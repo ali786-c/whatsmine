@@ -1,0 +1,5 @@
+---
+deployment:
+  tasks:
+    - export DEPLOYPATH=/home/devwithguru/wa.careerinpak.com
+    - /bin/rsync -avz --exclude '.git' --exclude '.env' --exclude 'storage' --exclude 'node_modules' --exclude 'vendor' ./ $DEPLOYPATH
