@@ -222,8 +222,23 @@ class IntegrationConfig extends Model
     {
         $creds = $this->credentials ?? [];
         $result = [];
+        
+        $fields = self::FIELDS[$this->provider] ?? [];
+        $passwordKeys = [];
+        foreach ($fields as $field) {
+            if (isset($field['type']) && $field['type'] === 'password') {
+                $passwordKeys[] = $field['key'];
+            }
+        }
+
         foreach ($creds as $k => $v) {
-            $result[$k] = (string) $v === '' ? '' : '••••••••••••';
+            if ((string) $v === '') {
+                $result[$k] = '';
+            } elseif (empty($fields) || in_array($k, $passwordKeys, true)) {
+                $result[$k] = '••••••••••••';
+            } else {
+                $result[$k] = $v;
+            }
         }
 
         return $result;

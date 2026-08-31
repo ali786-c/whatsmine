@@ -345,27 +345,62 @@ class InboxSetupController extends Controller
         return response()->json(['success' => true, 'connected' => $connected]);
     }
 
+    private function logMeta(string $message, array $context = []): void
+    {
+        try {
+            Log::build([
+                'driver' => 'single',
+                'path' => storage_path('logs/meta.log'),
+            ])->info($message, $context);
+        } catch (\Throwable $e) {
+            Log::warning("Meta Log fallback: {$message}", $context);
+        }
+    }
+
     private function exchangeCodeForToken(string $code): ?string
     {
         $meta = CredentialResolver::system()->meta();
         if (! $meta?->appId() || ! $meta?->appSecret()) {
+            $this->logMeta('Code exchange failed: Meta App credentials not configured.');
             return null;
         }
 
-        $res = Http::get('https://graph.facebook.com/v20.0/oauth/access_token', [
+        $redirectUri = rtrim((string) config('app.url'), '/');
+        $tokenParams = [
             'client_id'     => $meta->appId(),
             'client_secret' => $meta->appSecret(),
             'code'          => $code,
-            'redirect_uri'  => '',
+        ];
+        if ($redirectUri !== '') {
+            $tokenParams['redirect_uri'] = $redirectUri;
+        }
+
+        $this->logMeta('Attempting Meta code exchange (Instagram/Messenger)', [
+            'client_id' => $meta->appId(),
+            'redirect_uri' => $tokenParams['redirect_uri'] ?? null,
         ]);
 
+        $res = Http::get('https://graph.facebook.com/v20.0/oauth/access_token', $tokenParams);
+
+        // Some Meta app configs reject redirect_uri on embedded-signup codes — retry without it.
+        if ((! $res->successful() || empty($res->json('access_token'))) && isset($tokenParams['redirect_uri'])) {
+            $this->logMeta('Retrying Meta code exchange without redirect_uri', [
+                'client_id' => $meta->appId(),
+                'response' => $res->json() ?: $res->body(),
+            ]);
+            unset($tokenParams['redirect_uri']);
+            $res = Http::get('https://graph.facebook.com/v20.0/oauth/access_token', $tokenParams);
+        }
+
         if (! $res->successful() || ! $res->json('access_token')) {
-            Log::warning('Meta embedded signup: code exchange failed', [
-                'response' => $res->json(),
+            $this->logMeta('Meta code exchange failed', [
+                'status' => $res->status(),
+                'response' => $res->json() ?: $res->body(),
             ]);
             return null;
         }
 
+        $this->logMeta('Meta code exchange successful.');
         return $res->json('access_token');
     }
 
