@@ -365,32 +365,24 @@ class InboxSetupController extends Controller
             return null;
         }
 
-        $redirectUri = rtrim((string) config('app.url'), '/');
         $tokenParams = [
             'client_id'     => $meta->appId(),
             'client_secret' => $meta->appSecret(),
             'code'          => $code,
+            // Codes returned by FB.login() are bound to the JavaScript SDK flow,
+            // which requires an explicitly empty redirect URI during exchange.
+            'redirect_uri'  => '',
         ];
-        if ($redirectUri !== '') {
-            $tokenParams['redirect_uri'] = $redirectUri;
-        }
 
         $this->logMeta('Attempting Meta code exchange (Instagram/Messenger)', [
-            'client_id' => $meta->appId(),
-            'redirect_uri' => $tokenParams['redirect_uri'] ?? null,
+            'client_id'        => $meta->appId(),
+            'config_id_social' => $meta->configIdSocial(),
+            'redirect_mode'    => 'explicit-empty',
+            'code_length'      => strlen($code),
+            'code_hash'        => substr(hash('sha256', $code), 0, 12),
         ]);
 
         $res = Http::get('https://graph.facebook.com/v20.0/oauth/access_token', $tokenParams);
-
-        // Some Meta app configs reject redirect_uri on embedded-signup codes — retry without it.
-        if ((! $res->successful() || empty($res->json('access_token'))) && isset($tokenParams['redirect_uri'])) {
-            $this->logMeta('Retrying Meta code exchange without redirect_uri', [
-                'client_id' => $meta->appId(),
-                'response' => $res->json() ?: $res->body(),
-            ]);
-            unset($tokenParams['redirect_uri']);
-            $res = Http::get('https://graph.facebook.com/v20.0/oauth/access_token', $tokenParams);
-        }
 
         if (! $res->successful() || ! $res->json('access_token')) {
             $this->logMeta('Meta code exchange failed', [
