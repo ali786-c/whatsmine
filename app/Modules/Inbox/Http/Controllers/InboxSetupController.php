@@ -365,19 +365,21 @@ class InboxSetupController extends Controller
             return null;
         }
 
+        // FB.login() supplies this page as fallback_redirect_uri. Meta binds the
+        // returned code to that full URL (including the path), not to APP_URL.
+        $redirectUri = route('client.inbox.setup');
+
         $tokenParams = [
             'client_id'     => $meta->appId(),
             'client_secret' => $meta->appSecret(),
             'code'          => $code,
-            // Codes returned by FB.login() are bound to the JavaScript SDK flow,
-            // which requires an explicitly empty redirect URI during exchange.
-            'redirect_uri'  => '',
+            'redirect_uri'  => $redirectUri,
         ];
 
         $this->logMeta('Attempting Meta code exchange (Instagram/Messenger)', [
             'client_id'        => $meta->appId(),
             'config_id_social' => $meta->configIdSocial(),
-            'redirect_mode'    => 'explicit-empty',
+            'redirect_uri'     => $redirectUri,
             'code_length'      => strlen($code),
             'code_hash'        => substr(hash('sha256', $code), 0, 12),
         ]);
