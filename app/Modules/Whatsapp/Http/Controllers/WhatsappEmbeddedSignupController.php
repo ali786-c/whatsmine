@@ -415,16 +415,4 @@ class WhatsappEmbeddedSignupController extends Controller
 
         $account->save();
     }
-
-    private function logMeta(string $message, array $context = []): void
-    {
-        try {
-            \Illuminate\Support\Facades\Log::build([
-                'driver' => 'single',
-                'path'   => storage_path('logs/meta.log'),
-            ])->info($message, $context);
-        } catch (\Throwable $e) {
-            \Illuminate\Support\Facades\Log::warning("Meta Log fallback: {$message}", $context);
-        }
-    }
 }

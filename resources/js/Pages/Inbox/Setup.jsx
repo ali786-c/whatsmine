@@ -855,8 +855,35 @@ function EmbeddedSignupButton({ configId, appId, channel, label, color, onCode, 
             setError(t('inbox.embedded_signup_not_configured'));
             return;
         }
+        if (!resolvedAppId) {
+            setError('Meta App ID is not configured. Ask your administrator to configure it.');
+            return;
+        }
 
         setLoading(true);
+
+        const isWhatsapp = channel === 'whatsapp';
+        if (!isWhatsapp) {
+            const redirectUri = route('client.inbox.setup');
+            const state = typeof window.crypto?.randomUUID === 'function'
+                ? window.crypto.randomUUID()
+                : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+            const params = new window.URLSearchParams({
+                client_id: resolvedAppId,
+                redirect_uri: redirectUri,
+                response_type: 'code',
+                config_id: configId,
+                state,
+                override_default_response_type: 'true',
+                extras: JSON.stringify(channel === 'instagram'
+                    ? { feature_type: 'instagram_management' }
+                    : { feature_type: 'messenger_chat' }),
+            });
+
+            window.sessionStorage.setItem('meta_social_oauth', JSON.stringify({ state, channel, redirectUri }));
+            window.location.assign(`https://www.facebook.com/v20.0/dialog/oauth?${params.toString()}`);
+            return;
+        }
 
         try {
             await loadFbSdk(resolvedAppId);
@@ -866,7 +893,6 @@ function EmbeddedSignupButton({ configId, appId, channel, label, color, onCode, 
             return;
         }
 
-        const isWhatsapp = channel === 'whatsapp';
         const sessionInfoPromise = isWhatsapp ? waitForWabaSessionInfo() : Promise.resolve(null);
 
         const extrasMap = {
@@ -1117,6 +1143,61 @@ export default function ChannelSetup({
 
     const [drawer, setDrawer] = useState(null);
     const [showWabaForm, setShowWabaForm] = useState(false);
+    const [oauthCallbackStatus, setOauthCallbackStatus] = useState(null);
+
+    useEffect(() => {
+        const params = new window.URLSearchParams(window.location.search);
+        const code = params.get('code');
+        const returnedState = params.get('state');
+        const oauthError = params.get('error_message') || params.get('error_description');
+        if (!code && !oauthError) return;
+
+        let pending = null;
+        try {
+            pending = JSON.parse(window.sessionStorage.getItem('meta_social_oauth') || 'null');
+        } catch {
+            pending = null;
+        }
+
+        window.sessionStorage.removeItem('meta_social_oauth');
+        window.history.replaceState({}, document.title, window.location.pathname + window.location.hash);
+
+        if (oauthError) {
+            window.queueMicrotask(() => setOauthCallbackStatus({ type: 'error', message: oauthError }));
+            return;
+        }
+        if (!pending || !returnedState || pending.state !== returnedState || !['instagram', 'messenger'].includes(pending.channel)) {
+            window.queueMicrotask(() => setOauthCallbackStatus({ type: 'error', message: 'Meta authorization state could not be verified. Please start the connection again.' }));
+            return;
+        }
+
+        const connect = async () => {
+            setOauthCallbackStatus({ type: 'loading', message: `Connecting ${pending.channel} account…` });
+            try {
+                const endpoint = pending.channel === 'instagram'
+                    ? route('client.inbox.setup.embedded-signup.instagram')
+                    : route('client.inbox.setup.embedded-signup.messenger');
+                const res = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                        'Accept': 'application/json',
+                    },
+                    body: JSON.stringify({ code }),
+                });
+                const json = await res.json();
+                if (!res.ok) throw new Error(json.message || 'Meta connection failed.');
+
+                setOauthCallbackStatus({ type: 'success', message: `${pending.channel} connected successfully.` });
+                router.reload({ preserveScroll: true });
+            } catch (e) {
+                setOauthCallbackStatus({ type: 'error', message: e?.message || 'Meta connection failed.' });
+            }
+        };
+
+        connect();
+    }, []);
 
     const openDrawer = (key) => {
         setDrawer(key);
@@ -1163,6 +1244,13 @@ export default function ChannelSetup({
             </div>
 
             {/* Flash message */}
+            {oauthCallbackStatus && (
+                <div className={`mb-4 rounded-xl border px-4 py-3 text-sm ${oauthCallbackStatus.type === 'error'
+                    ? 'border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-950/30 dark:text-red-300'
+                    : 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-300'}`}>
+                    {oauthCallbackStatus.message}
+                </div>
+            )}
             {flash.success && (
                 <div className="mb-4 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200 px-4 py-3 text-sm flex items-center gap-2">
                     <Check className="h-4 w-4 shrink-0" />
@@ -1337,6 +1425,3 @@ export default function ChannelSetup({
         </ClientLayout>
     );
 }
-
-
-
