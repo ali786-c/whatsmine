@@ -135,7 +135,8 @@ class IntegrationConfigController extends Controller
             app(StorageManager::class)->clearCache();
         }
 
-        return back()->with('success', 'Integration saved.');
+        return redirect()->route('admin.integrations.edit', $provider)
+            ->with('success', 'Integration saved.');
     }
 
     public function test(Request $request, string $provider): RedirectResponse|JsonResponse
