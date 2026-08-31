@@ -120,14 +120,25 @@ class IntegrationConfigController extends Controller
         $mergeDecisions = [];
 
         foreach ($incoming as $k => $v) {
-            if ($v === null) {
-                $mergeDecisions[$k] = 'SKIP (null - not submitted)';
+            // Laravel's ConvertEmptyStringsToNull middleware converts "" → null.
+            // Use $request->has() to tell apart "user submitted empty" vs "field absent".
+            $fieldWasSubmitted = $request->has('credentials.' . $k);
+
+            if ($v === null && ! $fieldWasSubmitted) {
+                $mergeDecisions[$k] = 'SKIP (field not present in request at all)';
                 continue;
             }
+
+            // null here means user cleared the field (empty string → null by middleware)
+            if ($v === null) {
+                $v = '';
+            }
+
             if (preg_match('/^•+$/', (string) $v)) {
                 $mergeDecisions[$k] = 'SKIP (masked placeholder - keep existing)';
                 continue;
             }
+
             $old = $existing[$k] ?? null;
             if ($v === '') {
                 unset($merged[$k]);
