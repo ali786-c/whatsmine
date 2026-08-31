@@ -32,14 +32,16 @@ class WhatsappEmbeddedSignupController extends Controller
             return response()->json(['message' => 'Meta App credentials are not configured. Please ask your administrator to configure them in Admin → Integrations → Meta App.'], 422);
         }
 
+        // FB.login() supplies the inbox setup page as fallback_redirect_uri.
+        // Meta binds the returned code to that full URL (including the path).
+        $redirectUri = route('client.inbox.setup');
+
         // Exchange the short-lived auth code for an access token
         $tokenParams = [
             'client_id'     => $meta->appId(),
             'client_secret' => $meta->appSecret(),
             'code'          => $validated['code'],
-            // Codes returned by FB.login() are bound to the JavaScript SDK flow,
-            // which requires an explicitly empty redirect URI during exchange.
-            'redirect_uri'  => '',
+            'redirect_uri'  => $redirectUri,
         ];
 
         $this->logMeta('Attempting Meta code exchange (WhatsApp)', [
@@ -47,7 +49,7 @@ class WhatsappEmbeddedSignupController extends Controller
             'client_id'          => $meta->appId(),
             'config_id_whatsapp' => $meta->configIdWhatsapp(),
             'waba_id'            => $validated['waba_id'],
-            'redirect_mode'      => 'explicit-empty',
+            'redirect_uri'       => $redirectUri,
             'code_length'        => strlen($validated['code']),
             'code_hash'          => substr(hash('sha256', $validated['code']), 0, 12),
         ]);
