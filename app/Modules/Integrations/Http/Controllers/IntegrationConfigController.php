@@ -97,15 +97,23 @@ class IntegrationConfigController extends Controller
 
         foreach ($incoming as $k => $v) {
             if ($v === null) {
-                continue;
+                continue; // not submitted at all — keep existing
             }
-            if (preg_match('/^•+/', (string) $v)) {
-                continue; // masked placeholder — keep existing
+            if (preg_match('/^•+$/', (string) $v)) {
+                continue; // pure masked placeholder — keep existing
             }
-            // Empty string explicitly clears the credential
-            $merged[$k] = $v === '' ? null : $v;
-            if ($v !== ($existing[$k] ?? null)) {
-                $changedKeys[] = $k;
+            $old = $existing[$k] ?? null;
+            if ($v === '') {
+                // User explicitly cleared the field — remove key from credentials
+                unset($merged[$k]);
+                if ($old !== null && $old !== '') {
+                    $changedKeys[] = $k;
+                }
+            } else {
+                $merged[$k] = $v;
+                if ($v !== $old) {
+                    $changedKeys[] = $k;
+                }
             }
         }
 

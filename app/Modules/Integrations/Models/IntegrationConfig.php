@@ -217,27 +217,32 @@ class IntegrationConfig extends Model
         return ! empty($creds) && collect($creds)->filter()->isNotEmpty();
     }
 
-    /** Returns a fixed-length masked preview — never reveals actual credential content. */
+    /** Returns a masked preview driven by FIELDS definition — cleared fields always return empty string. */
     public function maskedCredentials(): array
     {
-        $creds = $this->credentials ?? [];
-        $result = [];
-        
+        $creds  = $this->credentials ?? [];
         $fields = self::FIELDS[$this->provider] ?? [];
-        $passwordKeys = [];
-        foreach ($fields as $field) {
-            if (isset($field['type']) && $field['type'] === 'password') {
-                $passwordKeys[] = $field['key'];
+        $result = [];
+
+        if (empty($fields)) {
+            // Provider with no field definition — mask everything stored
+            foreach ($creds as $k => $v) {
+                $result[$k] = ($v === null || (string) $v === '') ? '' : '••••••••••••';
             }
+            return $result;
         }
 
-        foreach ($creds as $k => $v) {
-            if ((string) $v === '') {
-                $result[$k] = '';
-            } elseif (empty($fields) || in_array($k, $passwordKeys, true)) {
-                $result[$k] = '••••••••••••';
+        // Iterate over the FIELDS definition so every field is always present in response
+        foreach ($fields as $field) {
+            $key = $field['key'];
+            $v   = $creds[$key] ?? null;
+
+            if ($v === null || (string) $v === '') {
+                $result[$key] = '';             // explicitly empty — show blank field
+            } elseif (($field['type'] ?? 'text') === 'password') {
+                $result[$key] = '••••••••••••'; // secret — mask
             } else {
-                $result[$k] = $v;
+                $result[$key] = $v;             // public text — show as-is
             }
         }
 
