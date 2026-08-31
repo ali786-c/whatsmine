@@ -32,37 +32,22 @@ class WhatsappEmbeddedSignupController extends Controller
             return response()->json(['message' => 'Meta App credentials are not configured. Please ask your administrator to configure them in Admin → Integrations → Meta App.'], 422);
         }
 
-        $redirectUri = rtrim((string) config('app.url'), '/');
-
-        // Exchange the short-lived auth code for an access token
+        // Exchange the short-lived auth code for an access token.
+        // We omit redirect_uri because the code is obtained via the JS SDK (which uses xd_arbiter).
+        // Sending a redirect_uri (or retrying after a failed attempt with one) will result in OAuth error 36008.
         $tokenParams = [
             'client_id'     => $meta->appId(),
             'client_secret' => $meta->appSecret(),
             'code'          => $validated['code'],
         ];
-        if ($redirectUri !== '') {
-            $tokenParams['redirect_uri'] = $redirectUri;
-        }
 
-        $this->logMeta('Attempting Meta code exchange (WhatsApp)', [
+        $this->logMeta('Attempting Meta code exchange (WhatsApp) without redirect_uri', [
             'workspace_id' => $workspaceId,
             'client_id' => $meta->appId(),
             'waba_id' => $validated['waba_id'],
-            'redirect_uri' => $tokenParams['redirect_uri'] ?? null,
         ]);
 
         $tokenRes = Http::get('https://graph.facebook.com/v20.0/oauth/access_token', $tokenParams);
-
-        // Some Meta app configs reject redirect_uri on embedded-signup codes — retry without it.
-        if ((! $tokenRes->successful() || empty($tokenRes->json('access_token'))) && isset($tokenParams['redirect_uri'])) {
-            $this->logMeta('Retrying WhatsApp Meta code exchange without redirect_uri', [
-                'workspace_id' => $workspaceId,
-                'client_id' => $meta->appId(),
-                'response' => $tokenRes->json() ?: $tokenRes->body(),
-            ]);
-            unset($tokenParams['redirect_uri']);
-            $tokenRes = Http::get('https://graph.facebook.com/v20.0/oauth/access_token', $tokenParams);
-        }
 
         if (! $tokenRes->successful() || empty($tokenRes->json('access_token'))) {
             $this->logMeta('WhatsApp Meta code exchange failed', [
