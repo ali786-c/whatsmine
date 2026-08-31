@@ -79,6 +79,7 @@ class IntegrationConfigController extends Controller
     {
         abort_unless(in_array($provider, IntegrationConfig::PROVIDERS, true), 404);
 
+        // ── STEP 1: Build validation rules ──────────────────────────────────
         $fields = IntegrationConfig::FIELDS[$provider] ?? [];
         $rules = ['enabled' => ['required', 'boolean'], 'mode' => ['required', 'in:test,live']];
         foreach ($fields as $f) {
@@ -87,44 +88,89 @@ class IntegrationConfigController extends Controller
 
         $validated = $request->validate($rules);
 
+        $log = \Illuminate\Support\Facades\Log::build([
+            'driver' => 'single',
+            'path'   => storage_path('logs/credentials.log'),
+        ]);
+
+        // ── STEP 2: Log raw incoming values from frontend ────────────────────
+        $incoming = $validated['credentials'] ?? [];
+        $incomingDebug = [];
+        foreach ($incoming as $k => $v) {
+            if ($v === null)       $incomingDebug[$k] = '[NULL]';
+            elseif ($v === '')     $incomingDebug[$k] = '[EMPTY STRING]';
+            elseif (preg_match('/^•/', (string)$v)) $incomingDebug[$k] = '[MASKED: '.mb_strlen($v).' chars]';
+            else                   $incomingDebug[$k] = '[VALUE: '.mb_substr($v, 0, 6).'...]';
+        }
+        $log->info("[$provider] INCOMING from frontend", $incomingDebug);
+
         $config = IntegrationConfig::firstOrNew(['provider' => $provider, 'mode' => $validated['mode']]);
 
-        // Merge credentials: skip masked values (••••xxxx) to preserve existing
+        // ── STEP 3: Log existing DB credentials ──────────────────────────────
         $existing = $config->credentials ?? [];
-        $incoming = $validated['credentials'] ?? [];
+        $existingDebug = [];
+        foreach ($existing as $k => $v) {
+            $existingDebug[$k] = ($v === null || $v === '') ? '[EMPTY]' : '[HAS VALUE: '.mb_substr((string)$v, 0, 6).'...]';
+        }
+        $log->info("[$provider] EXISTING in DB", $existingDebug);
+
+        // ── STEP 4: Merge logic with per-key decision logging ─────────────────
         $merged = $existing;
         $changedKeys = [];
+        $mergeDecisions = [];
 
         foreach ($incoming as $k => $v) {
             if ($v === null) {
-                continue; // not submitted at all — keep existing
+                $mergeDecisions[$k] = 'SKIP (null - not submitted)';
+                continue;
             }
             if (preg_match('/^•+$/', (string) $v)) {
-                continue; // pure masked placeholder — keep existing
+                $mergeDecisions[$k] = 'SKIP (masked placeholder - keep existing)';
+                continue;
             }
             $old = $existing[$k] ?? null;
             if ($v === '') {
-                // User explicitly cleared the field — remove key from credentials
                 unset($merged[$k]);
+                $mergeDecisions[$k] = 'CLEARED (unset from array)';
                 if ($old !== null && $old !== '') {
                     $changedKeys[] = $k;
                 }
             } else {
                 $merged[$k] = $v;
+                $mergeDecisions[$k] = 'SET to new value';
                 if ($v !== $old) {
                     $changedKeys[] = $k;
                 }
             }
         }
 
+        $log->info("[$provider] MERGE DECISIONS", $mergeDecisions);
+
+        // ── STEP 5: Log what will be saved ────────────────────────────────────
+        $mergedDebug = [];
+        foreach ($merged as $k => $v) {
+            $mergedDebug[$k] = ($v === null || $v === '') ? '[EMPTY/NULL]' : '[HAS VALUE]';
+        }
+        $log->info("[$provider] FINAL merged (will be saved to DB)", $mergedDebug);
+        $log->info("[$provider] Changed keys", $changedKeys);
+
         $wasEnabled = $config->enabled ?? false;
         $config->fill([
-            'label' => IntegrationConfig::LABELS[$provider] ?? $provider,
-            'enabled' => (bool) $validated['enabled'],
-            'mode' => $validated['mode'],
-            'credentials' => $merged,
+            'label'               => IntegrationConfig::LABELS[$provider] ?? $provider,
+            'enabled'             => (bool) $validated['enabled'],
+            'mode'                => $validated['mode'],
+            'credentials'         => $merged,
             'updated_by_admin_id' => auth('admin')->id(),
         ])->save();
+
+        // ── STEP 6: Log what maskedCredentials() returns after save ───────────
+        $config->refresh();
+        $afterSave = $config->maskedCredentials();
+        $afterSaveDebug = [];
+        foreach ($afterSave as $k => $v) {
+            $afterSaveDebug[$k] = ($v === '') ? '[EMPTY - will show blank]' : (preg_match('/^•/', $v) ? '[MASKED]' : '[PLAIN: '.mb_substr($v,0,6).'...]');
+        }
+        $log->info("[$provider] maskedCredentials() AFTER SAVE (what frontend will see)", $afterSaveDebug);
 
         $this->auditLog($request, $config, $config->wasRecentlyCreated ? 'create' : 'update', $changedKeys);
         if ($wasEnabled !== $config->enabled) {
@@ -138,6 +184,7 @@ class IntegrationConfigController extends Controller
         return redirect()->route('admin.integrations.edit', $provider)
             ->with('success', 'Integration saved.');
     }
+
 
     public function test(Request $request, string $provider): RedirectResponse|JsonResponse
     {
