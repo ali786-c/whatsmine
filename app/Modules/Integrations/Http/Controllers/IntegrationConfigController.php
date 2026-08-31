@@ -96,14 +96,17 @@ class IntegrationConfigController extends Controller
         $changedKeys = [];
 
         foreach ($incoming as $k => $v) {
-            if ($v === null || $v === '') {
+            if ($v === null) {
                 continue;
             }
             if (preg_match('/^•+/', (string) $v)) {
-                continue; // keep existing
+                continue; // masked placeholder — keep existing
             }
-            $merged[$k] = $v;
-            $changedKeys[] = $k;
+            // Empty string explicitly clears the credential
+            $merged[$k] = $v === '' ? null : $v;
+            if ($v !== ($existing[$k] ?? null)) {
+                $changedKeys[] = $k;
+            }
         }
 
         $wasEnabled = $config->enabled ?? false;
