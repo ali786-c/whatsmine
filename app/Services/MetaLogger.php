@@ -17,11 +17,21 @@ class MetaLogger
                 'path'   => storage_path('logs/meta.log'),
             ]);
 
+            // Convert deeply nested arrays (like payload) to formatted JSON strings to prevent Monolog depth truncation
+            $formattedContext = [];
+            foreach ($context as $key => $value) {
+                if (is_array($value) || is_object($value)) {
+                    $formattedContext[$key] = json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT);
+                } else {
+                    $formattedContext[$key] = $value;
+                }
+            }
+
             match ($level) {
-                'error'    => $logger->error($action, $context),
-                'warning'  => $logger->warning($action, $context),
-                'debug'    => $logger->debug($action, $context),
-                default    => $logger->info($action, $context),
+                'error'    => $logger->error($action, $formattedContext),
+                'warning'  => $logger->warning($action, $formattedContext),
+                'debug'    => $logger->debug($action, $formattedContext),
+                default    => $logger->info($action, $formattedContext),
             };
         } catch (\Throwable $e) {
             Log::warning("MetaLogger fallback [{$action}]: " . $e->getMessage(), $context);
