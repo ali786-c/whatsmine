@@ -96,7 +96,7 @@ class WhatsappWebhookController extends Controller
         \App\Services\MetaLogger::log('[Inbound WhatsApp Webhook Global]', $logData);
 
         return $this->flushWebhookOkThen(
-            fn () => ProcessInboundMessageJob::dispatchSync($payload, '')
+            fn () => ProcessInboundMessageJob::dispatch($payload, '')->onQueue('whatsapp')
         );
     }
 
@@ -171,7 +171,7 @@ class WhatsappWebhookController extends Controller
         ]);
 
         return $this->flushWebhookOkThen(
-            fn () => ProcessInboundMessageJob::dispatchSync($payload, $token)
+            fn () => ProcessInboundMessageJob::dispatch($payload, $token)->onQueue('whatsapp')
         );
     }
 
