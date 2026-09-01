@@ -437,8 +437,33 @@ class CloudApiClient
 
     private function post(string $path, array $data): Response
     {
-        return Http::withToken($this->accessToken)
+        $res = Http::withToken($this->accessToken)
             ->timeout(30)
             ->post(self::BASE.$path, $data);
+
+        \App\Services\MetaLogger::log("[CloudApiClient Outbound POST] {$path}", [
+            'phone_number_id' => $this->phoneNumberId,
+            'status'          => $res->status(),
+            'payload'         => $data,
+            'response'        => $res->json() ?: $res->body(),
+        ], $res->successful() ? 'info' : 'error');
+
+        return $res;
+    }
+
+    private function get(string $path, array $query = []): Response
+    {
+        $res = Http::withToken($this->accessToken)
+            ->timeout(30)
+            ->get(self::BASE.$path, $query);
+
+        \App\Services\MetaLogger::log("[CloudApiClient Outbound GET] {$path}", [
+            'phone_number_id' => $this->phoneNumberId,
+            'status'          => $res->status(),
+            'query'           => $query,
+            'response'        => $res->json() ?: $res->body(),
+        ], $res->successful() ? 'info' : 'error');
+
+        return $res;
     }
 }

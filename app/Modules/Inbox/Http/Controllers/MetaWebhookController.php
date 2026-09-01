@@ -56,11 +56,15 @@ class MetaWebhookController extends Controller
 
         $object = $request->input('object', '');
 
-        Log::info('meta.webhook.received', [
+        $logData = [
             'object'      => $object,
             'entry_count' => count($request->input('entry', [])),
             'entry_ids'   => collect($request->input('entry', []))->pluck('id')->filter()->values()->all(),
-        ]);
+            'payload'     => $request->all(),
+        ];
+
+        Log::info('meta.webhook.received', $logData);
+        \App\Services\MetaLogger::log("[Inbound Social Webhook ({$object})]", $logData);
 
         if (! in_array($object, ['instagram', 'page'], true)) {
             Log::info('meta.webhook.ignored_object', ['object' => $object]);

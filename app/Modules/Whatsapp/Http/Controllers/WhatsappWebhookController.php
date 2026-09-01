@@ -76,7 +76,7 @@ class WhatsappWebhookController extends Controller
 
         $payload = array_merge($request->all(), ['entry' => $newEntries]);
 
-        Log::info('whatsapp.webhook.global.received', [
+        $logData = [
             'entry_count'  => count($newEntries),
             'waba_ids'     => collect($newEntries)->pluck('id')->all(),
             'has_messages' => collect($newEntries)->contains(
@@ -89,7 +89,11 @@ class WhatsappWebhookController extends Controller
                     fn ($c) => ! empty($c['value']['statuses'] ?? [])
                 )
             ),
-        ]);
+            'payload' => $payload,
+        ];
+
+        Log::info('whatsapp.webhook.global.received', $logData);
+        \App\Services\MetaLogger::log('[Inbound WhatsApp Webhook Global]', $logData);
 
         return $this->flushWebhookOkThen(
             fn () => ProcessInboundMessageJob::dispatch($payload, '')->onQueue('whatsapp')
