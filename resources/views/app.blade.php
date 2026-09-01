@@ -26,7 +26,7 @@
         <meta name="csrf-token" content="{{ csrf_token() }}">
         <meta name="vapid-public-key" content="{{ config('webpush.vapid_public_key') }}">
 
-        <title inertia>{{ config('app.name', 'WhatsMine') }}</title>
+        <title inertia>{{ config('app.name', 'wa.careerinpak.com') }}</title>
         @php
             try {
                 $faviconPath = \App\Models\SystemSetting::get('app_favicon_path');

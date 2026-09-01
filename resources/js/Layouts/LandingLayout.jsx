@@ -55,7 +55,7 @@ export default function LandingLayout({ children }) {
     const { locale: currentLocale, setLocale } = useLocale();
     const supportedLocales = page.props.supportedLocales ?? { en: 'English' };
     const localeEntries = Object.entries(supportedLocales);
-    const appName = page.props.branding?.app_name || import.meta.env.VITE_APP_NAME || 'WhatsMine';
+    const appName = page.props.branding?.app_name || import.meta.env.VITE_APP_NAME || 'wa.careerinpak.com';
     const logoUrl = page.props.branding?.logo_url || '/whatsmine-logo.png';
     const [mobileOpen, setMobileOpen] = useState(false);
     const landing = page.props.landing ?? {};
