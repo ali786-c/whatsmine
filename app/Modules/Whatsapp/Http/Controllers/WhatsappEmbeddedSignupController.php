@@ -55,24 +55,32 @@ class WhatsappEmbeddedSignupController extends Controller
             'client_id'     => $appId,
             'client_secret' => $appSecret,
             'code'          => $validated['code'],
+            'grant_type'    => 'authorization_code',
         ];
-        if ($redirectUri !== '') {
-            $tokenParams['redirect_uri'] = $redirectUri;
-        }
 
-        $tokenRes = Http::get('https://graph.facebook.com/v20.0/oauth/access_token', $tokenParams);
+        // 1. Try POST with grant_type=authorization_code (Meta Embedded Signup standard)
+        $tokenRes = Http::asForm()->post('https://graph.facebook.com/v20.0/oauth/access_token', $tokenParams);
 
-        $log->info('[WhatsApp Embedded Signup] Initial code exchange response', [
+        $log->info('[WhatsApp Embedded Signup] POST code exchange response', [
             'status'   => $tokenRes->status(),
             'response' => $tokenRes->json(),
         ]);
 
-        // Some Meta app configs reject redirect_uri on embedded-signup codes — retry without it.
-        if ((! $tokenRes->successful() || empty($tokenRes->json('access_token'))) && isset($tokenParams['redirect_uri'])) {
-            unset($tokenParams['redirect_uri']);
+        // 2. Retry with JSON POST if form-encoded failed
+        if (! $tokenRes->successful() || empty($tokenRes->json('access_token'))) {
+            $tokenRes = Http::post('https://graph.facebook.com/v20.0/oauth/access_token', $tokenParams);
+
+            $log->info('[WhatsApp Embedded Signup] JSON POST code exchange response', [
+                'status'   => $tokenRes->status(),
+                'response' => $tokenRes->json(),
+            ]);
+        }
+
+        // 3. Retry with GET if POST failed
+        if (! $tokenRes->successful() || empty($tokenRes->json('access_token'))) {
             $tokenRes = Http::get('https://graph.facebook.com/v20.0/oauth/access_token', $tokenParams);
 
-            $log->info('[WhatsApp Embedded Signup] Retry code exchange (without redirect_uri) response', [
+            $log->info('[WhatsApp Embedded Signup] GET code exchange response', [
                 'status'   => $tokenRes->status(),
                 'response' => $tokenRes->json(),
             ]);
