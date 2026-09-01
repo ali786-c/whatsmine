@@ -13,7 +13,14 @@ class MetaCredentials extends CredentialValueObject
     public function appSecret(): ?string
     {
         $val = $this->get('app_secret');
-        return $val !== null ? trim((string) $val) : null;
+        if ($val === null) {
+            return null;
+        }
+        $str = trim((string) $val);
+        if (preg_match('/[\x{2022}•]/u', $str)) {
+            return null; // Safety guard: never return masked bullet placeholder as actual secret
+        }
+        return $str !== '' ? $str : null;
     }
 
     public function systemUserToken(): ?string
