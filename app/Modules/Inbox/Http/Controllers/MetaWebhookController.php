@@ -99,7 +99,7 @@ class MetaWebhookController extends Controller
         $payload = array_merge($request->all(), ['entry' => $newEntries]);
 
         return $this->flushWebhookOkThen(
-            fn () => ProcessInboundInboxMessageJob::dispatch($payload, $object)->onQueue('whatsapp')
+            fn () => ProcessInboundInboxMessageJob::dispatchSync($payload, $object)
         );
     }
 
