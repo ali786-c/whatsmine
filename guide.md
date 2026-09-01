@@ -51,29 +51,6 @@ The MySQL database has been pre-populated with default workspaces, plans, and ad
 
 ---
 
-## 📋 Session Log — Aug 31, 2026
-
-### Actions Performed This Session:
-
-8.  **Git Force Push to GitHub:**
-    *   Confirmed the git remote: `https://github.com/ali786-c/whatsmine.git` (branch: `master`).
-    *   Verified working tree was already clean and in sync — no untracked/uncommitted files.
-    *   Executed `git push origin master --force` to ensure GitHub reflects the exact local state.
-
-9.  **Local Laravel Server Started (PHP 8.3):**
-    *   XAMPP's bundled PHP (8.0.30) failed to start the server — project requires `PHP >= 8.2.0`.
-    *   Detected `C:\php83\php.exe` (PHP 8.3.33) installed separately on the system.
-    *   Successfully started the Laravel dev server using:
-        ```powershell
-        C:\php83\php.exe artisan serve
-        ```
-    *   Server is available at: [http://127.0.0.1:8000](http://127.0.0.1:8000)
-
-10. **Guide & Context Files Added to WhatsMine150:**
-    *   Copied `guide.md` and `context.md` from the parent `WhatsMine v1.5.0/` folder into `WhatsMine150/` so they are tracked inside the Laravel project root and included in git commits.
-
----
-
 ## 🏗️ Core Architectural Modules (WhatsMine)
 
 WhatsMine is developed as a modern modular monolith inside the `WhatsMine150` Laravel 12 workspace. The main functional components reside inside the `app/Modules/` directory:
@@ -134,3 +111,68 @@ While MySQL (configured in `whatscrm/.env`) is fine for up to 30-50 concurrent s
 
 ### 4. IP Management & Dedicated Proxies
 Running too many WhatsApp accounts from a single Server IP can cause WhatsApp to flag the IP for spam. If scaling past 50 accounts, distribute traffic across different clean IP addresses or set up proxies.
+
+---
+
+## 🌐 Production Deployment & Meta Integration Guide (`wa.careerinpak.com`)
+
+### 📌 Live Project Credentials & Repository
+* **Production Domain:** `https://wa.careerinpak.com`
+* **GitHub Repository:** `https://github.com/ali786-c/whatsmine.git` (Branch: `master`)
+* **cPanel App Root Directory:** `/home/devwithguru/wa.careerinpak.com`
+* **cPanel PHP 8.3 CLI Path:** `/opt/alt/php83/usr/bin/php`
+
+---
+
+### 🔑 Meta App & WhatsApp Embedded Signup Configuration
+
+1. **Credentials Management:**
+   * Go to **Admin Control Panel → Integrations → Meta App** (`https://wa.careerinpak.com/admin/integrations/meta_app/edit`).
+   * Enter **App ID** and **App Secret** from the Meta for Developers Portal (**Basic Settings**).
+   * *Note: The system automatically trims trailing whitespace and protects against saving masked bullet placeholders (`••••••••••••`).*
+
+2. **Embedded Signup Authorization Code Exchange:**
+   * Endpoint: `POST https://graph.facebook.com/v20.0/oauth/access_token`
+   * Required Parameters:
+     * `client_id`: Meta App ID
+     * `client_secret`: Meta App Secret
+     * `code`: Authorization code from Embedded Signup callback
+     * `grant_type`: `authorization_code`
+
+---
+
+### 📑 Dedicated Meta Logging (`storage/logs/meta.log`)
+
+All Meta API calls, embedded signup token exchanges, outbound messages, and inbound webhooks are logged to a dedicated log file:
+
+* **Log Location:** `/home/devwithguru/wa.careerinpak.com/storage/logs/meta.log`
+* **Real-time Log Viewing Command (cPanel/SSH Terminal):**
+  ```bash
+  tail -f /home/devwithguru/wa.careerinpak.com/storage/logs/meta.log
+  ```
+
+---
+
+### ⚙️ Hybrid Environment Setup (cPanel Shared Hosting vs. VPS Server)
+
+WhatsMine is designed to run seamlessly on both shared hosting (cPanel) and dedicated cloud servers (VPS):
+
+#### 🅰️ Option A: cPanel / Shared Hosting Setup
+* **`.env` Queue Connection:** Set `QUEUE_CONNECTION=sync`
+* **Message Processing:** Messages are processed immediately inline upon receiving Meta webhooks.
+* **Frontend Real-time Sync:** If WebSockets are not connected, the React frontend automatically enables **3-second background polling** (`Index.jsx` & `Show.jsx`) so new messages pop up without manual page refresh (`F5`).
+* **Deployment Command:**
+  ```bash
+  cd /home/devwithguru/wa.careerinpak.com
+  git pull origin master
+  /opt/alt/php83/usr/bin/php artisan optimize:clear
+  ```
+
+#### 🅱️ Option B: VPS / Dedicated Server Setup (High Performance & Scale)
+* **`.env` Queue Connection:** Set `QUEUE_CONNECTION=redis` (or `database`)
+* **Background Queue Worker (Supervisor):** Run Supervisor daemon to handle high-throughput WhatsApp message queues:
+  ```bash
+  php artisan queue:work --queue=whatsapp,default --tries=3
+  ```
+* **Real-time WebSockets (Laravel Reverb / Pusher):** Enable Reverb or Pusher in `.env`. When WebSockets are connected (`state === 'connected'`), the frontend automatically disables background polling and streams messages with 0ms latency.
+
