@@ -91,7 +91,7 @@ export default function Sidebar({
                 ) : logo ? (
                     logo
                 ) : (
-                    <img src="/whatsmine-logo.png" alt={appName} className="h-10 w-auto max-w-[200px] object-contain" />
+                    <img src="/whatsmine-logo-with-title.svg" alt={appName} className="h-10 w-auto max-w-[200px] object-contain" />
                 )}
             </div>
 
