@@ -229,6 +229,15 @@ class InboxController extends Controller
             $driver = $this->channelManager->driver($channel);
             $messageId = $driver->send($message);
             $message->update(['status' => 'sent', 'provider_message_id' => $messageId]);
+
+            \App\Services\MetaLogger::log('[Inbox Outbound Reply Sent]', [
+                'conversation_id' => $conversation->id,
+                'channel'         => $channel,
+                'message_id'      => $message->id,
+                'provider_msg_id' => $messageId,
+                'type'            => $message->type,
+                'body'            => $message->body,
+            ]);
         } catch (\Throwable $e) {
             $sendError = $e->getMessage();
             Log::error('Inbox reply send failed', [
@@ -237,6 +246,13 @@ class InboxController extends Controller
                 'error' => $sendError,
             ]);
             $message->update(['status' => 'failed', 'error_json' => ['message' => $sendError]]);
+
+            \App\Services\MetaLogger::log('[Inbox Outbound Reply Failed]', [
+                'conversation_id' => $conversation->id,
+                'channel'         => $channel,
+                'message_id'      => $message->id,
+                'error'           => $sendError,
+            ], 'error');
         }
 
         $conversation->update(['last_message_at' => now()]);

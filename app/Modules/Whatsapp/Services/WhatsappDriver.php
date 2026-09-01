@@ -352,6 +352,16 @@ class WhatsappDriver implements ChannelDriverInterface
         // Fire typed event for automations / AI
         MessageReceived::dispatch($message);
 
+        \App\Services\MetaLogger::log('[Inbox Inbound Message Saved]', [
+            'conversation_id' => $conversation->id,
+            'contact_phone'   => $contact->phone_e164,
+            'message_id'      => $message->id,
+            'provider_msg_id' => $message->provider_message_id,
+            'type'            => $message->type,
+            'body'            => $message->body,
+            'unread_count'    => $conversation->unread_count,
+        ]);
+
         return $message;
     }
 
