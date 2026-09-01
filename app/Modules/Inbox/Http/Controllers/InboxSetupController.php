@@ -386,6 +386,12 @@ class InboxSetupController extends Controller
 
         $res = Http::get('https://graph.facebook.com/v20.0/oauth/access_token', $tokenParams);
 
+        if ((! $res->successful() || ! $res->json('access_token')) && isset($tokenParams['redirect_uri'])) {
+            $this->logMeta('Retrying code exchange without redirect_uri...');
+            unset($tokenParams['redirect_uri']);
+            $res = Http::get('https://graph.facebook.com/v20.0/oauth/access_token', $tokenParams);
+        }
+
         if (! $res->successful() || ! $res->json('access_token')) {
             $this->logMeta('Meta code exchange failed', [
                 'status' => $res->status(),

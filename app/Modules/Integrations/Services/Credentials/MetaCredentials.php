@@ -6,31 +6,37 @@ class MetaCredentials extends CredentialValueObject
 {
     public function appId(): ?string
     {
-        return $this->get('app_id');
+        $val = $this->get('app_id');
+        return $val !== null ? trim((string) $val) : null;
     }
 
     public function appSecret(): ?string
     {
-        return $this->get('app_secret');
+        $val = $this->get('app_secret');
+        return $val !== null ? trim((string) $val) : null;
     }
 
     public function systemUserToken(): ?string
     {
-        return $this->get('system_user_token');
+        $val = $this->get('system_user_token');
+        return $val !== null ? trim((string) $val) : null;
     }
 
     public function verifyToken(): ?string
     {
-        return $this->get('verify_token');
+        $val = $this->get('verify_token');
+        return $val !== null ? trim((string) $val) : null;
     }
 
     public function configIdWhatsapp(): ?string
     {
-        return $this->get('config_id_whatsapp') ?: null;
+        $val = $this->get('config_id_whatsapp');
+        return $val !== null && trim((string) $val) !== '' ? trim((string) $val) : null;
     }
 
     public function configIdSocial(): ?string
     {
-        return $this->get('config_id_social') ?: null;
+        $val = $this->get('config_id_social');
+        return $val !== null && trim((string) $val) !== '' ? trim((string) $val) : null;
     }
 }

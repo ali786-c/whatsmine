@@ -31,12 +31,29 @@ class WhatsappEmbeddedSignupController extends Controller
             return response()->json(['message' => 'Meta App credentials are not configured. Please ask your administrator to configure them in Admin → Integrations → Meta App.'], 422);
         }
 
+        $log = Log::build([
+            'driver' => 'single',
+            'path'   => storage_path('logs/meta.log'),
+        ]);
+
+        $appId = $meta->appId();
+        $appSecret = $meta->appSecret();
+
+        $log->info('[WhatsApp Embedded Signup] Code exchange initiated', [
+            'workspace_id' => $workspaceId,
+            'client_id'    => $appId,
+            'secret_len'   => strlen((string) $appSecret),
+            'secret_start' => substr((string) $appSecret, 0, 4) . '...',
+            'code_len'     => strlen($validated['code']),
+            'waba_id'      => $validated['waba_id'],
+        ]);
+
         $redirectUri = rtrim((string) config('app.url'), '/');
 
         // Exchange the short-lived auth code for an access token
         $tokenParams = [
-            'client_id'     => $meta->appId(),
-            'client_secret' => $meta->appSecret(),
+            'client_id'     => $appId,
+            'client_secret' => $appSecret,
             'code'          => $validated['code'],
         ];
         if ($redirectUri !== '') {
@@ -45,15 +62,26 @@ class WhatsappEmbeddedSignupController extends Controller
 
         $tokenRes = Http::get('https://graph.facebook.com/v20.0/oauth/access_token', $tokenParams);
 
+        $log->info('[WhatsApp Embedded Signup] Initial code exchange response', [
+            'status'   => $tokenRes->status(),
+            'response' => $tokenRes->json(),
+        ]);
+
         // Some Meta app configs reject redirect_uri on embedded-signup codes — retry without it.
         if ((! $tokenRes->successful() || empty($tokenRes->json('access_token'))) && isset($tokenParams['redirect_uri'])) {
             unset($tokenParams['redirect_uri']);
             $tokenRes = Http::get('https://graph.facebook.com/v20.0/oauth/access_token', $tokenParams);
+
+            $log->info('[WhatsApp Embedded Signup] Retry code exchange (without redirect_uri) response', [
+                'status'   => $tokenRes->status(),
+                'response' => $tokenRes->json(),
+            ]);
         }
 
         if (! $tokenRes->successful() || empty($tokenRes->json('access_token'))) {
-            Log::warning('WhatsApp embedded signup: code exchange failed', [
+            $log->error('[WhatsApp Embedded Signup] Code exchange failed', [
                 'workspace_id' => $workspaceId,
+                'status'       => $tokenRes->status(),
                 'response'     => $tokenRes->json(),
             ]);
 
