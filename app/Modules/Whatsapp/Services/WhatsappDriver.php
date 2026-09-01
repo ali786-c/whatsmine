@@ -97,9 +97,14 @@ class WhatsappDriver implements ChannelDriverInterface
 
                 foreach ($value['messages'] ?? [] as $msg) {
                     try {
-                        $processed[] = $this->processInboundMessage($value, $msg);
+                        $processed[] = $this->processInboundMessage($value, $msg, $wabaId);
                     } catch (\Throwable $e) {
                         Log::error('WhatsApp webhook processing failed', ['error' => $e->getMessage(), 'msg' => $msg]);
+                        \App\Services\MetaLogger::log("[Inbound Message Error]", [
+                            'error'  => $e->getMessage(),
+                            'from'   => $msg['from'] ?? null,
+                            'msg_id' => $msg['id'] ?? null,
+                        ], 'error');
                     }
                 }
 
@@ -193,7 +198,7 @@ class WhatsappDriver implements ChannelDriverInterface
         return true;
     }
 
-    private function processInboundMessage(array $value, array $msg): Message
+    private function processInboundMessage(array $value, array $msg, string $wabaId = ''): Message
     {
         $msgId = $msg['id'] ?? null;
 
@@ -228,17 +233,42 @@ class WhatsappDriver implements ChannelDriverInterface
             ->where('channel', 'whatsapp')
             ->first();
 
+        if (! $channelAccount && ! empty($wabaId)) {
+            $channelAccount = ChannelAccount::where('business_account_id', $wabaId)
+                ->where('channel', 'whatsapp')
+                ->first();
+
+            if ($channelAccount && $phoneId !== '') {
+                $channelAccount->update(['phone_number_id' => $phoneId]);
+            }
+        }
+
         if (! $channelAccount) {
-            Log::warning('WhatsApp inbound dropped — no channel_account match', [
+            $activeAccounts = ChannelAccount::where('channel', 'whatsapp')->get();
+            if ($activeAccounts->count() === 1) {
+                $channelAccount = $activeAccounts->first();
+                if ($phoneId !== '' && empty($channelAccount->phone_number_id)) {
+                    $channelAccount->update(['phone_number_id' => $phoneId]);
+                }
+            }
+        }
+
+        if (! $channelAccount) {
+            $err = "WhatsApp inbound dropped — no channel_account match for phone_number_id={$phoneId}, waba_id={$wabaId}";
+            Log::warning($err, [
                 'phone_number_id' => $phoneId,
+                'waba_id' => $wabaId,
                 'from' => $fromPhone,
                 'msg_id' => $msg['id'] ?? null,
-                'hint' => 'The phone_number_id received from Meta does not exist in channel_accounts. Re-run the WhatsApp setup or verify the configured number id.',
             ]);
+            \App\Services\MetaLogger::log("[Inbound Message Dropped]", [
+                'reason' => $err,
+                'phone_number_id' => $phoneId,
+                'waba_id' => $wabaId,
+                'from' => $fromPhone,
+            ], 'warning');
 
-            // Skip persisting — without a workspace the message would be invisible
-            // and would corrupt the inbox queries that filter by workspace_id.
-            throw new \RuntimeException("No channel_account found for phone_number_id={$phoneId}");
+            throw new \RuntimeException($err);
         }
 
         $workspaceId = (int) $channelAccount->workspace_id;
