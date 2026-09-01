@@ -261,14 +261,24 @@ export default function InboxIndex({ conversations: initialConversations, filter
 
     // Fallback polling for environments without active WebSockets (e.g. cPanel)
     useEffect(() => {
-        if (window.Echo) return;
+        const checkEchoConnected = () => {
+            try {
+                return window.Echo && window.Echo.connector && window.Echo.connector.pusher && window.Echo.connector.pusher.connection && window.Echo.connector.pusher.connection.state === 'connected';
+            } catch (e) {
+                return false;
+            }
+        };
+
+        if (checkEchoConnected()) return;
+
         const interval = setInterval(() => {
             router.reload({
                 preserveScroll: true,
                 preserveState: true,
                 only: ['conversations'],
             });
-        }, 5000);
+        }, 3000);
+
         return () => clearInterval(interval);
     }, [workspaceId]);
 
