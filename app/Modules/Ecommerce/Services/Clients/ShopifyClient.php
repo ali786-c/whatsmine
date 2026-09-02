@@ -36,6 +36,7 @@ class ShopifyClient implements EcommerceClientInterface
             $resp = $this->http()->get('/shop.json');
             if ($resp->successful() && isset($resp->json()['shop'])) {
                 $shop = $resp->json()['shop'];
+                \App\Services\ShopifyLogger::log('Test Connection Success', ['domain' => $this->domain, 'shop' => $shop['name'] ?? null]);
 
                 return [
                     'ok' => true,
@@ -48,8 +49,10 @@ class ShopifyClient implements EcommerceClientInterface
                 ];
             }
 
+            \App\Services\ShopifyLogger::log('Test Connection Failed', ['domain' => $this->domain, 'status' => $resp->status(), 'response' => $resp->json()], 'error');
             return ['ok' => false, 'message' => $resp->json()['errors'] ?? 'Shopify rejected the access token.'];
         } catch (\Throwable $e) {
+            \App\Services\ShopifyLogger::log('Test Connection Exception', ['domain' => $this->domain, 'error' => $e->getMessage()], 'error');
             return ['ok' => false, 'message' => $e->getMessage()];
         }
     }
@@ -65,11 +68,15 @@ class ShopifyClient implements EcommerceClientInterface
                 // 201 created; 422 means it already exists — both are acceptable.
                 if ($resp->status() === 201) {
                     $created++;
+                } elseif ($resp->status() !== 422) {
+                    \App\Services\ShopifyLogger::log('Webhook Register Error', ['domain' => $this->domain, 'topic' => $topic, 'status' => $resp->status(), 'response' => $resp->json()], 'warning');
                 }
             }
 
+            \App\Services\ShopifyLogger::log('Webhooks Registered', ['domain' => $this->domain, 'created' => $created, 'callback' => $callbackUrl]);
             return ['ok' => true, 'message' => "Registered {$created} new webhook(s)."];
         } catch (\Throwable $e) {
+            \App\Services\ShopifyLogger::log('Webhook Register Exception', ['domain' => $this->domain, 'error' => $e->getMessage()], 'error');
             return ['ok' => false, 'message' => $e->getMessage()];
         }
     }
@@ -124,6 +131,7 @@ class ShopifyClient implements EcommerceClientInterface
             : $this->http()->get('/orders.json', ['status' => 'any', 'limit' => 250]);
 
         if (! $resp->successful()) {
+            \App\Services\ShopifyLogger::log('Fetch Orders Failed', ['domain' => $this->domain, 'status' => $resp->status(), 'response' => $resp->json()], 'error');
             throw new \RuntimeException("Shopify orders fetch failed (HTTP {$resp->status()}).");
         }
 
@@ -179,6 +187,7 @@ class ShopifyClient implements EcommerceClientInterface
         $body = $resp->json();
         if (! $resp->successful() || isset($body['errors'])) {
             $detail = $body['errors'][0]['message'] ?? "HTTP {$resp->status()}";
+            \App\Services\ShopifyLogger::log('Fetch Products Failed', ['domain' => $this->domain, 'detail' => $detail, 'response' => $body], 'error');
             throw new \RuntimeException("Shopify products fetch failed ({$detail}).");
         }
 
@@ -264,10 +273,15 @@ class ShopifyClient implements EcommerceClientInterface
                 ],
             ]);
 
-            return $resp->successful()
-                ? ['ok' => true, 'message' => 'Fulfillment created.']
-                : ['ok' => false, 'message' => $resp->json()['errors'] ?? 'Shopify rejected the fulfillment.'];
+            if ($resp->successful()) {
+                \App\Services\ShopifyLogger::log('Order Fulfill Success', ['domain' => $this->domain, 'order' => $externalId, 'tracking' => $trackingNumber]);
+                return ['ok' => true, 'message' => 'Fulfillment created.'];
+            } else {
+                \App\Services\ShopifyLogger::log('Order Fulfill Failed', ['domain' => $this->domain, 'order' => $externalId, 'status' => $resp->status(), 'response' => $resp->json()], 'error');
+                return ['ok' => false, 'message' => $resp->json()['errors'] ?? 'Shopify rejected the fulfillment.'];
+            }
         } catch (\Throwable $e) {
+            \App\Services\ShopifyLogger::log('Order Fulfill Exception', ['domain' => $this->domain, 'order' => $externalId, 'error' => $e->getMessage()], 'error');
             return ['ok' => false, 'message' => $e->getMessage()];
         }
     }

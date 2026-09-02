@@ -134,7 +134,7 @@ class IntegrationConfigController extends Controller
                 $v = '';
             }
 
-            if (preg_match('/^[\x{2022}•]+$/u', (string) $v) || (string) $v === '••••••••••••') {
+            if (preg_match('/^[\x{2022}•\.\*]+$/u', (string) $v) || (string) $v === '••••••••••••') {
                 $mergeDecisions[$k] = 'SKIP (masked placeholder - keep existing)';
                 continue;
             }

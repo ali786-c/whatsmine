@@ -28,8 +28,11 @@ class EcommerceOAuthManager
     {
         $creds = $this->credentials->oauth('shopify');
         if (! $creds || ! $creds->clientId()) {
+            \App\Services\ShopifyLogger::log('OAuth Init Failed', ['shop' => $shop, 'error' => 'Shopify OAuth is not configured.'], 'error');
             throw new RuntimeException('Shopify OAuth is not configured.');
         }
+
+        \App\Services\ShopifyLogger::log('OAuth Init', ['shop' => $shop, 'callback' => $callbackUrl]);
 
         return "https://{$shop}/admin/oauth/authorize?".http_build_query([
             'client_id' => $creds->clientId(),
@@ -50,6 +53,7 @@ class EcommerceOAuthManager
         $secret = $creds?->clientSecret();
         $hmac = (string) ($query['hmac'] ?? '');
         if (! $secret || $hmac === '') {
+            \App\Services\ShopifyLogger::log('HMAC Verification Failed', ['reason' => 'Missing secret or HMAC', 'query' => $query], 'error');
             return false;
         }
 
@@ -58,13 +62,18 @@ class EcommerceOAuthManager
         $message = urldecode(http_build_query($query));
         $computed = hash_hmac('sha256', $message, $secret);
 
-        return hash_equals($computed, $hmac);
+        $isValid = hash_equals($computed, $hmac);
+        if (!$isValid) {
+            \App\Services\ShopifyLogger::log('HMAC Verification Failed', ['reason' => 'Mismatch', 'computed' => $computed, 'provided' => $hmac], 'error');
+        }
+        return $isValid;
     }
 
     public function shopifyExchange(string $shop, string $code): ?string
     {
         $creds = $this->credentials->oauth('shopify');
         if (! $creds) {
+            \App\Services\ShopifyLogger::log('Token Exchange Failed', ['shop' => $shop, 'error' => 'Credentials not found'], 'error');
             return null;
         }
 
@@ -74,7 +83,13 @@ class EcommerceOAuthManager
             'code' => $code,
         ]);
 
-        return $resp->successful() ? ($resp->json()['access_token'] ?? null) : null;
+        if (! $resp->successful()) {
+            \App\Services\ShopifyLogger::log('Token Exchange Failed', ['shop' => $shop, 'status' => $resp->status(), 'response' => $resp->json()], 'error');
+            return null;
+        }
+
+        \App\Services\ShopifyLogger::log('Token Exchange Success', ['shop' => $shop]);
+        return $resp->json()['access_token'] ?? null;
     }
 
     // ── WooCommerce ──────────────────────────────────────────────────────────
