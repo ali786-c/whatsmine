@@ -2,6 +2,9 @@
 
 namespace App\Modules\WhatsappQR\Http\Controllers;
 
+use App\Events\ContactCreated;
+use App\Events\MessageReceived;
+use App\Events\MessageSent;
 use App\Http\Controllers\Controller;
 use App\Modules\Shared\Models\ChannelAccount;
 use App\Modules\Shared\Models\Contact;
@@ -175,6 +178,12 @@ class QrWebhookController extends Controller
             "unread_count" => $fromMe ? 0 : ($conversation->unread_count + 1),
             "last_inbound_at" => $fromMe ? $conversation->last_inbound_at : $message->sent_at,
         ]);
+
+        if ($fromMe) {
+            MessageSent::dispatch($message);
+        } else {
+            MessageReceived::dispatch($message);
+        }
     }
 
     private function resolveContact(int $workspaceId, string $phoneNumber, ?string $senderName = null): Contact
@@ -192,6 +201,7 @@ class QrWebhookController extends Controller
                 "source" => "whatsapp_qr",
                 "opt_in_whatsapp" => true,
             ]);
+            ContactCreated::dispatch($contact);
         } elseif ($senderName && empty($contact->first_name)) {
             $nameParts = explode(" ", $senderName, 2);
             $contact->update(["first_name" => $nameParts[0] ?? null, "last_name" => $nameParts[1] ?? null]);
