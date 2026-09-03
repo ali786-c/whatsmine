@@ -19,7 +19,8 @@ const PRIORITY_STYLES = {
 };
 
 function Avatar({ name, staff = false }) {
-    const initials = name?.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() ?? '?';
+    const safeName = name || '?';
+    const initials = safeName.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
     return (
         <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${staff ? 'bg-brand-600 text-white' : 'bg-neutral-200 dark:bg-neutral-600 text-neutral-700 dark:text-neutral-300'}`}>
             {staff ? <Shield className="h-3.5 w-3.5" /> : initials}
