@@ -43,6 +43,7 @@ class EcommerceStore extends Model
         return [
             'credentials' => 'encrypted:array',
             'external_meta' => 'array',
+            'messaging_config' => 'array',
             'last_tested_at' => 'datetime',
             'customers_synced_at' => 'datetime',
             'orders_synced_at' => 'datetime',
