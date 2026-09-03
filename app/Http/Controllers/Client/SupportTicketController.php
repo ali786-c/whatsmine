@@ -103,6 +103,7 @@ class SupportTicketController extends Controller
 
     public function show(Request $request, SupportTicket $supportTicket): Response
     {
+        Log::info('Opening Support Ticket', ['ticket_id' => $supportTicket->id, 'user_id' => $request->user()->id]);
         abort_unless($supportTicket->user_id === $request->user()->id, 403);
 
         $supportTicket->load('replies');

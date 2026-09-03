@@ -1,5 +1,5 @@
 import ClientLayout from '@/Layouts/ClientLayout';
-import { Head, Link, usePage } from '@inertiajs/react';
+import { Head, Link, usePage, router } from '@inertiajs/react';
 import { CheckCircle, Clock, LifeBuoy, MessageSquare, Plus, Tag, XCircle } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { formatDateTz } from '@/Utils/datetime';
@@ -105,7 +105,15 @@ export default function SupportIndex({ tickets, stats }) {
                                         const stLabel = t(`support_tickets.${ticket.status}`) || ticket.status;
                                         const pr = PRIORITY_STYLES[ticket.priority] ?? PRIORITY_STYLES.normal;
                                         return (
-                                            <tr key={ticket.id} className="hover:bg-neutral-50 dark:hover:bg-neutral-700/30 transition-colors">
+                                            <tr 
+                                                key={ticket.id} 
+                                                onClick={() => {
+                                                    const url = route('client.support.show', ticket.id);
+                                                    console.log('Ticket clicked! ID:', ticket.id, 'Navigating to:', url);
+                                                    router.visit(url);
+                                                }}
+                                                className="hover:bg-neutral-50 dark:hover:bg-neutral-700/30 transition-colors cursor-pointer"
+                                            >
                                                 <td className="px-4 py-3.5">
                                                     <div className="flex items-start gap-2">
                                                         <span className="text-xs text-neutral-400 dark:text-neutral-500 mt-0.5 tabular-nums">#{ticket.id}</span>
