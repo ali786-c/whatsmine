@@ -28,8 +28,15 @@ class SeedDefaultEcommerceTemplatesJob implements ShouldQueue
                 'components' => [
                     [
                         'type' => 'BODY', 
-                        'text' => 'Hi {{1}}, your order #{{2}} is confirmed! The total amount of {{3}} will be collected on delivery. We will notify you when it ships.', 
+                        'text' => 'Hi {{1}}, your order #{{2}} is placed! The total amount of {{3}} will be collected on delivery. Please confirm your order by clicking the button below.', 
                         'example' => ['body_text' => [['John', '1001', '$50.00']]]
+                    ],
+                    [
+                        'type' => 'BUTTONS',
+                        'buttons' => [
+                            ['type' => 'QUICK_REPLY', 'text' => '✅ Confirm Order'],
+                            ['type' => 'QUICK_REPLY', 'text' => '❌ Cancel Order']
+                        ]
                     ]
                 ],
             ],
@@ -45,6 +52,50 @@ class SeedDefaultEcommerceTemplatesJob implements ShouldQueue
                 ],
             ],
             [
+                'name' => 'ecommerce_order_shipped', 
+                'category' => 'UTILITY', 
+                'components' => [
+                    [
+                        'type' => 'BODY', 
+                        'text' => 'Great news {{1}}! Your order #{{2}} is on the way. Track it here: {{3}}', 
+                        'example' => ['body_text' => [['John', '1001', 'https://track.com/123']]]
+                    ]
+                ],
+            ],
+            [
+                'name' => 'ecommerce_winback', 
+                'category' => 'MARKETING', 
+                'components' => [
+                    [
+                        'type' => 'BODY', 
+                        'text' => 'Hi {{1}}, it\'s been a while! We miss you. Use code {{2}} for {{3}} off your next purchase.', 
+                        'example' => ['body_text' => [['John', 'WELCOMEBACK15', '15%']]]
+                    ]
+                ],
+            ],
+            [
+                'name' => 'ecommerce_review_request', 
+                'category' => 'MARKETING', 
+                'components' => [
+                    [
+                        'type' => 'BODY', 
+                        'text' => 'Hope you\'re loving your recent purchase! Could you take 10 seconds to leave a review? {{1}}', 
+                        'example' => ['body_text' => [['https://store.com/review']]]
+                    ]
+                ],
+            ],
+            [
+                'name' => 'ecommerce_vip_thanks', 
+                'category' => 'MARKETING', 
+                'components' => [
+                    [
+                        'type' => 'BODY', 
+                        'text' => 'Hi {{1}}, I\'m the founder. I personally wanted to thank you for your VIP order #{{2}}! We truly appreciate your support.', 
+                        'example' => ['body_text' => [['John', '1001']]]
+                    ]
+                ],
+            ],
+            [
                 'name' => 'ecommerce_abandoned_cart', 
                 'category' => 'MARKETING', 
                 'components' => [
@@ -56,7 +107,7 @@ class SeedDefaultEcommerceTemplatesJob implements ShouldQueue
                     [
                         'type' => 'BUTTONS',
                         'buttons' => [
-                            ['type' => 'URL', 'text' => 'Complete Purchase', 'url' => 'https://example.com'] // Note: URL must be valid domain, users will edit this.
+                            ['type' => 'URL', 'text' => 'Complete Purchase', 'url' => 'https://example.com']
                         ]
                     ]
                 ],

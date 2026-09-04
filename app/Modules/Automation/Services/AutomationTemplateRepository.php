@@ -11,8 +11,8 @@ class AutomationTemplateRepository
     {
         return [
             'ecommerce_order_placed' => [
-                'name' => 'E-Commerce: Order Confirmation',
-                'description' => 'Automatically send a WhatsApp message when a customer places an order.',
+                'name' => 'E-Commerce: Order Confirmation & COD Verify',
+                'description' => 'Automatically verify COD orders with quick replies, and send instant confirmation for prepaid orders.',
                 'trigger_type' => 'order.placed',
                 'nodes' => [
                     [
@@ -25,12 +25,40 @@ class AutomationTemplateRepository
                         ],
                     ],
                     [
-                        'id' => 'node_1',
-                        'type' => 'send_template',
+                        'id' => 'node_condition',
+                        'type' => 'condition',
                         'position' => ['x' => 400, 'y' => 250],
                         'data' => [
+                            'nodeType' => 'condition',
+                            'label' => 'Is COD?',
+                            'field' => 'context.payment_method',
+                            'operator' => '==',
+                            'value' => 'COD',
+                        ],
+                    ],
+                    [
+                        'id' => 'node_cod',
+                        'type' => 'send_template',
+                        'position' => ['x' => 200, 'y' => 400],
+                        'data' => [
                             'nodeType' => 'send_template',
-                            'label' => 'Send Order Template',
+                            'label' => 'Verify COD Template',
+                            'template_name' => 'ecommerce_order_cod',
+                            'language' => 'en',
+                            'variables' => [
+                                '{{contact.first_name}}',
+                                '{{context.order_number}}',
+                                '{{context.order_total}} {{context.order_currency}}',
+                            ],
+                        ],
+                    ],
+                    [
+                        'id' => 'node_prepaid',
+                        'type' => 'send_template',
+                        'position' => ['x' => 600, 'y' => 400],
+                        'data' => [
+                            'nodeType' => 'send_template',
+                            'label' => 'Prepaid Confirm Template',
                             'template_name' => 'ecommerce_order_paid',
                             'language' => 'en',
                             'variables' => [
@@ -43,9 +71,23 @@ class AutomationTemplateRepository
                 ],
                 'edges' => [
                     [
-                        'id' => 'edge_trigger_1_node_1',
+                        'id' => 'edge_trigger_to_cond',
                         'source' => 'trigger_1',
-                        'target' => 'node_1',
+                        'target' => 'node_condition',
+                        'type' => 'smoothstep',
+                    ],
+                    [
+                        'id' => 'edge_cond_true',
+                        'source' => 'node_condition',
+                        'target' => 'node_cod',
+                        'sourceHandle' => 'true',
+                        'type' => 'smoothstep',
+                    ],
+                    [
+                        'id' => 'edge_cond_false',
+                        'source' => 'node_condition',
+                        'target' => 'node_prepaid',
+                        'sourceHandle' => 'false',
                         'type' => 'smoothstep',
                     ],
                 ],
@@ -224,6 +266,216 @@ class AutomationTemplateRepository
                         'source' => 'node_condition',
                         'target' => 'node_shopify',
                         'sourceHandle' => 'false',
+                        'type' => 'smoothstep',
+                    ],
+                ],
+            ],
+            'ecommerce_shipping_notification' => [
+                'name' => 'E-Commerce: Shipping & Tracking Notification',
+                'description' => 'Send an automatic WhatsApp message with tracking details when an order is shipped.',
+                'trigger_type' => 'order.fulfilled',
+                'nodes' => [
+                    [
+                        'id' => 'trigger_1',
+                        'type' => 'trigger',
+                        'position' => ['x' => 400, 'y' => 100],
+                        'data' => [
+                            'triggerType' => 'order.fulfilled',
+                            'label' => 'Order Shipped',
+                        ],
+                    ],
+                    [
+                        'id' => 'node_1',
+                        'type' => 'send_template',
+                        'position' => ['x' => 400, 'y' => 250],
+                        'data' => [
+                            'nodeType' => 'send_template',
+                            'label' => 'Shipping Template',
+                            'template_name' => 'ecommerce_order_shipped',
+                            'language' => 'en',
+                            'variables' => [
+                                '{{contact.first_name}}',
+                                '{{context.order_number}}',
+                                '{{context.tracking_url}}',
+                            ],
+                        ],
+                    ],
+                ],
+                'edges' => [
+                    [
+                        'id' => 'edge_1',
+                        'source' => 'trigger_1',
+                        'target' => 'node_1',
+                        'type' => 'smoothstep',
+                    ],
+                ],
+            ],
+            'ecommerce_winback' => [
+                'name' => 'E-Commerce: Customer Win-back',
+                'description' => 'Automatically send a 15% discount code to customers 30 days after their purchase to drive repeat sales.',
+                'trigger_type' => 'order.placed',
+                'nodes' => [
+                    [
+                        'id' => 'trigger_1',
+                        'type' => 'trigger',
+                        'position' => ['x' => 400, 'y' => 100],
+                        'data' => [
+                            'triggerType' => 'order.placed',
+                            'label' => 'Order Placed',
+                        ],
+                    ],
+                    [
+                        'id' => 'node_wait',
+                        'type' => 'wait',
+                        'position' => ['x' => 400, 'y' => 250],
+                        'data' => [
+                            'nodeType' => 'wait',
+                            'label' => 'Wait 30 Days',
+                            'amount' => 30,
+                            'unit' => 'days',
+                        ],
+                    ],
+                    [
+                        'id' => 'node_send',
+                        'type' => 'send_template',
+                        'position' => ['x' => 400, 'y' => 400],
+                        'data' => [
+                            'nodeType' => 'send_template',
+                            'label' => 'Win-back Template',
+                            'template_name' => 'ecommerce_winback',
+                            'language' => 'en',
+                            'variables' => [
+                                '{{contact.first_name}}',
+                                'WELCOMEBACK15',
+                                '15%',
+                            ],
+                        ],
+                    ],
+                ],
+                'edges' => [
+                    [
+                        'id' => 'edge_1',
+                        'source' => 'trigger_1',
+                        'target' => 'node_wait',
+                        'type' => 'smoothstep',
+                    ],
+                    [
+                        'id' => 'edge_2',
+                        'source' => 'node_wait',
+                        'target' => 'node_send',
+                        'type' => 'smoothstep',
+                    ],
+                ],
+            ],
+            'ecommerce_review_request' => [
+                'name' => 'E-Commerce: Product Review Request',
+                'description' => 'Ask customers for a review 3 days after their order is shipped/fulfilled.',
+                'trigger_type' => 'order.fulfilled',
+                'nodes' => [
+                    [
+                        'id' => 'trigger_1',
+                        'type' => 'trigger',
+                        'position' => ['x' => 400, 'y' => 100],
+                        'data' => [
+                            'triggerType' => 'order.fulfilled',
+                            'label' => 'Order Shipped',
+                        ],
+                    ],
+                    [
+                        'id' => 'node_wait',
+                        'type' => 'wait',
+                        'position' => ['x' => 400, 'y' => 250],
+                        'data' => [
+                            'nodeType' => 'wait',
+                            'label' => 'Wait 3 Days',
+                            'amount' => 3,
+                            'unit' => 'days',
+                        ],
+                    ],
+                    [
+                        'id' => 'node_send',
+                        'type' => 'send_template',
+                        'position' => ['x' => 400, 'y' => 400],
+                        'data' => [
+                            'nodeType' => 'send_template',
+                            'label' => 'Review Template',
+                            'template_name' => 'ecommerce_review_request',
+                            'language' => 'en',
+                            'variables' => [
+                                'https://your-store.com/reviews',
+                            ],
+                        ],
+                    ],
+                ],
+                'edges' => [
+                    [
+                        'id' => 'edge_1',
+                        'source' => 'trigger_1',
+                        'target' => 'node_wait',
+                        'type' => 'smoothstep',
+                    ],
+                    [
+                        'id' => 'edge_2',
+                        'source' => 'node_wait',
+                        'target' => 'node_send',
+                        'type' => 'smoothstep',
+                    ],
+                ],
+            ],
+            'ecommerce_vip_thanks' => [
+                'name' => 'E-Commerce: VIP Founder\'s Thank You',
+                'description' => 'Send a personalized thank you message from the founder to customers who spend more than 15,000.',
+                'trigger_type' => 'order.placed',
+                'nodes' => [
+                    [
+                        'id' => 'trigger_1',
+                        'type' => 'trigger',
+                        'position' => ['x' => 400, 'y' => 100],
+                        'data' => [
+                            'triggerType' => 'order.placed',
+                            'label' => 'Order Placed',
+                        ],
+                    ],
+                    [
+                        'id' => 'node_cond',
+                        'type' => 'condition',
+                        'position' => ['x' => 400, 'y' => 250],
+                        'data' => [
+                            'nodeType' => 'condition',
+                            'label' => 'Order > 15k?',
+                            'field' => 'context.order_total',
+                            'operator' => '>',
+                            'value' => '15000',
+                        ],
+                    ],
+                    [
+                        'id' => 'node_send',
+                        'type' => 'send_template',
+                        'position' => ['x' => 200, 'y' => 400],
+                        'data' => [
+                            'nodeType' => 'send_template',
+                            'label' => 'VIP Template',
+                            'template_name' => 'ecommerce_vip_thanks',
+                            'language' => 'en',
+                            'variables' => [
+                                '{{contact.first_name}}',
+                                '{{context.order_number}}',
+                            ],
+                        ],
+                    ],
+                ],
+                'edges' => [
+                    [
+                        'id' => 'edge_1',
+                        'source' => 'trigger_1',
+                        'target' => 'node_cond',
+                        'type' => 'smoothstep',
+                    ],
+                    [
+                        'id' => 'edge_2',
+                        'source' => 'node_cond',
+                        'target' => 'node_send',
+                        'sourceHandle' => 'true',
                         'type' => 'smoothstep',
                     ],
                 ],

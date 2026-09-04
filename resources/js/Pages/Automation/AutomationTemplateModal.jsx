@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ShoppingCart, ShoppingBag, Sparkles, Plus, Loader2 } from 'lucide-react';
+import { ShoppingCart, ShoppingBag, Sparkles, Plus, Loader2, Package } from 'lucide-react';
 
 export default function AutomationTemplateModal({ templates = {}, onClose, onSelect, processing }) {
     const { t } = useTranslation();
@@ -9,6 +9,7 @@ export default function AutomationTemplateModal({ templates = {}, onClose, onSel
     const getIcon = (triggerType) => {
         if (triggerType === 'cart.abandoned') return <ShoppingCart className="h-6 w-6" />;
         if (triggerType === 'order.placed') return <ShoppingBag className="h-6 w-6" />;
+        if (triggerType === 'order.fulfilled') return <Package className="h-6 w-6" />;
         return <Sparkles className="h-6 w-6" />;
     };
 
