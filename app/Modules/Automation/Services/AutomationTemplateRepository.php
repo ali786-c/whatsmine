@@ -26,12 +26,18 @@ class AutomationTemplateRepository
                     ],
                     [
                         'id' => 'node_1',
-                        'type' => 'send_whatsapp',
+                        'type' => 'send_template',
                         'position' => ['x' => 400, 'y' => 250],
                         'data' => [
-                            'nodeType' => 'send_whatsapp',
-                            'label' => 'Send WhatsApp Message',
-                            'body' => "Hi {{contact.first_name}},\n\nYour order #{{context.order_number}} for {{context.order_total}} {{context.order_currency}} is confirmed! \n\nThank you for shopping with us! We'll notify you when it ships.",
+                            'nodeType' => 'send_template',
+                            'label' => 'Send Order Template',
+                            'template_name' => 'ecommerce_order_paid',
+                            'language' => 'en',
+                            'variables' => [
+                                '{{contact.first_name}}',
+                                '{{context.order_total}} {{context.order_currency}}',
+                                '{{context.order_number}}',
+                            ],
                         ],
                     ],
                 ],
@@ -71,12 +77,18 @@ class AutomationTemplateRepository
                     ],
                     [
                         'id' => 'node_2',
-                        'type' => 'send_whatsapp',
+                        'type' => 'send_template',
                         'position' => ['x' => 400, 'y' => 400],
                         'data' => [
-                            'nodeType' => 'send_whatsapp',
-                            'label' => 'First Reminder',
-                            'body' => "Hi {{contact.first_name}}, you left something in your cart!\n\nComplete your purchase of {{context.cart_total}} easily here: {{context.recovery_url}}",
+                            'nodeType' => 'send_template',
+                            'label' => 'First Reminder Template',
+                            'template_name' => 'ecommerce_abandoned_cart',
+                            'language' => 'en',
+                            'variables' => [
+                                '{{contact.first_name}}',
+                                '{{context.cart_total}} {{context.order_currency}}',
+                                '{{context.recovery_url}}',
+                            ],
                         ],
                     ],
                     [
