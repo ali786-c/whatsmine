@@ -52,7 +52,7 @@ export default function AutomationIndex({ automations, templates }) {
     const flash = props.flash ?? {};
     const [showCreate, setShowCreate] = useState(false);
     const [showAi, setShowAi] = useState(false);
-    const [showGallery, setShowGallery] = useState(false);
+    const [activeTab, setActiveTab] = useState('automations');
     const [templateLoading, setTemplateLoading] = useState(false);
     const [aiPrompt, setAiPrompt] = useState('');
     const [aiLoading, setAiLoading] = useState(false);
@@ -113,9 +113,6 @@ export default function AutomationIndex({ automations, templates }) {
                     </div>
                     {(
                         <div className="flex items-center gap-2">
-                            <button onClick={() => setShowGallery(true)} className="flex items-center gap-1.5 rounded-lg border border-brand-200 dark:border-brand-800 bg-brand-50 dark:bg-brand-900/30 px-3 py-2 text-sm font-medium text-brand-700 dark:text-brand-300 hover:bg-brand-100 dark:hover:bg-brand-900/50 transition">
-                                <Plus className="h-4 w-4" /> Template Gallery
-                            </button>
                             <button onClick={() => { setAiError(null); setShowAi(true); }} className="ai-glow flex items-center gap-1.5 rounded-lg border border-purple-200 dark:border-purple-800 bg-purple-50 dark:bg-purple-900/30 px-3 py-2 text-sm font-medium text-purple-700 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-900/50 transition">
                                 <Sparkles className="h-4 w-4" /> {t('automation.ai_generate')}
                             </button>
@@ -126,9 +123,35 @@ export default function AutomationIndex({ automations, templates }) {
                     )}
                 </div>
 
+                <div className="border-b border-neutral-200 dark:border-neutral-800">
+                    <nav className="-mb-px flex space-x-8">
+                        <button
+                            onClick={() => setActiveTab('automations')}
+                            className={`whitespace-nowrap border-b-2 py-4 px-1 text-sm font-medium ${
+                                activeTab === 'automations'
+                                    ? 'border-brand-500 text-brand-600 dark:text-brand-400'
+                                    : 'border-transparent text-neutral-500 hover:border-neutral-300 hover:text-neutral-700 dark:text-neutral-400 dark:hover:border-neutral-700 dark:hover:text-neutral-300'
+                            }`}
+                        >
+                            My Automations
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('templates')}
+                            className={`whitespace-nowrap border-b-2 py-4 px-1 text-sm font-medium ${
+                                activeTab === 'templates'
+                                    ? 'border-brand-500 text-brand-600 dark:text-brand-400'
+                                    : 'border-transparent text-neutral-500 hover:border-neutral-300 hover:text-neutral-700 dark:text-neutral-400 dark:hover:border-neutral-700 dark:hover:text-neutral-300'
+                            }`}
+                        >
+                            Pre-built Templates
+                        </button>
+                    </nav>
+                </div>
+
                 {flash.success && <div className="rounded-lg bg-green-50 dark:bg-green-900/30 text-green-800 dark:text-green-200 px-4 py-2 text-sm">{flash.success}</div>}
 
-                {automations.length === 0 ? (
+                {activeTab === 'automations' ? (
+                    automations.length === 0 ? (
                     <div className="rounded-xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900">
                         <EmptyState
                             icon={<Zap className="h-8 w-8" />}
@@ -216,6 +239,52 @@ export default function AutomationIndex({ automations, templates }) {
                             );
                         })}
                     </div>
+                ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {Object.entries(templates).map(([key, template]) => {
+                            const getIcon = (triggerType) => {
+                                if (triggerType === 'cart.abandoned') return <ShoppingCart className="h-6 w-6" />;
+                                if (triggerType === 'order.placed') return <ShoppingBag className="h-6 w-6" />;
+                                if (triggerType === 'order.fulfilled') return <PackageCheck className="h-6 w-6" />;
+                                return <Sparkles className="h-6 w-6" />;
+                            };
+
+                            return (
+                                <div
+                                    key={key}
+                                    className="group flex flex-col rounded-xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 p-6 transition hover:border-brand-500 hover:shadow-md dark:hover:border-brand-500 cursor-pointer"
+                                    onClick={() => !templateLoading && handleSelectTemplate(key)}
+                                >
+                                    <div className="flex items-center gap-4">
+                                        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-neutral-50 dark:bg-neutral-800 text-brand-600 dark:text-brand-400 shadow-sm border border-neutral-100 dark:border-neutral-700">
+                                            {getIcon(template.trigger_type)}
+                                        </span>
+                                        <div>
+                                            <h4 className="font-semibold text-neutral-900 dark:text-neutral-100 group-hover:text-brand-600 transition text-base">
+                                                {template.name}
+                                            </h4>
+                                            <span className="text-xs uppercase tracking-wide text-neutral-400 font-medium mt-1 block">
+                                                {template.trigger_type}
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <p className="mt-4 text-sm text-neutral-600 dark:text-neutral-400 leading-relaxed flex-1">
+                                        {template.description}
+                                    </p>
+                                    <div className="mt-6 pt-4 border-t border-neutral-100 dark:border-neutral-800 flex items-center text-sm font-medium text-brand-600 dark:text-brand-400 group-hover:underline">
+                                        {templateLoading ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : <Plus className="h-4 w-4 mr-1.5" />}
+                                        Use this template
+                                    </div>
+                                </div>
+                            );
+                        })}
+                        
+                        {Object.keys(templates).length === 0 && (
+                            <div className="col-span-full text-center py-12 text-neutral-500 text-sm bg-white dark:bg-neutral-900 rounded-xl border border-neutral-200 dark:border-neutral-700">
+                                No templates available.
+                            </div>
+                        )}
+                    </div>
                 )}
             </div>
 
@@ -271,25 +340,17 @@ export default function AutomationIndex({ automations, templates }) {
                         <p className="flex items-start gap-1.5 text-xs text-neutral-400">
                             <Sparkles className="h-3.5 w-3.5 shrink-0 mt-0.5" />{t('automation.ai_disclaimer')}
                         </p>
-                        <div className="flex gap-2 pt-1">
-                            <button disabled={aiLoading || !aiPrompt.trim()} onClick={handleGenerate} className="ai-glow flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-purple-600 py-2 text-sm font-medium text-white hover:bg-purple-700 disabled:opacity-60 transition">
-                                {aiLoading ? <><Loader2 className="h-4 w-4 animate-spin" /> {t('automation.ai_generating')}</> : <><Sparkles className="h-4 w-4" /> {t('automation.ai_generate')}</>}
-                            </button>
-                            <button type="button" disabled={aiLoading} onClick={() => setShowAi(false)} className="rounded-lg border border-neutral-300 dark:border-neutral-600 px-4 py-2 text-sm hover:bg-neutral-50 dark:hover:bg-neutral-800 transition">
+                        <div className="flex justify-end gap-3 pt-2">
+                            <button type="button" onClick={() => setShowAi(false)} className="rounded-lg px-4 py-2 text-sm font-medium text-neutral-700 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800 transition">
                                 {t('common.cancel')}
+                            </button>
+                            <button type="button" onClick={handleGenerate} disabled={aiLoading || !aiPrompt.trim()} className="flex items-center gap-1.5 rounded-lg bg-purple-600 px-4 py-2 text-sm font-medium text-white hover:bg-purple-700 disabled:opacity-50 transition">
+                                {aiLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                                {t('automation.btn_generate')}
                             </button>
                         </div>
                     </div>
                 </div>
-            )}
-
-            {showGallery && (
-                <AutomationTemplateModal 
-                    templates={templates} 
-                    onClose={() => setShowGallery(false)} 
-                    onSelect={handleSelectTemplate} 
-                    processing={templateLoading} 
-                />
             )}
         </ClientLayout>
     );
