@@ -138,9 +138,9 @@ class SeedDefaultEcommerceTemplatesJob implements ShouldQueue
 
         foreach ($templates as $t) {
             WhatsappTemplate::firstOrCreate(
-                ['workspace_id' => $waba->workspace_id, 'name' => $t['name'], 'language' => 'en'],
+                ['waba_id' => $waba->waba_id, 'name' => $t['name'], 'language' => 'en'],
                 [
-                    'waba_id' => $waba->waba_id,
+                    'workspace_id' => $waba->workspace_id,
                     'category' => $t['category'],
                     'status' => 'PENDING',
                     'components' => $t['components'],

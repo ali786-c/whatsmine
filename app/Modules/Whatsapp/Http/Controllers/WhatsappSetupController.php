@@ -7,6 +7,7 @@ use App\Modules\Integrations\Services\CredentialResolver;
 use App\Modules\Shared\Models\ChannelAccount;
 use App\Modules\Whatsapp\Models\WhatsappBusinessAccount;
 use App\Modules\Whatsapp\Models\WhatsappPhoneNumber;
+use App\Modules\Whatsapp\Models\WhatsappTemplate;
 use App\Modules\Whatsapp\Services\CloudApiClient;
 use Illuminate\Http\Client\ConnectionException as HttpConnectionException;
 use Illuminate\Http\JsonResponse;
@@ -58,6 +59,11 @@ class WhatsappSetupController extends Controller
     {
         $workspaceId = $request->user()->current_workspace_id ?? $request->user()->workspace_id;
         $this->authorizeWaba($waba, $workspaceId);
+
+        // Delete all templates associated with this WABA (both custom and pre-built)
+        WhatsappTemplate::where('workspace_id', $workspaceId)
+            ->where('waba_id', $waba->waba_id)
+            ->delete();
 
         ChannelAccount::where('workspace_id', $workspaceId)
             ->where('channel', 'whatsapp')
