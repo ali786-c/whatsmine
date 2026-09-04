@@ -831,8 +831,8 @@ class AutomationEngine
         return match ($operator) {
             'equals' => (string) $actual === (string) $value,
             'not_equals' => (string) $actual !== (string) $value,
-            'contains' => $value !== null && str_contains((string) $actual, (string) $value),
-            'not_contains' => $value === null || ! str_contains((string) $actual, (string) $value),
+            'contains' => $value !== null && str_contains(mb_strtolower((string) $actual), mb_strtolower((string) $value)),
+            'not_contains' => $value === null || ! str_contains(mb_strtolower((string) $actual), mb_strtolower((string) $value)),
             'exists' => $actual !== null && $actual !== '' && $actual !== false,
             'not_exists' => $actual === null || $actual === '' || $actual === false,
             'gt' => (float) $actual > (float) $value,
