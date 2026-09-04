@@ -147,6 +147,7 @@ function ConnectedStoreCard({ store, onOpenAutomations }) {
                 >
                     {busy === 'test' ? '…' : (t('ecommerce.test') || 'Test')}
                 </button>
+
                 <button
                     type="button"
                     onClick={() => act('client.ecommerce.stores.sync', 'sync')}
@@ -155,14 +156,6 @@ function ConnectedStoreCard({ store, onOpenAutomations }) {
                 >
                     <RefreshCw className={`h-3.5 w-3.5 ${busy === 'sync' ? 'animate-spin' : ''}`} />
                     {t('ecommerce.sync') || 'Sync'}
-                </button>
-                <button
-                    type="button"
-                    onClick={() => onOpenAutomations(store)}
-                    className="flex items-center justify-center gap-1.5 flex-1 rounded-lg border border-neutral-200 dark:border-neutral-700 py-2 text-sm font-medium text-neutral-600 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-800 transition"
-                >
-                    <Bot className="h-3.5 w-3.5" />
-                    Automations
                 </button>
                 <button
                     type="button"
