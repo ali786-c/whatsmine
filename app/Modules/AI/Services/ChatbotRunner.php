@@ -55,6 +55,11 @@ class ChatbotRunner
             $systemPrompt .= "\n\nUse this order information if the customer asks about their order status, shipping, or delivery:\n".$orderSummary;
         }
 
+        $productSummary = $this->productSummary($workspaceId, $body);
+        if ($productSummary !== null) {
+            $systemPrompt .= "\n\nUse this product information if the customer asks about products, pricing, or stock:\n".$productSummary;
+        }
+
         // Load recent conversation turns as context (last 20 messages)
         $history = [];
         $recentMessages = $conversation->messages()
@@ -141,6 +146,65 @@ class ChatbotRunner
             }
 
             return '- '.implode(', ', $parts);
+        })->implode("\n");
+    }
+
+    /**
+     * Extracts keywords from the user's message and performs a fast, zero-cost
+     * database search to inject relevant product catalog data into the prompt.
+     */
+    private function productSummary(int $workspaceId, string $query): ?string
+    {
+        $storeModel = 'App\Modules\Ecommerce\Models\EcommerceStore';
+        $productModel = 'App\Modules\Ecommerce\Models\EcommerceProduct';
+
+        if (! class_exists($storeModel) || ! class_exists($productModel)) {
+            return null;
+        }
+
+        $hasStore = $storeModel::where('workspace_id', $workspaceId)->where('status', 'connected')->exists();
+        if (! $hasStore) {
+            return null;
+        }
+
+        // Extract keywords: strip punctuation, lowercase, split, drop short words
+        $clean = preg_replace('/[^a-zA-Z0-9\s]/', ' ', strtolower($query));
+        $words = array_filter(explode(' ', (string) $clean), fn($w) => strlen(trim($w)) > 2);
+        
+        // Remove common stop words to improve search relevance
+        $stopWords = ['the', 'and', 'for', 'you', 'have', 'with', 'this', 'that', 'are', 'what', 'how', 'much', 'can', 'get', 'want'];
+        $keywords = array_diff($words, $stopWords);
+
+        if (empty($keywords)) {
+            return null;
+        }
+
+        $q = $productModel::where('workspace_id', $workspaceId)->where('status', 'active');
+        
+        $q->where(function ($queryBuilder) use ($keywords) {
+            foreach ($keywords as $kw) {
+                $queryBuilder->orWhere('name', 'LIKE', '%' . $kw . '%')
+                             ->orWhere('sku', 'LIKE', '%' . $kw . '%');
+            }
+        });
+
+        // Take top 5 matching products to keep token usage minimal
+        $products = $q->take(5)->get();
+
+        if ($products->isEmpty()) {
+            return null;
+        }
+
+        return $products->map(function ($p) {
+            $parts = ["Product: {$p->name}"];
+            if ($p->sku) {
+                $parts[] = "SKU: {$p->sku}";
+            }
+            $parts[] = "Price: {$p->price}";
+            if ($p->inventory_quantity !== null) {
+                $parts[] = "Stock: {$p->inventory_quantity} available";
+            }
+            return '- ' . implode(' | ', $parts);
         })->implode("\n");
     }
 
