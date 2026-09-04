@@ -386,7 +386,7 @@ class AutomationEngine
 
         try {
             return match ($type) {
-                'wait' => $this->executeWait($data, $run),
+                'wait' => $this->executeWait($data, $run, $context),
                 'add_tag' => $this->executeTagAction($data, $run, 'add'),
                 'remove_tag' => $this->executeTagAction($data, $run, 'remove'),
                 'update_contact' => $this->executeUpdateContact($data, $run, $context),
@@ -623,8 +623,27 @@ class AutomationEngine
         );
     }
 
-    private function executeWait(array $data, AutomationRun $run): array
+    private function executeWait(array $data, AutomationRun $run, array $context): array
     {
+        $automation = $run->automation;
+        $edges = collect($automation->edges ?? []);
+        $nextEdge = $edges->first(fn ($e) => $e['source'] === $run->current_node_id);
+        $nextNodeId = $nextEdge['target'] ?? null;
+
+        if (($data['wait_type'] ?? 'time') === 'reply') {
+            $var = ($data['variable'] ?? '') ?: 'last_reply';
+            $run->update([
+                'status' => 'waiting',
+                'resume_node_id' => $nextNodeId,
+            ]);
+
+            return [
+                'status' => 'waiting',
+                'message' => "Waiting for reply → {{context.{$var}}}",
+                'context_update' => ['_awaiting_reply' => true, '_reply_var' => $var],
+            ];
+        }
+
         $amount = (int) ($data['amount'] ?? 1);
         $unit = $data['unit'] ?? 'minutes';
         $delay = match ($unit) {
@@ -632,12 +651,6 @@ class AutomationEngine
             'days' => $amount * 1440,
             default => $amount,
         };
-
-        // Find the next node after this wait node so the wakeup job resumes there
-        $automation = $run->automation;
-        $edges = collect($automation->edges ?? []);
-        $nextEdge = $edges->first(fn ($e) => $e['source'] === $run->current_node_id);
-        $nextNodeId = $nextEdge['target'] ?? null;
 
         // Persist the resume cursor and mark the run as waiting
         $run->update([

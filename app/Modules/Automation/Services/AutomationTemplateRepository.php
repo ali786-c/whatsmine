@@ -68,6 +68,49 @@ class AutomationTemplateRepository
                             ],
                         ],
                     ],
+                    [
+                        'id' => 'node_cod_wait',
+                        'type' => 'wait',
+                        'position' => ['x' => 200, 'y' => 550],
+                        'data' => [
+                            'nodeType' => 'wait',
+                            'label' => 'Wait for Reply',
+                            'wait_type' => 'reply',
+                            'variable' => 'cod_reply',
+                        ],
+                    ],
+                    [
+                        'id' => 'node_cod_check',
+                        'type' => 'condition',
+                        'position' => ['x' => 200, 'y' => 700],
+                        'data' => [
+                            'nodeType' => 'condition',
+                            'label' => 'Did they confirm?',
+                            'field' => 'context.cod_reply',
+                            'operator' => 'contains',
+                            'value' => 'Confirm',
+                        ],
+                    ],
+                    [
+                        'id' => 'node_cod_confirm',
+                        'type' => 'send_whatsapp',
+                        'position' => ['x' => 0, 'y' => 850],
+                        'data' => [
+                            'nodeType' => 'send_whatsapp',
+                            'label' => 'Send Confirmation',
+                            'body' => "Thank you {{contact.first_name}}! ✅\n\nYour COD order #{{context.order_number}} for {{context.order_total}} {{context.order_currency}} has been confirmed and is now being processed for delivery.",
+                        ],
+                    ],
+                    [
+                        'id' => 'node_cod_cancel',
+                        'type' => 'send_whatsapp',
+                        'position' => ['x' => 400, 'y' => 850],
+                        'data' => [
+                            'nodeType' => 'send_whatsapp',
+                            'label' => 'Send Cancellation',
+                            'body' => "We understand, {{contact.first_name}}.\n\nYour order #{{context.order_number}} has been cancelled as requested. ❌\n\nLet us know if you need any help!",
+                        ],
+                    ],
                 ],
                 'edges' => [
                     [
@@ -87,6 +130,32 @@ class AutomationTemplateRepository
                         'id' => 'edge_cond_false',
                         'source' => 'node_condition',
                         'target' => 'node_prepaid',
+                        'sourceHandle' => 'false',
+                        'type' => 'smoothstep',
+                    ],
+                    [
+                        'id' => 'edge_cod_to_wait',
+                        'source' => 'node_cod',
+                        'target' => 'node_cod_wait',
+                        'type' => 'smoothstep',
+                    ],
+                    [
+                        'id' => 'edge_wait_to_check',
+                        'source' => 'node_cod_wait',
+                        'target' => 'node_cod_check',
+                        'type' => 'smoothstep',
+                    ],
+                    [
+                        'id' => 'edge_check_true',
+                        'source' => 'node_cod_check',
+                        'target' => 'node_cod_confirm',
+                        'sourceHandle' => 'true',
+                        'type' => 'smoothstep',
+                    ],
+                    [
+                        'id' => 'edge_check_false',
+                        'source' => 'node_cod_check',
+                        'target' => 'node_cod_cancel',
                         'sourceHandle' => 'false',
                         'type' => 'smoothstep',
                     ],

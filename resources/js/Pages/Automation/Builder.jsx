@@ -285,7 +285,11 @@ function clip(str, n = 40) {
 function summarizeConfig(data, t) {
     const { nodeType } = data;
     switch (nodeType) {
-        case 'wait': return data.amount ? `${data.amount} ${data.unit ?? 'minutes'}` : '';
+        case 'wait': 
+            if (data.wait_type === 'reply') {
+                return `Wait for reply → {{context.${data.variable || 'last_reply'}}}`;
+            }
+            return data.amount ? `${data.amount} ${data.unit ?? 'minutes'}` : '';
         case 'condition': return data.field ? `${data.field} ${data.operator ?? '='} ${data.value ?? ''}` : '';
         case 'add_tag':
         case 'remove_tag': return data.tag ?? '';
@@ -842,20 +846,37 @@ function AskQuestionFields({ d, set }) {
 
 function WaitFields({ d, set }) {
     const { t } = useTranslation();
+    const waitType = d.wait_type || 'time';
+
     return (
-        <div className="flex gap-2">
-            <div className="flex-1">
-                <label className={labelCls}>{t('automation.field_amount_required')}</label>
-                <input type="number" min={1} className={inputCls} value={d.amount ?? ''} onChange={e => set('amount', e.target.value)} placeholder="1" />
-            </div>
-            <div className="flex-1">
-                <label className={labelCls}>{t('automation.field_unit')}</label>
-                <select className={selectCls} value={d.unit ?? 'minutes'} onChange={e => set('unit', e.target.value)}>
-                    <option value="minutes">{t('automation.unit_minutes')}</option>
-                    <option value="hours">{t('automation.unit_hours')}</option>
-                    <option value="days">{t('automation.unit_days')}</option>
+        <div className="space-y-4">
+            <Field label={t('automation.wait_type', 'Wait Type')}>
+                <select className={selectCls} value={waitType} onChange={e => set('wait_type', e.target.value)}>
+                    <option value="time">{t('automation.wait_time', 'Time Delay')}</option>
+                    <option value="reply">{t('automation.wait_reply', 'Contact Reply')}</option>
                 </select>
-            </div>
+            </Field>
+
+            {waitType === 'time' ? (
+                <div className="flex gap-2">
+                    <div className="flex-1">
+                        <label className={labelCls}>{t('automation.field_amount_required')}</label>
+                        <input type="number" min={1} className={inputCls} value={d.amount ?? ''} onChange={e => set('amount', e.target.value)} placeholder="1" />
+                    </div>
+                    <div className="flex-1">
+                        <label className={labelCls}>{t('automation.field_unit')}</label>
+                        <select className={selectCls} value={d.unit ?? 'minutes'} onChange={e => set('unit', e.target.value)}>
+                            <option value="minutes">{t('automation.unit_minutes')}</option>
+                            <option value="hours">{t('automation.unit_hours')}</option>
+                            <option value="days">{t('automation.unit_days')}</option>
+                        </select>
+                    </div>
+                </div>
+            ) : (
+                <Field label={t('automation.field_save_to_var_required', 'Save reply to variable')}>
+                    <input className={inputCls} value={d.variable ?? 'last_reply'} onChange={e => set('variable', e.target.value)} placeholder="last_reply" />
+                </Field>
+            )}
         </div>
     );
 }
