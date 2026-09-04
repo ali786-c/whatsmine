@@ -4,6 +4,7 @@ namespace App\Modules\Whatsapp\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Modules\Integrations\Services\CredentialResolver;
+use App\Modules\Whatsapp\Jobs\SeedDefaultEcommerceTemplatesJob;
 use App\Modules\Whatsapp\Jobs\TemplateSyncJob;
 use App\Modules\Whatsapp\Models\WhatsappBusinessAccount;
 use App\Modules\Whatsapp\Services\CloudApiClient;
@@ -197,6 +198,9 @@ class WhatsappEmbeddedSignupController extends Controller
         if ($phoneCount > 0) {
             TemplateSyncJob::dispatch($waba->id)->onQueue('whatsapp');
         }
+        
+        // Seed default e-commerce templates
+        SeedDefaultEcommerceTemplatesJob::dispatch($waba->id)->onQueue('whatsapp');
 
         $warnings = array_filter([$webhookError, $syncError, $phoneCount === 0 ? 'No phone numbers were synced. Use Sync from Meta on Channel Setup or reconnect.' : null]);
 

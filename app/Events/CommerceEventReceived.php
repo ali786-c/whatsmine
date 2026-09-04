@@ -24,5 +24,6 @@ class CommerceEventReceived
         public readonly int $contactId,
         public readonly string $eventType,
         public readonly array $context = [],
+        public readonly ?int $storeId = null,
     ) {}
 }

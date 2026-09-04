@@ -4,8 +4,9 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
     Eye, EyeOff, CheckCircle, AlertCircle, Clock, Trash2, RefreshCw,
-    PlugZap, Copy, Check, ShoppingBag, Store,
+    PlugZap, Copy, Check, ShoppingBag, Store, Bot
 } from 'lucide-react';
+import WhatsappAutomationsModal from './WhatsappAutomationsModal';
 
 const PLATFORM_META = {
     shopify: {
@@ -86,7 +87,7 @@ function CopyField({ value }) {
     );
 }
 
-function ConnectedStoreCard({ store }) {
+function ConnectedStoreCard({ store, onOpenAutomations }) {
     const { t } = useTranslation();
     const meta = PLATFORM_META[store.platform] ?? {};
     const Icon = meta.Icon ?? Store;
@@ -154,6 +155,14 @@ function ConnectedStoreCard({ store }) {
                 >
                     <RefreshCw className={`h-3.5 w-3.5 ${busy === 'sync' ? 'animate-spin' : ''}`} />
                     {t('ecommerce.sync') || 'Sync'}
+                </button>
+                <button
+                    type="button"
+                    onClick={() => onOpenAutomations(store)}
+                    className="flex items-center justify-center gap-1.5 flex-1 rounded-lg border border-neutral-200 dark:border-neutral-700 py-2 text-sm font-medium text-neutral-600 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-800 transition"
+                >
+                    <Bot className="h-3.5 w-3.5" />
+                    Automations
                 </button>
                 <button
                     type="button"
@@ -349,10 +358,12 @@ function ConnectForm({ platforms, oauth = {} }) {
     );
 }
 
-export default function EcommerceStoresIndex({ stores = [], platforms = [], oauth = {} }) {
+export default function EcommerceStoresIndex({ stores = [], platforms = [], oauth = {}, whatsapp_templates = [] }) {
     const { t } = useTranslation();
     const { props } = usePage();
     const flash = props.flash ?? {};
+    
+    const [automationStore, setAutomationStore] = useState(null);
 
     return (
         <ClientLayout title={t('ecommerce.title') || 'E-Commerce'}>
@@ -377,7 +388,13 @@ export default function EcommerceStoresIndex({ stores = [], platforms = [], oaut
                         {stores.length === 0 && (
                             <p className="text-sm text-neutral-400 sm:col-span-2">{t('ecommerce.no_stores') || 'No stores connected yet.'}</p>
                         )}
-                        {stores.map(s => <ConnectedStoreCard key={s.id} store={s} />)}
+                        {stores.map(s => (
+                            <ConnectedStoreCard 
+                                key={s.id} 
+                                store={s} 
+                                onOpenAutomations={setAutomationStore} 
+                            />
+                        ))}
                     </div>
                     {(
                         <div>
@@ -386,6 +403,15 @@ export default function EcommerceStoresIndex({ stores = [], platforms = [], oaut
                     )}
                 </div>
             </div>
+            
+            {automationStore && (
+                <WhatsappAutomationsModal
+                    store={automationStore}
+                    visible={!!automationStore}
+                    onClose={() => setAutomationStore(null)}
+                    templates={whatsapp_templates}
+                />
+            )}
         </ClientLayout>
     );
 }

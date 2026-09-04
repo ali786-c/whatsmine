@@ -100,7 +100,7 @@ class ProcessEcommerceWebhookJob implements ShouldQueue
         // customer.created (no order/cart payload)
         if ($contact && $event['event_type'] === 'customer.created') {
             $enricher->markAsCustomer($contact, $store, $event['contact']['external_id'] ?? null);
-            CommerceEventReceived::dispatch($store->workspace_id, $contact->id, 'customer.created', $event['context']);
+            CommerceEventReceived::dispatch($store->workspace_id, $contact->id, 'customer.created', $event['context'], $store->id);
         }
     }
 
@@ -157,6 +157,7 @@ class ProcessEcommerceWebhookJob implements ShouldQueue
             $contact->id,
             $event['event_type'],
             $event['context'],
+            $store->id
         );
     }
 

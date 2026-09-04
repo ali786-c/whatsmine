@@ -10,6 +10,7 @@ use App\Modules\Ecommerce\Services\Clients\StoreClientFactory;
 use App\Modules\Ecommerce\Services\StoreConnectionTester;
 use App\Modules\Ecommerce\Services\StoreConnector;
 use App\Modules\Integrations\Models\IntegrationConfig;
+use App\Modules\Whatsapp\Models\WhatsappTemplate;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -73,6 +74,11 @@ class StoreController extends Controller
                 'shopify' => $this->oauthConfigured('oauth_shopify'),
                 'bigcommerce' => $this->oauthConfigured('oauth_bigcommerce'),
             ],
+            'whatsapp_templates' => WhatsappTemplate::where('workspace_id', $workspaceId)->get()->map(fn($t) => [
+                'id' => $t->id,
+                'name' => $t->name,
+                'status' => $t->status,
+            ]),
         ]);
     }
 

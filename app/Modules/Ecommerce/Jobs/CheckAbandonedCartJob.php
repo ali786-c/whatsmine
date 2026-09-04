@@ -50,6 +50,7 @@ class CheckAbandonedCartJob implements ShouldQueue
                 'order_currency' => (string) $cart->currency,
                 'recovery_url' => (string) $cart->recovery_url,
             ],
+            $cart->store_id
         );
     }
 }

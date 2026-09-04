@@ -11,6 +11,7 @@ use App\Modules\Automation\Jobs\ExecuteAutomationRunJob;
 use App\Modules\Automation\Models\Automation;
 use App\Modules\Automation\Models\AutomationRun;
 use App\Modules\Automation\Services\AutomationEngine;
+use App\Modules\Ecommerce\Jobs\ProcessEcommerceMessagingJob;
 
 class AutomationTriggerListener
 {
@@ -48,6 +49,16 @@ class AutomationTriggerListener
 
     public function handleCommerceEvent(CommerceEventReceived $event): void
     {
+        // Trigger native templates if configured in store messaging_config
+        if ($event->storeId !== null && in_array($event->eventType, ['order.placed', 'cart.abandoned'])) {
+            ProcessEcommerceMessagingJob::dispatch(
+                $event->storeId,
+                $event->contactId,
+                $event->eventType,
+                $event->context
+            )->onQueue('automation');
+        }
+
         // eventType is one of order.placed / order.fulfilled / order.cancelled /
         // cart.abandoned / customer.created — matched directly against trigger_type.
         $this->fire($event->eventType, $event->workspaceId, $event->contactId, $event->context);
