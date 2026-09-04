@@ -63,6 +63,28 @@ class SeedDefaultEcommerceTemplatesJob implements ShouldQueue
                 ],
             ],
             [
+                'name' => 'ecommerce_order_cancelled', 
+                'category' => 'UTILITY', 
+                'components' => [
+                    [
+                        'type' => 'BODY', 
+                        'text' => 'We understand, {{1}}. Your order #{{2}} has been cancelled as requested. Let us know if you need any help!', 
+                        'example' => ['body_text' => [['John', '1001']]]
+                    ]
+                ],
+            ],
+            [
+                'name' => 'ecommerce_order_confirmed', 
+                'category' => 'UTILITY', 
+                'components' => [
+                    [
+                        'type' => 'BODY', 
+                        'text' => 'Thank you {{1}}! Your COD order #{{2}} for {{3}} has been confirmed and is now being processed for delivery.', 
+                        'example' => ['body_text' => [['John', '1001', '$50.00']]]
+                    ]
+                ],
+            ],
+            [
                 'name' => 'ecommerce_winback', 
                 'category' => 'MARKETING', 
                 'components' => [
