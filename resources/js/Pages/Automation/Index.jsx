@@ -114,7 +114,7 @@ export default function AutomationIndex({ automations, templates }) {
                     {(
                         <div className="flex items-center gap-2">
                             <button onClick={() => setShowGallery(true)} className="flex items-center gap-1.5 rounded-lg border border-brand-200 dark:border-brand-800 bg-brand-50 dark:bg-brand-900/30 px-3 py-2 text-sm font-medium text-brand-700 dark:text-brand-300 hover:bg-brand-100 dark:hover:bg-brand-900/50 transition">
-                                <Plus className="h-4 w-4" /> {t('automation.template_gallery') || 'Template Gallery'}
+                                <Plus className="h-4 w-4" /> Template Gallery
                             </button>
                             <button onClick={() => { setAiError(null); setShowAi(true); }} className="ai-glow flex items-center gap-1.5 rounded-lg border border-purple-200 dark:border-purple-800 bg-purple-50 dark:bg-purple-900/30 px-3 py-2 text-sm font-medium text-purple-700 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-900/50 transition">
                                 <Sparkles className="h-4 w-4" /> {t('automation.ai_generate')}

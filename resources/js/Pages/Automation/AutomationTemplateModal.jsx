@@ -18,10 +18,10 @@ export default function AutomationTemplateModal({ templates = {}, onClose, onSel
                 <div className="flex items-center justify-between">
                     <div>
                         <h3 className="text-lg font-semibold text-neutral-900 dark:text-neutral-100">
-                            {t('automation.templates_title') || 'Pre-built Templates Gallery'}
+                            Pre-built Templates Gallery
                         </h3>
                         <p className="text-sm text-neutral-500">
-                            {t('automation.templates_subtitle') || 'Start quickly with our pre-built visual automation workflows.'}
+                            Start quickly with our pre-built visual automation workflows.
                         </p>
                     </div>
                     <button onClick={onClose} disabled={processing} className="text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300">
@@ -56,7 +56,7 @@ export default function AutomationTemplateModal({ templates = {}, onClose, onSel
                             </p>
                             <div className="mt-auto pt-4 flex items-center text-sm font-medium text-brand-600 dark:text-brand-400 group-hover:underline">
                                 {processing ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : <Plus className="h-4 w-4 mr-1.5" />}
-                                {t('automation.use_template') || 'Use this template'}
+                                Use this template
                             </div>
                         </div>
                     ))}
