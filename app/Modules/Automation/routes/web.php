@@ -7,6 +7,7 @@ Route::middleware(['web', 'client-app'])->prefix('app/automations')->name('clien
     Route::get('/', [AutomationController::class, 'index'])->name('index');
     Route::post('/', [AutomationController::class, 'store'])->name('store');
     Route::post('/generate', [AutomationController::class, 'generate'])->name('generate');
+    Route::post('/template', [AutomationController::class, 'storeFromTemplate'])->name('template');
     Route::get('/{automation}/edit', [AutomationController::class, 'edit'])->name('edit');
     Route::put('/{automation}', [AutomationController::class, 'update'])->name('update');
     Route::delete('/{automation}', [AutomationController::class, 'destroy'])->name('destroy');

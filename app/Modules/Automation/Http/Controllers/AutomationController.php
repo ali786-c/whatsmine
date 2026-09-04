@@ -34,7 +34,12 @@ class AutomationController extends Controller
             ->withCount('runs')
             ->latest()->get();
 
-        return Inertia::render('Automation/Index', ['automations' => $automations]);
+        $templates = \App\Modules\Automation\Services\AutomationTemplateRepository::getTemplates();
+
+        return Inertia::render('Automation/Index', [
+            'automations' => $automations,
+            'templates' => $templates,
+        ]);
     }
 
     public function store(Request $request): RedirectResponse
@@ -50,6 +55,33 @@ class AutomationController extends Controller
         ]));
 
         return redirect()->route('client.automations.edit', $auto->uuid)->with('success', 'Automation created.');
+    }
+
+    public function storeFromTemplate(Request $request): RedirectResponse
+    {
+        $wid = $this->workspaceId($request);
+        $validated = $request->validate([
+            'template_key' => ['required', 'string'],
+        ]);
+
+        $templates = \App\Modules\Automation\Services\AutomationTemplateRepository::getTemplates();
+        
+        if (! array_key_exists($validated['template_key'], $templates)) {
+            return back()->with('error', 'Template not found.');
+        }
+
+        $template = $templates[$validated['template_key']];
+
+        $auto = Automation::create([
+            'workspace_id' => $wid,
+            'name' => $template['name'],
+            'status' => 'draft',
+            'trigger_type' => $template['trigger_type'],
+            'nodes' => $template['nodes'],
+            'edges' => $template['edges'],
+        ]);
+
+        return redirect()->route('client.automations.edit', $auto->uuid)->with('success', 'Automation created from template.');
     }
 
     public function edit(Request $request, Automation $automation): Response
