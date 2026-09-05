@@ -1439,7 +1439,7 @@ export default function InboxShow({
         setAssignedTo(conversation.assigned_to ?? 'bot');
         setAssignedUserId(conversation.assigned_user_id ?? null);
         setSendError(null);
-    }, [conversation.id]);
+    }, [conversation.id, initialMessages]);
 
     useEffect(() => {
         setConversations(initialConversations);

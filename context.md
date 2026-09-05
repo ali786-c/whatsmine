@@ -92,3 +92,10 @@ The Node.js side only logged `Laravel response: 200` — it couldn't distinguish
   * **Dedicated Logs:** Added a `logMeta()` helper that creates a dedicated log channel outputting directly to `storage/logs/meta.log` to print raw requests and responses from Meta.
   * **Fallback Token Exchange:** Updated `InboxSetupController` (Instagram/Messenger signup) to try exchanging authorization codes with a `redirect_uri` first, and if that fails, retry without it. This matches the robust exchange flow used in the WhatsApp module.
 
+### 4. WhatsApp Pre-built Templates Scoping & Deletion Fix
+* **Files Modified:**
+  * `WhatsMine150/app/Modules/Whatsapp/Http/Controllers/WhatsappSetupController.php`
+  * `WhatsMine150/app/Modules/Whatsapp/Jobs/SeedDefaultEcommerceTemplatesJob.php`
+* **Changes:**
+  * **Scoping:** Updated `SeedDefaultEcommerceTemplatesJob` to use `firstOrCreate` with `waba_id` instead of `workspace_id`. This ensures that every WhatsApp Business Account (WABA) gets its own isolated set of pre-built templates, preventing cross-contamination when multiple numbers are connected to the same workspace.
+  * **Clean Deletion:** Updated `WhatsappSetupController@destroy` to completely delete all templates (both custom and pre-built) associated with a `waba_id` when an account is disconnected. This prevents orphaned templates and ensures that when a new number connects, a fresh set of pre-built templates is seeded in the `PENDING` state.

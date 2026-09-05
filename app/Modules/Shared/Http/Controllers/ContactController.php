@@ -5,6 +5,8 @@ namespace App\Modules\Shared\Http\Controllers;
 use App\Http\Controllers\Controller;
 use App\Modules\Shared\Models\Contact;
 use App\Modules\Shared\Models\ContactTag;
+use App\Modules\Shared\Models\Conversation;
+use App\Modules\Shared\Models\Message;
 use App\Modules\Shared\Models\Segment;
 use App\Modules\Shared\Services\ContactService;
 use App\Services\StorageManager;
@@ -155,9 +157,16 @@ class ContactController extends Controller
     public function destroy(Request $request, Contact $contact): RedirectResponse
     {
         $this->authoriseContact($request, $contact);
+
+        $conversationIds = Conversation::where('contact_id', $contact->id)->pluck('id');
+        if ($conversationIds->isNotEmpty()) {
+            Message::whereIn('conversation_id', $conversationIds)->delete();
+            Conversation::whereIn('id', $conversationIds)->delete();
+        }
+
         $contact->delete();
 
-        return back()->with('success', 'Contact deleted.');
+        return back()->with('success', 'Contact and associated messages deleted.');
     }
 
     public function uploadAvatar(Request $request, Contact $contact): RedirectResponse
@@ -274,11 +283,21 @@ class ContactController extends Controller
             'uuids.*' => ['string', 'uuid'],
         ]);
 
-        $deleted = Contact::where('workspace_id', $workspaceId)
+        $contactIds = Contact::where('workspace_id', $workspaceId)
             ->whereIn('uuid', $validated['uuids'])
-            ->delete();
+            ->pluck('id');
 
-        return back()->with('success', "{$deleted} contact(s) deleted.");
+        if ($contactIds->isNotEmpty()) {
+            $conversationIds = Conversation::whereIn('contact_id', $contactIds)->pluck('id');
+            if ($conversationIds->isNotEmpty()) {
+                Message::whereIn('conversation_id', $conversationIds)->delete();
+                Conversation::whereIn('id', $conversationIds)->delete();
+            }
+            
+            Contact::whereIn('id', $contactIds)->delete();
+        }
+
+        return back()->with('success', count($validated['uuids']).' contact(s) and their associated messages deleted.');
     }
 
     public function export(Request $request): HttpResponse
