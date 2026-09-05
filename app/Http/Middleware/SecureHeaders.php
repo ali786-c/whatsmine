@@ -119,6 +119,11 @@ class SecureHeaders
             $sources[] = 'https://web.facebook.com';
         }
 
+        // Allow Pusher WebSockets and Fallbacks
+        $sources[] = 'wss://*.pusher.com';
+        $sources[] = 'ws://*.pusher.com';
+        $sources[] = 'https://*.pusher.com';
+
         return implode(' ', array_unique($sources));
     }
 
