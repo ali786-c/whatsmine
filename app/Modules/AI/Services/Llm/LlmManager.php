@@ -9,14 +9,14 @@ use App\Modules\Integrations\Services\CredentialResolver;
 class LlmManager
 {
     /** Providers that support embeddings natively. */
-    private const EMBED_CAPABLE = ['openai', 'gemini'];
+    private const EMBED_CAPABLE = ['openai', 'gemini', 'ollama'];
 
     /** Resolve a provider for chat completions (all providers supported). */
     public static function forWorkspace(int $workspaceId): LlmProviderInterface
     {
         $config = AiProviderConfig::where('workspace_id', $workspaceId)
             ->where('enabled', true)
-            ->orderByRaw("FIELD(provider, 'openai', 'anthropic', 'gemini')")
+            ->orderByRaw("FIELD(provider, 'openai', 'anthropic', 'gemini', 'ollama')")
             ->first();
 
         if ($config && ! empty($config->credentials['api_key'] ?? '')) {
@@ -27,7 +27,7 @@ class LlmManager
         }
 
         $workspace = app(Workspace::class)->find($workspaceId);
-        foreach (['openai', 'anthropic', 'gemini'] as $provider) {
+        foreach (['openai', 'anthropic', 'gemini', 'ollama'] as $provider) {
             $creds = CredentialResolver::for($workspace)->llm($provider);
             if ($creds) {
                 return static::build($provider, $creds->toArray());
@@ -47,7 +47,7 @@ class LlmManager
         // Workspace-level: prefer embed-capable providers, then fall back to any enabled one
         $configs = AiProviderConfig::where('workspace_id', $workspaceId)
             ->where('enabled', true)
-            ->orderByRaw("FIELD(provider, 'openai', 'gemini', 'anthropic')")
+            ->orderByRaw("FIELD(provider, 'openai', 'gemini', 'ollama', 'anthropic')")
             ->get();
 
         foreach ($configs as $config) {
@@ -89,6 +89,7 @@ class LlmManager
             ),
             'anthropic' => new AnthropicProvider($creds['api_key'] ?? '', $models['chat'] ?? 'claude-3-haiku-20240307'),
             'gemini' => new GeminiProvider($creds['api_key'] ?? '', $models['chat'] ?? 'gemini-1.5-flash', $models['embed'] ?? 'text-embedding-004'),
+            'ollama' => new OllamaProvider($creds['api_key'] ?? 'http://127.0.0.1:11434', $models['chat'] ?? 'qwen2:0.5b', $models['embed'] ?? 'nomic-embed-text'),
             default => throw new \RuntimeException("Unknown LLM provider: {$provider}"),
         };
     }

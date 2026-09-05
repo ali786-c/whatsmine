@@ -38,6 +38,15 @@ const SETUP_GUIDES = {
         link: 'https://aistudio.google.com/app/apikey',
         linkLabelKey: 'ai.guide_gemini_link',
     },
+    ollama: {
+        steps: [
+            'ai.guide_ollama_step1',
+            'ai.guide_ollama_step2',
+            'ai.guide_ollama_step3',
+        ],
+        link: 'https://ollama.com',
+        linkLabelKey: 'ai.guide_ollama_link',
+    }
 };
 
 function SetupGuide({ providerKey }) {
@@ -100,10 +109,17 @@ const GeminiLogo = () => (
     </svg>
 );
 
+const OllamaLogo = () => (
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+        <path d="M12 2a10 10 0 0 0-10 10c0 4.6 3.14 8.44 7.42 9.68A2 2 0 0 0 12 22a2 2 0 0 0 2.58-.32 10 10 0 0 0 7.42-9.68 10 10 0 0 0-10-10zM8 11.5a1.5 1.5 0 1 1 3 0 1.5 1.5 0 0 1-3 0zm5.5 4.5a3.5 3.5 0 0 1-3-5.5 3.5 3.5 0 1 1 3 5.5zm1-3.5a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3z"/>
+    </svg>
+);
+
 const PROVIDER_INFO = {
     openai:    { label: 'OpenAI',    Icon: OpenAILogo,    models: ['gpt-4o', 'gpt-4o-mini', 'gpt-3.5-turbo'] },
     anthropic: { label: 'Anthropic', Icon: AnthropicLogo, models: ['claude-3-opus-20240229', 'claude-3-sonnet-20240229', 'claude-3-haiku-20240307'] },
     gemini:    { label: 'Gemini',    Icon: GeminiLogo,    models: ['gemini-1.5-pro', 'gemini-1.5-flash', 'gemini-1.0-pro'] },
+    ollama:    { label: 'Ollama',    Icon: OllamaLogo,    isLocal: true, defaultModel: 'qwen2:0.5b' },
 };
 
 function ProviderCard({ provider }) {
@@ -113,7 +129,7 @@ function ProviderCard({ provider }) {
 
     const { data, setData, put, processing, errors } = useForm({
         api_key:             '',
-        default_model_chat:  provider.default_model_chat || info.models?.[1] || '',
+        default_model_chat:  provider.default_model_chat || (info.isLocal ? info.defaultModel : info.models?.[1]) || '',
         enabled:             provider.enabled,
     });
 
@@ -134,25 +150,33 @@ function ProviderCard({ provider }) {
 
             <form onSubmit={handleSubmit} className="space-y-3">
                 <div>
-                    <label className="text-xs font-medium text-neutral-500 dark:text-neutral-400">{t('ai.api_key')}</label>
+                    <label className="text-xs font-medium text-neutral-500 dark:text-neutral-400">
+                        {info.isLocal ? 'Base URL' : t('ai.api_key')}
+                    </label>
                     <div className="relative mt-1">
                         <input
-                            type={showKey ? 'text' : 'password'}
+                            type={info.isLocal ? 'text' : (showKey ? 'text' : 'password')}
                             value={data.api_key}
                             onChange={e => setData('api_key', e.target.value)}
-                            placeholder={provider.configured ? t('ai.api_key_encrypted_placeholder') : 'sk-…'}
+                            placeholder={provider.configured ? (info.isLocal ? 'http://127.0.0.1:11434' : t('ai.api_key_encrypted_placeholder')) : (info.isLocal ? 'http://127.0.0.1:11434' : 'sk-…')}
                             className="w-full rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 pr-10 text-sm"
                         />
-                        <button type="button" onClick={() => setShowKey(v => !v)} className="absolute right-2 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-600">
-                            {showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                        </button>
+                        {!info.isLocal && (
+                            <button type="button" onClick={() => setShowKey(v => !v)} className="absolute right-2 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-600">
+                                {showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                            </button>
+                        )}
                     </div>
                 </div>
                 <div>
                     <label className="text-xs font-medium text-neutral-500 dark:text-neutral-400">{t('ai.default_chat_model')}</label>
-                    <select value={data.default_model_chat} onChange={e => setData('default_model_chat', e.target.value)} className="mt-1 w-full rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm">
-                        {info.models?.map(m => <option key={m} value={m}>{m}</option>)}
-                    </select>
+                    {info.isLocal ? (
+                        <input type="text" value={data.default_model_chat} onChange={e => setData('default_model_chat', e.target.value)} placeholder="e.g. qwen2:0.5b" className="mt-1 w-full rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm" />
+                    ) : (
+                        <select value={data.default_model_chat} onChange={e => setData('default_model_chat', e.target.value)} className="mt-1 w-full rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm">
+                            {info.models?.map(m => <option key={m} value={m}>{m}</option>)}
+                        </select>
+                    )}
                 </div>
                 <label className="flex items-center gap-2 text-sm cursor-pointer">
                     <input type="checkbox" checked={data.enabled} onChange={e => setData('enabled', e.target.checked)} className="rounded" />
