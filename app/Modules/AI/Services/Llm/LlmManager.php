@@ -26,7 +26,7 @@ class LlmManager
                     'api_key' => SystemSetting::get('system_ai_base_url', 'http://127.0.0.1:11434'),
                 ], [
                     'chat' => SystemSetting::get('system_ai_default_model', 'qwen2:0.5b'),
-                    'embed' => SystemSetting::get('system_ai_default_model', 'qwen2:0.5b'),
+                    'embed' => 'nomic-embed-text',
                 ], $workspaceId);
             }
             if (! empty($config->credentials['api_key'] ?? '')) {
@@ -70,7 +70,7 @@ class LlmManager
                     'api_key' => SystemSetting::get('system_ai_base_url', 'http://127.0.0.1:11434'),
                 ], [
                     'chat' => SystemSetting::get('system_ai_default_model', 'qwen2:0.5b'),
-                    'embed' => SystemSetting::get('system_ai_default_model', 'qwen2:0.5b'),
+                    'embed' => 'nomic-embed-text',
                 ], $workspaceId);
             }
             if (empty($config->credentials['api_key'] ?? '')) {
