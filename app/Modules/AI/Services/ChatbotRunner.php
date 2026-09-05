@@ -40,25 +40,8 @@ class ChatbotRunner
             $contextChunks = array_column($results, 'chunk');
         }
 
-        // 3. Build prompt
+        // Base system prompt remains strictly for behavioral instructions
         $systemPrompt = $bot->system_prompt ?? 'You are a helpful assistant.';
-        if (! empty($contextChunks)) {
-            $context = implode("\n\n---\n\n", array_map(fn ($c) => $c->content, $contextChunks));
-            $systemPrompt .= "\n\nRelevant context:\n".$context;
-        }
-
-        // Inject the customer's recent orders so the bot can answer "where is my order?".
-        // Gated on a connected Ecommerce store; resolved lazily to avoid a hard
-        // cross-module dependency (matches the CredentialResolver class_exists pattern).
-        $orderSummary = $this->orderSummary($workspaceId, $conversation->contact_id);
-        if ($orderSummary !== null) {
-            $systemPrompt .= "\n\nUse this order information if the customer asks about their order status, shipping, or delivery:\n".$orderSummary;
-        }
-
-        $productSummary = $this->productSummary($workspaceId, $body);
-        if ($productSummary !== null) {
-            $systemPrompt .= "\n\nUse this product information if the customer asks about products, pricing, or stock:\n".$productSummary;
-        }
 
         // Load recent conversation turns as context (last 20 messages)
         $history = [];
@@ -79,10 +62,38 @@ class ChatbotRunner
             ];
         }
 
+        // Build the augmented user message with context
+        $augmentedUserMessage = "";
+        
+        $hasContext = !empty($contextChunks);
+        $orderSummary = $this->orderSummary($workspaceId, $conversation->contact_id);
+        $productSummary = $this->productSummary($workspaceId, $body);
+
+        if ($hasContext || $orderSummary !== null || $productSummary !== null) {
+            $augmentedUserMessage .= "Context information is below.\n---------------------\n";
+            
+            if ($hasContext) {
+                $contextText = implode("\n\n---\n\n", array_map(fn ($c) => $c->content, $contextChunks));
+                $augmentedUserMessage .= "Knowledge Base:\n" . $contextText . "\n\n";
+            }
+            
+            if ($orderSummary !== null) {
+                $augmentedUserMessage .= "Customer Recent Orders (Use if asked about orders/shipping/delivery):\n" . $orderSummary . "\n\n";
+            }
+
+            if ($productSummary !== null) {
+                $augmentedUserMessage .= "Product Information (Use if asked about pricing/stock/products):\n" . $productSummary . "\n\n";
+            }
+            
+            $augmentedUserMessage .= "---------------------\nGiven the context information above and not prior knowledge, answer the query.\nQuery: ";
+        }
+
+        $augmentedUserMessage .= $body;
+
         $messages = array_merge(
             [['role' => 'system', 'content' => $systemPrompt]],
             $history,
-            [['role' => 'user', 'content' => $body]],
+            [['role' => 'user', 'content' => $augmentedUserMessage]],
         );
 
         // 4. Call LLM
@@ -236,15 +247,20 @@ class ChatbotRunner
 
         // 3. Build messages array
         $systemPrompt = $bot->system_prompt ?? 'You are a helpful assistant.';
+        
+        $augmentedUserMessage = "";
         if (! empty($contextChunks)) {
+            $augmentedUserMessage .= "Context information is below.\n---------------------\n";
             $context = implode("\n\n---\n\n", array_map(fn ($c) => $c->content, $contextChunks));
-            $systemPrompt .= "\n\nRelevant context:\n".$context;
+            $augmentedUserMessage .= "Knowledge Base:\n" . $context . "\n\n";
+            $augmentedUserMessage .= "---------------------\nGiven the context information above and not prior knowledge, answer the query.\nQuery: ";
         }
+        $augmentedUserMessage .= $message;
 
         $messages = array_merge(
             [['role' => 'system', 'content' => $systemPrompt]],
             $history,
-            [['role' => 'user', 'content' => $message]],
+            [['role' => 'user', 'content' => $augmentedUserMessage]],
         );
 
         // 4. Call LLM
