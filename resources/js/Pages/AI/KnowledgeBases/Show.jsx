@@ -28,6 +28,7 @@ export default function AiKnowledgeBaseShow({ kb }) {
     const [dragOver, setDragOver] = useState(false);
     const [faqPairs, setFaqPairs] = useState([{ question: '', answer: '' }]);
     const fileRef = useRef();
+    const faqJsonRef = useRef();
 
     const { data, setData, reset } = useForm({
         source_type: 'url',
@@ -40,6 +41,44 @@ export default function AiKnowledgeBaseShow({ kb }) {
     const addFaqPair = () => setFaqPairs(p => [...p, { question: '', answer: '' }]);
     const removeFaqPair = (i) => setFaqPairs(p => p.filter((_, idx) => idx !== i));
     const updateFaqPair = (i, field, value) => setFaqPairs(p => p.map((pair, idx) => idx === i ? { ...pair, [field]: value } : pair));
+
+    const handleImportJSON = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            try {
+                const parsed = JSON.parse(event.target.result);
+                if (Array.isArray(parsed)) {
+                    const newPairs = parsed
+                        .filter(item => item && typeof item === 'object' && item.question && item.answer)
+                        .map(item => ({
+                            question: String(item.question).trim(),
+                            answer: String(item.answer).trim()
+                        }));
+
+                    if (newPairs.length > 0) {
+                        setFaqPairs(prev => {
+                            // Filter out completely empty rows before appending
+                            const filtered = prev.filter(p => p.question.trim() !== '' || p.answer.trim() !== '');
+                            return [...filtered, ...newPairs];
+                        });
+                        alert(`Successfully imported ${newPairs.length} FAQs!`);
+                    } else {
+                        alert("No valid FAQs found in the JSON. Make sure each object has a 'question' and 'answer' field.");
+                    }
+                } else {
+                    alert("Invalid JSON format. Expected an array of objects.");
+                }
+            } catch (err) {
+                alert("Failed to parse JSON file.");
+            }
+            // Reset input
+            e.target.value = null;
+        };
+        reader.readAsText(file);
+    };
 
     const handleAdd = (e) => {
         e.preventDefault();
@@ -302,13 +341,29 @@ export default function AiKnowledgeBaseShow({ kb }) {
                                             </div>
                                         ))}
                                     </div>
-                                    <button
-                                        type="button"
-                                        onClick={addFaqPair}
-                                        className="w-full rounded-lg border border-dashed border-neutral-300 dark:border-neutral-600 py-1.5 text-xs text-neutral-500 dark:text-neutral-400 hover:border-brand-400 hover:text-brand-600 dark:hover:text-brand-400 transition"
-                                    >
-                                        {t('ai.add_another_qa')}
-                                    </button>
+                                    <div className="flex gap-2">
+                                        <button
+                                            type="button"
+                                            onClick={addFaqPair}
+                                            className="flex-1 rounded-lg border border-dashed border-neutral-300 dark:border-neutral-600 py-1.5 text-xs text-neutral-500 dark:text-neutral-400 hover:border-brand-400 hover:text-brand-600 dark:hover:text-brand-400 transition"
+                                        >
+                                            {t('ai.add_another_qa')}
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => faqJsonRef.current?.click()}
+                                            className="flex-1 rounded-lg border border-neutral-300 dark:border-neutral-600 py-1.5 text-xs font-medium text-neutral-700 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-800 transition"
+                                        >
+                                            Import JSON
+                                        </button>
+                                        <input
+                                            ref={faqJsonRef}
+                                            type="file"
+                                            accept=".json"
+                                            className="hidden"
+                                            onChange={handleImportJSON}
+                                        />
+                                    </div>
                                 </div>
                             ) : (
                                 <div>
