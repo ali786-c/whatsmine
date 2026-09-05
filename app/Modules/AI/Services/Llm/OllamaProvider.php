@@ -23,7 +23,7 @@ class OllamaProvider implements LlmProviderInterface
         $start = microtime(true);
         $model = $opts['model'] ?? $this->chatModel;
 
-        $resp = Http::retry(2, 500)->timeout(120)->post($this->baseUrl . '/api/chat', [
+        $payload = [
             'model' => $model,
             'messages' => $messages,
             'stream' => false,
@@ -31,7 +31,17 @@ class OllamaProvider implements LlmProviderInterface
                 'temperature' => $opts['temperature'] ?? 0.7,
                 'num_predict' => $opts['max_tokens'] ?? 1024,
             ]
-        ]);
+        ];
+
+        if (isset($opts['num_ctx'])) {
+            $payload['options']['num_ctx'] = (int) $opts['num_ctx'];
+        }
+
+        if (isset($opts['keep_alive'])) {
+            $payload['keep_alive'] = $opts['keep_alive'];
+        }
+
+        $resp = Http::retry(2, 500)->timeout(120)->post($this->baseUrl . '/api/chat', $payload);
 
         if (! $resp->successful()) {
             throw new \RuntimeException('Ollama chat failed: ' . $resp->body());

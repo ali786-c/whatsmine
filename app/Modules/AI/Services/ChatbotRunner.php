@@ -43,13 +43,14 @@ class ChatbotRunner
         // Base system prompt remains strictly for behavioral instructions
         $systemPrompt = $bot->system_prompt ?? 'You are a helpful assistant.';
 
-        // Load recent conversation turns as context (last 20 messages)
+        // Load recent conversation turns as context
+        $historyLimit = $bot->history_limit ?? 5;
         $history = [];
         $recentMessages = $conversation->messages()
             ->whereIn('type', ['text', 'template'])
             ->where('id', '!=', $inboundMessage->id)
             ->orderByDesc('sent_at')
-            ->take(20)
+            ->take($historyLimit)
             ->get()
             ->reverse()
             ->values();
@@ -103,7 +104,11 @@ class ChatbotRunner
             $response = $this->llmGateway->chat(
                 $workspaceId,
                 $messages,
-                ['max_tokens' => 512],
+                [
+                    'max_tokens' => $bot->max_tokens ?? 256,
+                    'num_ctx' => $bot->num_ctx ?? 2048,
+                    'keep_alive' => $bot->keep_alive ?? '10m'
+                ],
                 $bot->id,
                 $conversation->id,
             );

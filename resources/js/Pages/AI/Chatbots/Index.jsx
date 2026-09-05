@@ -140,7 +140,11 @@ function ChatbotCard({ chatbot, knowledgeBases }) {
         name: chatbot.name,
         system_prompt: chatbot.system_prompt ?? '',
         tone: chatbot.tone ?? 'professional',
-        max_context_chunks: chatbot.max_context_chunks ?? 5,
+        max_context_chunks: chatbot.max_context_chunks ?? 3,
+        history_limit: chatbot.history_limit ?? 5,
+        max_tokens: chatbot.max_tokens ?? 256,
+        num_ctx: chatbot.num_ctx ?? 2048,
+        keep_alive: chatbot.keep_alive ?? '10m',
         fallback_reply: chatbot.fallback_reply ?? '',
         ai_kb_id: chatbot.ai_kb_id ?? '',
         enabled: chatbot.enabled,
@@ -281,19 +285,68 @@ function ChatbotCard({ chatbot, knowledgeBases }) {
                             <p className="text-xs text-neutral-400 dark:text-neutral-500">{t('ai.fallback_reply_hint')}</p>
                         </div>
 
-                        <div className="flex items-center gap-6">
-                            <div className="space-y-1">
-                                <label className="text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wide">{t('ai.max_context_chunks')}</label>
-                                <input
-                                    type="number"
-                                    min={1}
-                                    max={20}
-                                    value={data.max_context_chunks}
-                                    onChange={e => setData('max_context_chunks', Number(e.target.value))}
-                                    className="w-20 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 px-3 py-2 text-sm text-neutral-900 dark:text-neutral-100 focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500 transition"
-                                />
+                        <div className="pt-2 pb-1 border-t border-neutral-100 dark:border-neutral-800">
+                            <h4 className="text-xs font-bold text-neutral-900 dark:text-neutral-100 uppercase tracking-wider mb-3">Optimization & Resources</h4>
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                                <div className="space-y-1">
+                                    <label className="text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wide" title="Number of recent messages to send as context">History Limit</label>
+                                    <input
+                                        type="number"
+                                        min={0}
+                                        max={50}
+                                        value={data.history_limit}
+                                        onChange={e => setData('history_limit', Number(e.target.value))}
+                                        className="w-full rounded-lg border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 px-3 py-2 text-sm text-neutral-900 dark:text-neutral-100 focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500 transition"
+                                    />
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wide" title="Maximum length of bot reply">Max Tokens</label>
+                                    <input
+                                        type="number"
+                                        min={50}
+                                        max={4096}
+                                        value={data.max_tokens}
+                                        onChange={e => setData('max_tokens', Number(e.target.value))}
+                                        className="w-full rounded-lg border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 px-3 py-2 text-sm text-neutral-900 dark:text-neutral-100 focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500 transition"
+                                    />
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wide" title="Max context size in RAM">Context Window</label>
+                                    <input
+                                        type="number"
+                                        min={512}
+                                        max={8192}
+                                        step={512}
+                                        value={data.num_ctx}
+                                        onChange={e => setData('num_ctx', Number(e.target.value))}
+                                        className="w-full rounded-lg border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 px-3 py-2 text-sm text-neutral-900 dark:text-neutral-100 focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500 transition"
+                                    />
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wide" title="KB chunks to include">Max KB Chunks</label>
+                                    <input
+                                        type="number"
+                                        min={1}
+                                        max={10}
+                                        value={data.max_context_chunks}
+                                        onChange={e => setData('max_context_chunks', Number(e.target.value))}
+                                        className="w-full rounded-lg border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 px-3 py-2 text-sm text-neutral-900 dark:text-neutral-100 focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500 transition"
+                                    />
+                                </div>
+                                <div className="space-y-1 col-span-2 sm:col-span-1">
+                                    <label className="text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wide" title="Time to keep model in RAM (e.g., 5m, 1h)">Keep Alive</label>
+                                    <input
+                                        type="text"
+                                        value={data.keep_alive}
+                                        onChange={e => setData('keep_alive', e.target.value)}
+                                        className="w-full rounded-lg border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 px-3 py-2 text-sm text-neutral-900 dark:text-neutral-100 focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500 transition"
+                                    />
+                                </div>
                             </div>
-                            <div className="flex items-center gap-3 pt-5">
+                        </div>
+
+                        <div className="flex items-center gap-6">
+                            <div className="flex items-center gap-3">
                                 <ToggleSwitch checked={data.enabled} onChange={v => setData('enabled', v)} />
                                 <span className="text-sm font-medium text-neutral-700 dark:text-neutral-300">{t('common.active')}</span>
                             </div>
