@@ -47,11 +47,20 @@ class AiKnowledgeBaseController extends Controller
     {
         $this->authorise($request, $kb);
 
-        $validated = $request->validate([
+        $rules = [
             'source_type' => ['required', 'in:file,url,text,sitemap,faq'],
-            'source_ref' => ['nullable', 'string', 'max:512'],
             'title' => ['nullable', 'string', 'max:256'],
-        ]);
+        ];
+
+        if (in_array($request->source_type, ['text', 'faq'])) {
+            $rules['source_ref'] = ['required', 'string'];
+        } elseif (in_array($request->source_type, ['url', 'sitemap'])) {
+            $rules['source_ref'] = ['required', 'string', 'max:512', 'url'];
+        } else {
+            $rules['source_ref'] = ['nullable', 'string', 'max:512'];
+        }
+
+        $validated = $request->validate($rules);
 
         // Handle file upload
         if ($request->hasFile('file')) {
