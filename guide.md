@@ -58,7 +58,9 @@ WhatsMine is developed as a modern modular monolith inside the `WhatsMine150` La
 1.  **WhatsApp Module (`app/Modules/Whatsapp`):**
     *   Integrates directly with Meta's official WhatsApp Cloud API through `CloudApiClient` and `WhatsappDriver` to manage template synchronization, interactive messaging, auto-replies, and chat widgets.
 2.  **AI Module (`app/Modules/AI`):**
-    *   Enables automated AI Chatbots using vector database embeddings (via Qdrant in `EmbeddingStore.php`) and exposes a unified `LlmGateway` supporting OpenAI, Anthropic, and Gemini LLM providers.
+    *   Enables automated AI Chatbots using vector database embeddings (via Qdrant in `EmbeddingStore.php`) and exposes a unified `LlmGateway` supporting OpenAI, Anthropic, Gemini, and Ollama (Local) LLM providers.
+    *   **Local LLM RAG Optimization:** Includes a specialized LlamaIndex-style context prompt injection in `ChatbotRunner.php` where Knowledge Base context is placed directly into the final `user` message rather than the `system` message. This prevents small local models (like `qwen2:0.5b` or `llama3`) from ignoring context and hallucinating.
+    *   **Embeddings Fallback:** `LlmManager.php` explicitly requests `nomic-embed-text` for embeddings to prevent `501 Not Implemented` errors from local `llama-server` instances.
 3.  **Automation Module (`app/Modules/Automation`):**
     *   Hosts the main flow-builder interpreter execution engine (`AutomationEngine.php` and `WorkflowGenerator.php`) which manages user-defined marketing sequences and triggers.
 
@@ -141,15 +143,17 @@ Running too many WhatsApp accounts from a single Server IP can cause WhatsApp to
 
 ---
 
-### 📑 Dedicated Meta Logging (`storage/logs/meta.log`)
+### 📑 Dedicated Integration Logging (`storage/logs/meta.log` & `storage/logs/shopify.log`)
 
-All Meta API calls, embedded signup token exchanges, outbound messages, and inbound webhooks are logged to a dedicated log file:
+All major third-party API calls, token exchanges, outbound requests, and inbound webhooks are logged to dedicated log files:
 
-* **Log Location:** `/home/devwithguru/wa.careerinpak.com/storage/logs/meta.log`
-* **Real-time Log Viewing Command (cPanel/SSH Terminal):**
-  ```bash
-  tail -f /home/devwithguru/wa.careerinpak.com/storage/logs/meta.log
-  ```
+* **Meta Log:** `/home/devwithguru/wa.careerinpak.com/storage/logs/meta.log`
+* **Shopify Log:** `/home/devwithguru/wa.careerinpak.com/storage/logs/shopify.log`
+
+**Real-time Log Viewing Command (cPanel/SSH Terminal):**
+```bash
+tail -f /home/devwithguru/wa.careerinpak.com/storage/logs/shopify.log
+```
 
 ---
 
@@ -175,4 +179,28 @@ WhatsMine is designed to run seamlessly on both shared hosting (cPanel) and dedi
   php artisan queue:work --queue=whatsapp,default --tries=3
   ```
 * **Real-time WebSockets (Laravel Reverb / Pusher):** Enable Reverb or Pusher in `.env`. When WebSockets are connected (`state === 'connected'`), the frontend automatically disables background polling and streams messages with 0ms latency.
+
+---
+
+### 🕒 cPanel Background Queues & Shopify Syncing
+
+Shopify product and order syncing relies on background queue jobs (e.g., `SyncStoreProductsJob`). On cPanel shared hosting, setting up the worker correctly is critical.
+
+#### 1. Fixing the `pcntl_signal` Error
+Laravel's `queue:work` uses the `pcntl` extension for graceful shutdowns. Even if `pcntl` is enabled in cPanel's PHP Selector, specific functions might be blocked.
+* **Fix:** Go to cPanel → **MultiPHP INI Editor** (or PHP Options) → Find `disable_functions` → Remove `pcntl_signal` and `pcntl_async_signals`.
+
+#### 2. Running Scheduled Tasks & Queues via Cron Job
+To keep the Laravel scheduler and queue worker running continuously on cPanel without overlapping processes (no Supervisor needed), add these **two** commands to your cPanel **Cron Jobs** to run **Every Minute (* * * * *)**:
+
+**1. Laravel Scheduler:**
+```bash
+/usr/local/bin/lsphp /home/devwithguru/wa.careerinpak.com/artisan schedule:run >> /dev/null 2>&1
+```
+
+**2. Queue Worker (Auto-exiting for cPanel):**
+```bash
+/usr/local/bin/lsphp /home/devwithguru/wa.careerinpak.com/artisan queue:work database --queue=default --max-time=55 >> /dev/null 2>&1
+```
+*Note: The `--max-time=55` flag forces the worker to exit gracefully after 55 seconds, allowing the next minute's cron to start a fresh process without overlapping and crashing the server.*
 

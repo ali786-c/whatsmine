@@ -48,9 +48,11 @@ class ChatbotRunner
         $recentMessages = $conversation->messages()
             ->whereIn('type', ['text', 'template'])
             ->where('id', '!=', $inboundMessage->id)
-            ->orderBy('sent_at')
+            ->orderByDesc('sent_at')
             ->take(20)
-            ->get();
+            ->get()
+            ->reverse()
+            ->values();
 
         foreach ($recentMessages as $m) {
             if (! $m->body) {
@@ -85,7 +87,7 @@ class ChatbotRunner
                 $augmentedUserMessage .= "Product Information (Use if asked about pricing/stock/products):\n" . $productSummary . "\n\n";
             }
             
-            $augmentedUserMessage .= "---------------------\nGiven the context information above and not prior knowledge, answer the query.\nQuery: ";
+            $augmentedUserMessage .= "---------------------\nAnswer the user's query using the context provided above. If the context does not contain the answer, say so. However, if the query is a simple greeting or conversational (like 'hi' or 'thanks'), just respond naturally and conversationally.\nQuery: ";
         }
 
         $augmentedUserMessage .= $body;
@@ -253,7 +255,7 @@ class ChatbotRunner
             $augmentedUserMessage .= "Context information is below.\n---------------------\n";
             $context = implode("\n\n---\n\n", array_map(fn ($c) => $c->content, $contextChunks));
             $augmentedUserMessage .= "Knowledge Base:\n" . $context . "\n\n";
-            $augmentedUserMessage .= "---------------------\nGiven the context information above and not prior knowledge, answer the query.\nQuery: ";
+            $augmentedUserMessage .= "---------------------\nAnswer the user's query using the context provided above. If the context does not contain the answer, say so. However, if the query is a simple greeting or conversational (like 'hi' or 'thanks'), just respond naturally and conversationally.\nQuery: ";
         }
         $augmentedUserMessage .= $message;
 

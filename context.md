@@ -92,10 +92,35 @@ The Node.js side only logged `Laravel response: 200` — it couldn't distinguish
   * **Dedicated Logs:** Added a `logMeta()` helper that creates a dedicated log channel outputting directly to `storage/logs/meta.log` to print raw requests and responses from Meta.
   * **Fallback Token Exchange:** Updated `InboxSetupController` (Instagram/Messenger signup) to try exchanging authorization codes with a `redirect_uri` first, and if that fails, retry without it. This matches the robust exchange flow used in the WhatsApp module.
 
-### 4. WhatsApp Pre-built Templates Scoping & Deletion Fix
-* **Files Modified:**
-  * `WhatsMine150/app/Modules/Whatsapp/Http/Controllers/WhatsappSetupController.php`
-  * `WhatsMine150/app/Modules/Whatsapp/Jobs/SeedDefaultEcommerceTemplatesJob.php`
-* **Changes:**
-  * **Scoping:** Updated `SeedDefaultEcommerceTemplatesJob` to use `firstOrCreate` with `waba_id` instead of `workspace_id`. This ensures that every WhatsApp Business Account (WABA) gets its own isolated set of pre-built templates, preventing cross-contamination when multiple numbers are connected to the same workspace.
-  * **Clean Deletion:** Updated `WhatsappSetupController@destroy` to completely delete all templates (both custom and pre-built) associated with a `waba_id` when an account is disconnected. This prevents orphaned templates and ensures that when a new number connects, a fresh set of pre-built templates is seeded in the `PENDING` state.
+---
+
+## Smart Automation Wait Nodes & COD Upgrades (Sept 4, 2026)
+
+### 1. Wait For Reply Node
+- Modified `Builder.jsx` and `AutomationEngine.php` to support a new `wait_type` for the "Wait" node.
+- Workflows can now park indefinitely, waiting for a WhatsApp reply from the user. 
+- Custom context variables (like `cod_reply`) are populated automatically when the user replies, enabling complex conditional branching in flow execution.
+
+### 2. COD Verification Flow
+- Upgraded the `ecommerce_cod_verification` template inside `AutomationTemplateRepository.php`.
+- The new flow automatically fires when a COD order is placed, asks for confirmation using a pre-approved template, waits for a reply, evaluates the reply payload against a Condition node, and sends either a confirmation or cancellation template.
+
+### 3. E-Commerce UI & Compliance Rules
+- Created `.agents/AGENTS.md` and `.agents/brain.md` to force AI to always use `send_template` for E-commerce nodes instead of plain text messages.
+- Overhauled the Automations Index UI (`Index.jsx`), replacing the template gallery popup modal with a clean, in-line Tab Navigation system.
+- Added new `ecommerce_order_cancelled` template to the database seeder to complete the COD flow.
+
+### 4. Zero-Cost AI Product Search (RAG Hybrid)
+- Modified `ChatbotRunner.php` to extract keywords from inbound WhatsApp messages and perform a dynamic SQL `LIKE` search against the `ecommerce_products` table.
+- Formats the top 5 matching products into a concise string (SKU, Price, Stock) and injects it into the LLM system prompt dynamically.
+- Eliminates the need for Vector DB embedding syncs, saving 100% of LLM API costs while keeping the AI's product knowledge perfectly real-time.
+
+ # #   L o c a l   A I   &   O l l a m a   O p t i m i z a t i o n   ( S e p t   5 ,   2 0 2 6 ) 
+ 
+ # # #   1 .   C o r r e c t   D e f a u l t   E m b e d d i n g s   M o d e l 
+ -   U p d a t e d   L l m M a n a g e r . p h p   t o   u s e   t h e   c o r r e c t   m o d e l   n a m e   ` n o m i c - e m b e d - t e x t `   f o r   e m b e d d i n g s   w h e n   O l l a m a   i s   s e l e c t e d   a s   t h e   A I   p r o v i d e r .   P r e v i o u s l y ,   t h e   s y s t e m   f a l s e l y   u s e d   t h e   d e f a u l t   C h a t   m o d e l   ( e . g .   q w e n 2 : 0 . 5 b )   f o r   e m b e d d i n g   A P I   c a l l s ,   c a u s i n g   f a t a l   5 0 1   T h i s   s e r v e r   d o e s   n o t   s u p p o r t   e m b e d d i n g s   e r r o r s   f r o m   t h e   l l a m a - s e r v e r . 
+ 
+ # # #   2 .   R A G   P r o m p t   S t r u c t u r e   O p t i m i z a t i o n 
+ -   R e w r o t e   c o n t e x t   i n j e c t i o n   i n s i d e   C h a t b o t R u n n e r . p h p .   P r e v i o u s l y ,   m a s s i v e   c o n t e x t   b l o c k s   ( K n o w l e d g e   B a s e ,   O r d e r   S u m m a r i e s ,   P r o d u c t   I n f o )   w e r e   i n j e c t e d   i n t o   t h e   L L M ' s   s y s t e m   m e s s a g e . 
+ -   T o   s u p p o r t   s m a l l   l o c a l   m o d e l s   ( l i k e   q w e n   a n d   l l a m a 3 ) ,   c o n t e x t   w a s   s h i f t e d   e n t i r e l y   i n t o   t h e   f i n a l   u s e r   m e s s a g e   u s i n g   a   s t r i c t   L l a m a I n d e x - s t y l e   R A G   t e m p l a t e .   S m a l l   m o d e l s   n o w   r e l i a b l y   c o n s u m e   c o n t e x t   i m m e d i a t e l y   b e f o r e   a n s w e r i n g ,   p r e v e n t i n g   t h e m   f r o m   i g n o r i n g   s y s t e m   r u l e s   o r   h a l l u c i n a t i n g   o u t - o f - c o n t e x t   a n s w e r s .  
+ 
