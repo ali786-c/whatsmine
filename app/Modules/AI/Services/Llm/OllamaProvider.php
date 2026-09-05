@@ -58,30 +58,38 @@ class OllamaProvider implements LlmProviderInterface
 
     public function embed(array $texts): array
     {
-        $resp = Http::retry(2, 500)->timeout(120)->post($this->baseUrl . '/api/embed', [
-            'model' => $this->embedModel,
-            'input' => $texts,
-        ]);
+        try {
+            $resp = Http::retry(2, 500)->timeout(120)->post($this->baseUrl . '/api/embed', [
+                'model' => $this->embedModel,
+                'input' => $texts,
+            ]);
 
-        if ($resp->successful() && isset($resp->json()['embeddings'])) {
-            if ($this->workspaceId && isset($resp->json()['prompt_eval_count'])) {
-                UsageMeter::track($this->workspaceId, 'ai_tokens_per_month', $resp->json()['prompt_eval_count']);
+            if ($resp->successful() && isset($resp->json()['embeddings'])) {
+                if ($this->workspaceId && isset($resp->json()['prompt_eval_count'])) {
+                    UsageMeter::track($this->workspaceId, 'ai_tokens_per_month', $resp->json()['prompt_eval_count']);
+                }
+                return $resp->json()['embeddings'];
             }
-            return $resp->json()['embeddings'];
+        } catch (\Exception $e) {
+            // Ignore exception from primary endpoint to allow fallback
         }
 
         // Fallback for older versions of Ollama that don't support /api/embed or if it fails
         $embeddings = [];
         foreach ($texts as $text) {
-            $respFallback = Http::retry(2, 500)->timeout(30)->post($this->baseUrl . '/api/embeddings', [
-                'model' => $this->embedModel,
-                'prompt' => $text,
-            ]);
+            try {
+                $respFallback = Http::retry(2, 500)->timeout(30)->post($this->baseUrl . '/api/embeddings', [
+                    'model' => $this->embedModel,
+                    'prompt' => $text,
+                ]);
 
-            if (! $respFallback->successful()) {
-                throw new \RuntimeException('Ollama embed failed: ' . $respFallback->body());
+                if (! $respFallback->successful()) {
+                    throw new \RuntimeException('Ollama embed failed: ' . $respFallback->body());
+                }
+                $embeddings[] = $respFallback->json()['embedding'];
+            } catch (\Exception $e) {
+                throw new \RuntimeException('AI Embedding failed: ' . $e->getMessage());
             }
-            $embeddings[] = $respFallback->json()['embedding'];
         }
 
         return $embeddings;
