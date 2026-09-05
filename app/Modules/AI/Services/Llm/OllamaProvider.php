@@ -3,6 +3,7 @@
 namespace App\Modules\AI\Services\Llm;
 
 use Illuminate\Support\Facades\Http;
+use App\Modules\Broadcasting\Models\UsageMeter;
 
 class OllamaProvider implements LlmProviderInterface
 {
@@ -11,7 +12,8 @@ class OllamaProvider implements LlmProviderInterface
     public function __construct(
         string $baseUrl,
         private readonly string $chatModel = 'qwen2:0.5b',
-        private readonly string $embedModel = 'nomic-embed-text'
+        private readonly string $embedModel = 'nomic-embed-text',
+        private readonly ?int $workspaceId = null
     ) {
         $this->baseUrl = rtrim($baseUrl ?: 'http://127.0.0.1:11434', '/');
     }
@@ -38,10 +40,17 @@ class OllamaProvider implements LlmProviderInterface
         $json = $resp->json();
         $latency = (int) ((microtime(true) - $start) * 1000);
 
+        $promptTokens = $json['prompt_eval_count'] ?? 0;
+        $completionTokens = $json['eval_count'] ?? 0;
+
+        if ($this->workspaceId) {
+            UsageMeter::track($this->workspaceId, 'ai_tokens_per_month', $promptTokens + $completionTokens);
+        }
+
         return new LlmResponse(
             content: $json['message']['content'] ?? '',
-            promptTokens: $json['prompt_eval_count'] ?? 0,
-            completionTokens: $json['eval_count'] ?? 0,
+            promptTokens: $promptTokens,
+            completionTokens: $completionTokens,
             model: $json['model'] ?? $model,
             latencyMs: $latency,
         );
@@ -55,6 +64,9 @@ class OllamaProvider implements LlmProviderInterface
         ]);
 
         if ($resp->successful() && isset($resp->json()['embeddings'])) {
+            if ($this->workspaceId && isset($resp->json()['prompt_eval_count'])) {
+                UsageMeter::track($this->workspaceId, 'ai_tokens_per_month', $resp->json()['prompt_eval_count']);
+            }
             return $resp->json()['embeddings'];
         }
 

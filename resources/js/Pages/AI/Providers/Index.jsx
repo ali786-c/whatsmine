@@ -40,12 +40,12 @@ const SETUP_GUIDES = {
     },
     ollama: {
         steps: [
-            'ai.guide_ollama_step1',
-            'ai.guide_ollama_step2',
-            'ai.guide_ollama_step3',
+            'System AI provides out-of-the-box AI capabilities without requiring you to bring your own API keys.',
+            'You can simply enable this provider to start using AI features immediately.',
+            'Usage is deducted from your monthly plan AI credits.'
         ],
-        link: 'https://ollama.com',
-        linkLabelKey: 'ai.guide_ollama_link',
+        link: '',
+        linkLabelKey: '',
     }
 };
 
@@ -119,7 +119,7 @@ const PROVIDER_INFO = {
     openai:    { label: 'OpenAI',    Icon: OpenAILogo,    models: ['gpt-4o', 'gpt-4o-mini', 'gpt-3.5-turbo'] },
     anthropic: { label: 'Anthropic', Icon: AnthropicLogo, models: ['claude-3-opus-20240229', 'claude-3-sonnet-20240229', 'claude-3-haiku-20240307'] },
     gemini:    { label: 'Gemini',    Icon: GeminiLogo,    models: ['gemini-1.5-pro', 'gemini-1.5-flash', 'gemini-1.0-pro'] },
-    ollama:    { label: 'Ollama',    Icon: OllamaLogo,    isLocal: true, defaultModel: 'qwen2:0.5b' },
+    ollama:    { label: 'System AI', Icon: OllamaLogo,    isLocal: true, isSystem: true },
 };
 
 function ProviderCard({ provider }) {
@@ -149,35 +149,44 @@ function ProviderCard({ provider }) {
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-3">
-                <div>
-                    <label className="text-xs font-medium text-neutral-500 dark:text-neutral-400">
-                        {info.isLocal ? 'Base URL' : t('ai.api_key')}
-                    </label>
-                    <div className="relative mt-1">
-                        <input
-                            type={info.isLocal ? 'text' : (showKey ? 'text' : 'password')}
-                            value={data.api_key}
-                            onChange={e => setData('api_key', e.target.value)}
-                            placeholder={provider.configured ? (info.isLocal ? 'http://127.0.0.1:11434' : t('ai.api_key_encrypted_placeholder')) : (info.isLocal ? 'http://127.0.0.1:11434' : 'sk-…')}
-                            className="w-full rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 pr-10 text-sm"
-                        />
-                        {!info.isLocal && (
-                            <button type="button" onClick={() => setShowKey(v => !v)} className="absolute right-2 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-600">
-                                {showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                            </button>
-                        )}
+                {!info.isSystem && (
+                    <>
+                        <div>
+                            <label className="text-xs font-medium text-neutral-500 dark:text-neutral-400">
+                                {info.isLocal ? 'Base URL' : t('ai.api_key')}
+                            </label>
+                            <div className="relative mt-1">
+                                <input
+                                    type={info.isLocal ? 'text' : (showKey ? 'text' : 'password')}
+                                    value={data.api_key}
+                                    onChange={e => setData('api_key', e.target.value)}
+                                    placeholder={provider.configured ? (info.isLocal ? 'http://127.0.0.1:11434' : t('ai.api_key_encrypted_placeholder')) : (info.isLocal ? 'http://127.0.0.1:11434' : 'sk-…')}
+                                    className="w-full rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 pr-10 text-sm"
+                                />
+                                {!info.isLocal && (
+                                    <button type="button" onClick={() => setShowKey(v => !v)} className="absolute right-2 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-600">
+                                        {showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                        <div>
+                            <label className="text-xs font-medium text-neutral-500 dark:text-neutral-400">{t('ai.default_chat_model')}</label>
+                            {info.isLocal ? (
+                                <input type="text" value={data.default_model_chat} onChange={e => setData('default_model_chat', e.target.value)} placeholder="e.g. qwen2:0.5b" className="mt-1 w-full rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm" />
+                            ) : (
+                                <select value={data.default_model_chat} onChange={e => setData('default_model_chat', e.target.value)} className="mt-1 w-full rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm">
+                                    {info.models?.map(m => <option key={m} value={m}>{m}</option>)}
+                                </select>
+                            )}
+                        </div>
+                    </>
+                )}
+                {info.isSystem && (
+                    <div className="rounded-lg border border-indigo-200 dark:border-indigo-900 bg-indigo-50 dark:bg-indigo-900/20 px-4 py-3 text-sm text-indigo-700 dark:text-indigo-300 mb-4">
+                        <p><strong>System AI</strong> uses models provided natively by this platform. No API keys are required. Usage counts towards your plan's AI Credits limit.</p>
                     </div>
-                </div>
-                <div>
-                    <label className="text-xs font-medium text-neutral-500 dark:text-neutral-400">{t('ai.default_chat_model')}</label>
-                    {info.isLocal ? (
-                        <input type="text" value={data.default_model_chat} onChange={e => setData('default_model_chat', e.target.value)} placeholder="e.g. qwen2:0.5b" className="mt-1 w-full rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm" />
-                    ) : (
-                        <select value={data.default_model_chat} onChange={e => setData('default_model_chat', e.target.value)} className="mt-1 w-full rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm">
-                            {info.models?.map(m => <option key={m} value={m}>{m}</option>)}
-                        </select>
-                    )}
-                </div>
+                )}
                 <label className="flex items-center gap-2 text-sm cursor-pointer">
                     <input type="checkbox" checked={data.enabled} onChange={e => setData('enabled', e.target.checked)} className="rounded" />
                     {t('common.enabled')}
@@ -195,9 +204,11 @@ function ProviderCard({ provider }) {
     );
 }
 
-export default function AiProvidersIndex({ providers }) {
+export default function ProvidersIndex({ providers }) {
     const { t } = useTranslation();
     const { props } = usePage();
+    const creditsUsed = props.creditsUsed ?? 0;
+    const creditsLimit = props.creditsLimit;
     const flash = props.flash ?? {};
 
     return (
@@ -208,7 +219,26 @@ export default function AiProvidersIndex({ providers }) {
                     <h2 className="text-xl font-semibold text-neutral-900 dark:text-neutral-100">{t('ai.provider_settings')}</h2>
                     <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">{t('ai.provider_settings_subtitle')}</p>
                 </div>
-                {flash.success && <div className="rounded-lg bg-green-50 dark:bg-green-900/30 text-green-800 dark:text-green-200 px-4 py-2 text-sm">{flash.success}</div>}
+
+                <div className="rounded-xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 p-6 shadow-sm">
+                    <div className="flex items-center justify-between mb-4">
+                        <div>
+                            <h3 className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">AI Credits Usage</h3>
+                            <p className="text-xs text-neutral-500 dark:text-neutral-400">Your monthly AI credits usage for System AI.</p>
+                        </div>
+                        <div className="text-right">
+                            <span className="text-2xl font-bold text-neutral-900 dark:text-neutral-100">{creditsUsed.toLocaleString()}</span>
+                            <span className="text-sm text-neutral-500 dark:text-neutral-400"> / {creditsLimit === null ? 'Unlimited' : creditsLimit.toLocaleString()}</span>
+                        </div>
+                    </div>
+                    {creditsLimit !== null && (
+                        <div className="w-full bg-neutral-100 dark:bg-neutral-800 rounded-full h-2">
+                            <div className={`h-2 rounded-full ${creditsUsed >= creditsLimit ? 'bg-red-500' : 'bg-brand-500'}`} style={{ width: `${Math.min(100, (creditsUsed / creditsLimit) * 100)}%` }}></div>
+                        </div>
+                    )}
+                </div>
+
+                {flash?.success && <div className="rounded-lg bg-green-50 dark:bg-green-900/30 text-green-800 dark:text-green-200 px-4 py-2 text-sm">{flash.success}</div>}
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                     {providers.length === 0 ? (
                         <div className="col-span-full">

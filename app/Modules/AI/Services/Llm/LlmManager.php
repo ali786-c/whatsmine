@@ -3,6 +3,7 @@
 namespace App\Modules\AI\Services\Llm;
 
 use App\Models\Workspace;
+use App\Models\SystemSetting;
 use App\Modules\AI\Models\AiProviderConfig;
 use App\Modules\Integrations\Services\CredentialResolver;
 
@@ -19,18 +20,28 @@ class LlmManager
             ->orderByRaw("FIELD(provider, 'openai', 'anthropic', 'gemini', 'ollama')")
             ->first();
 
-        if ($config && ! empty($config->credentials['api_key'] ?? '')) {
-            return static::build($config->provider, $config->credentials ?? [], [
-                'chat' => $config->default_model_chat,
-                'embed' => $config->default_model_embed,
-            ]);
+        if ($config) {
+            if ($config->provider === 'ollama' && SystemSetting::get('system_ai_enabled', 'false') === 'true') {
+                return static::build('ollama', [
+                    'api_key' => SystemSetting::get('system_ai_base_url', 'http://127.0.0.1:11434'),
+                ], [
+                    'chat' => SystemSetting::get('system_ai_default_model', 'qwen2:0.5b'),
+                    'embed' => SystemSetting::get('system_ai_default_model', 'qwen2:0.5b'),
+                ], $workspaceId);
+            }
+            if (! empty($config->credentials['api_key'] ?? '')) {
+                return static::build($config->provider, $config->credentials ?? [], [
+                    'chat' => $config->default_model_chat,
+                    'embed' => $config->default_model_embed,
+                ], $workspaceId);
+            }
         }
 
         $workspace = app(Workspace::class)->find($workspaceId);
         foreach (['openai', 'anthropic', 'gemini', 'ollama'] as $provider) {
             $creds = CredentialResolver::for($workspace)->llm($provider);
             if ($creds) {
-                return static::build($provider, $creds->toArray());
+                return static::build($provider, $creds->toArray(), [], $workspaceId);
             }
         }
 
@@ -54,13 +65,21 @@ class LlmManager
             if (! in_array($config->provider, self::EMBED_CAPABLE, true)) {
                 continue;
             }
+            if ($config->provider === 'ollama' && SystemSetting::get('system_ai_enabled', 'false') === 'true') {
+                return static::build('ollama', [
+                    'api_key' => SystemSetting::get('system_ai_base_url', 'http://127.0.0.1:11434'),
+                ], [
+                    'chat' => SystemSetting::get('system_ai_default_model', 'qwen2:0.5b'),
+                    'embed' => SystemSetting::get('system_ai_default_model', 'qwen2:0.5b'),
+                ], $workspaceId);
+            }
             if (empty($config->credentials['api_key'] ?? '')) {
                 continue;
             }
             return static::build($config->provider, $config->credentials ?? [], [
                 'chat' => $config->default_model_chat,
                 'embed' => $config->default_model_embed,
-            ]);
+            ], $workspaceId);
         }
 
         // System-level fallback (embed-capable only)
@@ -68,7 +87,7 @@ class LlmManager
         foreach (self::EMBED_CAPABLE as $provider) {
             $creds = CredentialResolver::for($workspace)->llm($provider);
             if ($creds) {
-                return static::build($provider, $creds->toArray());
+                return static::build($provider, $creds->toArray(), [], $workspaceId);
             }
         }
 
@@ -78,7 +97,7 @@ class LlmManager
         );
     }
 
-    public static function build(string $provider, array $creds, array $models = []): LlmProviderInterface
+    public static function build(string $provider, array $creds, array $models = [], ?int $workspaceId = null): LlmProviderInterface
     {
         return match ($provider) {
             'openai' => new OpenAiProvider(
@@ -89,7 +108,7 @@ class LlmManager
             ),
             'anthropic' => new AnthropicProvider($creds['api_key'] ?? '', $models['chat'] ?? 'claude-3-haiku-20240307'),
             'gemini' => new GeminiProvider($creds['api_key'] ?? '', $models['chat'] ?? 'gemini-1.5-flash', $models['embed'] ?? 'text-embedding-004'),
-            'ollama' => new OllamaProvider($creds['api_key'] ?? 'http://127.0.0.1:11434', $models['chat'] ?? 'qwen2:0.5b', $models['embed'] ?? 'nomic-embed-text'),
+            'ollama' => new OllamaProvider($creds['api_key'] ?? 'http://127.0.0.1:11434', $models['chat'] ?? 'qwen2:0.5b', $models['embed'] ?? 'nomic-embed-text', $workspaceId),
             default => throw new \RuntimeException("Unknown LLM provider: {$provider}"),
         };
     }

@@ -4,6 +4,8 @@ namespace App\Modules\AI\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Modules\AI\Models\AiProviderConfig;
+use App\Models\Workspace;
+use App\Modules\Broadcasting\Models\UsageMeter;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -24,7 +26,16 @@ class AiProviderController extends Controller
             'default_model_chat' => $configs->get($p)?->default_model_chat ?? '',
         ]);
 
-        return Inertia::render('AI/Providers/Index', ['providers' => $list]);
+        $workspace = Workspace::with('client')->find($workspaceId);
+        $plan = $workspace?->client?->activePlan();
+        $aiCreditsLimit = $plan?->limits['ai_tokens_per_month'] ?? null;
+        $aiCreditsUsed = UsageMeter::current($workspaceId, 'ai_tokens_per_month');
+
+        return Inertia::render('AI/Providers/Index', [
+            'providers' => $list,
+            'creditsLimit' => $aiCreditsLimit,
+            'creditsUsed' => $aiCreditsUsed,
+        ]);
     }
 
     public function update(Request $request, string $provider): RedirectResponse

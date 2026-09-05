@@ -58,10 +58,17 @@ class SystemSettingsController extends Controller
             'appId'      => SystemSetting::get('firebase_app_id', ''),
         ];
 
+        $systemAi = [
+            'enabled'       => SystemSetting::get('system_ai_enabled', 'false') === 'true',
+            'baseUrl'       => SystemSetting::get('system_ai_base_url', 'http://127.0.0.1:11434'),
+            'defaultModel'  => SystemSetting::get('system_ai_default_model', 'qwen2:0.5b'),
+        ];
+
         return Inertia::render('Admin/Settings/Index', [
             'general'         => $general,
             'settingsByGroup' => $byGroup,
             'firebase'        => $firebase,
+            'systemAi'        => $systemAi,
         ]);
     }
 
@@ -152,6 +159,21 @@ class SystemSettingsController extends Controller
         }
 
         return back()->with('success', __('Firebase settings saved.'));
+    }
+
+    public function updateSystemAi(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'system_ai_enabled'       => ['required', 'in:true,false'],
+            'system_ai_base_url'      => ['nullable', 'url', 'max:255'],
+            'system_ai_default_model' => ['nullable', 'string', 'max:128'],
+        ]);
+
+        foreach ($validated as $key => $value) {
+            SystemSetting::set($key, $value ?? '', false, 'system_ai');
+        }
+
+        return back()->with('success', __('System AI settings saved.'));
     }
 
     public function update(Request $request): RedirectResponse

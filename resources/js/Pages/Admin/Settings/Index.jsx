@@ -3,7 +3,7 @@ import AdminLayout from '@/Layouts/AdminLayout';
 import { Button, Card, Tabs } from '@/Components/ui';
 import { Head, router, useForm, usePage } from '@inertiajs/react';
 import { useTranslation } from 'react-i18next';
-import { Upload, X, Image, Globe, Palette, Settings2, Code2, Flame } from 'lucide-react';
+import { Upload, X, Image, Globe, Palette, Settings2, Code2, Flame, Bot } from 'lucide-react';
 
 // ─── General Settings Tab ─────────────────────────────────────────────────────
 
@@ -478,9 +478,97 @@ function FirebaseTab({ firebase, flash }) {
     );
 }
 
+// ─── System AI Tab ─────────────────────────────────────────────────────────────
+
+function SystemAiTab({ systemAi, flash }) {
+    const { t } = useTranslation();
+    const { data, setData, put, processing, errors } = useForm({
+        system_ai_enabled:       systemAi?.enabled ? 'true' : 'false',
+        system_ai_base_url:      systemAi?.baseUrl ?? '',
+        system_ai_default_model: systemAi?.defaultModel ?? '',
+    });
+
+    const submit = (e) => {
+        e.preventDefault();
+        put(route('admin.settings.system-ai.update'), { preserveScroll: true });
+    };
+
+    const field = (label, key, description, placeholder = '') => (
+        <div className="space-y-1">
+            <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300">{label}</label>
+            {description && <p className="text-xs text-neutral-400 dark:text-neutral-500">{description}</p>}
+            <input
+                type="text"
+                value={data[key]}
+                onChange={(e) => setData(key, e.target.value)}
+                placeholder={placeholder}
+                className="w-full rounded-soft border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+            />
+            {errors[key] && <p className="text-xs text-red-500">{errors[key]}</p>}
+        </div>
+    );
+
+    return (
+        <form onSubmit={submit} className="space-y-6">
+            {flash?.success && (
+                <div className="rounded-soft-lg bg-green-50 dark:bg-green-900/30 text-green-800 dark:text-green-200 px-4 py-2 text-sm">
+                    {flash.success}
+                </div>
+            )}
+
+            <Card>
+                <Card.Body className="space-y-5">
+                    <div className="flex items-center gap-3 pb-4 border-b border-neutral-100 dark:border-neutral-800">
+                        <Bot className="h-5 w-5 text-indigo-500" />
+                        <div>
+                            <h3 className="font-semibold text-neutral-900 dark:text-neutral-100">System AI (Powered by Ollama)</h3>
+                            <p className="text-xs text-neutral-500 dark:text-neutral-400">
+                                Configure the global Ollama AI provider that your clients can use via their plan's credits limit.
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="flex items-center justify-between rounded-soft border border-neutral-200 dark:border-neutral-700 px-4 py-3">
+                        <div>
+                            <p className="text-sm font-medium text-neutral-700 dark:text-neutral-300">Enable System AI</p>
+                            <p className="text-xs text-neutral-400 dark:text-neutral-500 mt-0.5">Allow users to use the System AI instead of providing their own API keys.</p>
+                        </div>
+                        <button
+                            type="button"
+                            role="switch"
+                            aria-checked={data.system_ai_enabled === 'true'}
+                            onClick={() => setData('system_ai_enabled', data.system_ai_enabled === 'true' ? 'false' : 'true')}
+                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500/20 ${
+                                data.system_ai_enabled === 'true' ? 'bg-brand-500' : 'bg-neutral-300 dark:bg-neutral-600'
+                            }`}
+                        >
+                            <span
+                                className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                                    data.system_ai_enabled === 'true' ? 'translate-x-6' : 'translate-x-1'
+                                }`}
+                            />
+                        </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                        {field('Base URL', 'system_ai_base_url', 'Your Ollama Server Address', 'http://127.0.0.1:11434')}
+                        {field('Default Model', 'system_ai_default_model', 'Model to use for client requests', 'qwen2:0.5b')}
+                    </div>
+                </Card.Body>
+            </Card>
+
+            <div className="flex justify-end">
+                <Button type="submit" variant="primary" disabled={processing}>
+                    {processing ? t('settings.saving') : 'Save System AI Settings'}
+                </Button>
+            </div>
+        </form>
+    );
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
-export default function AdminSettingsIndex({ general = {}, settingsByGroup = {}, firebase = {} }) {
+export default function AdminSettingsIndex({ general = {}, settingsByGroup = {}, firebase = {}, systemAi = {} }) {
     const { t } = useTranslation();
     const { props } = usePage();
     const flash = props.flash ?? {};
@@ -488,6 +576,7 @@ export default function AdminSettingsIndex({ general = {}, settingsByGroup = {},
     const tabs = [
         { key: 'general',  label: t('settings.tab_general') },
         { key: 'firebase', label: t('settings.tab_firebase') },
+        { key: 'systemAi', label: 'System AI' },
         { key: 'advanced', label: t('settings.tab_advanced') },
     ];
 
@@ -507,6 +596,9 @@ export default function AdminSettingsIndex({ general = {}, settingsByGroup = {},
                         <FirebaseTab firebase={firebase} flash={flash} />
                     </Tabs.Panel>
                     <Tabs.Panel index={2} activeIndex={activeIndex}>
+                        <SystemAiTab systemAi={systemAi} flash={flash} />
+                    </Tabs.Panel>
+                    <Tabs.Panel index={3} activeIndex={activeIndex}>
                         <AdvancedTab settingsByGroup={settingsByGroup} flash={flash} />
                     </Tabs.Panel>
                 </Tabs>

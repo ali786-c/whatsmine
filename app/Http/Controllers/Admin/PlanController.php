@@ -18,6 +18,7 @@ class PlanController extends Controller
         return [
             'users' => null,
             'storage' => null,
+            'ai_tokens_per_month' => null,
         ];
     }
 
