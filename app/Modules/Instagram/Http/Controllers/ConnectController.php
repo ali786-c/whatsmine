@@ -116,6 +116,29 @@ class ConnectController extends Controller
                 ]);
             }
 
+            // Subscribe the linked Facebook Page to Instagram messaging webhooks
+            // (same step the Inbox connect flow performs). Without it Meta does
+            // not deliver inbound IG messages at all.
+            try {
+                app(InstagramGraphClient::class)->subscribePageToMessaging($account->page_id, $pageToken);
+                InstagramLog::connect('info', 'instagram_module: page subscribed to messaging webhooks', [
+                    'page_id' => $account->page_id,
+                    'ig_user_id' => $igId,
+                ]);
+            } catch (\Throwable $e) {
+                InstagramLog::connect('warning', 'instagram_module: page messaging subscription failed', [
+                    'page_id' => $account->page_id,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+
+            // Create/update the Inbox module's channel_accounts row so DMs flow
+            // into the shared Inbox even when connected from THIS panel. The
+            // Inbox InstagramDriver matches inbound messages on meta_json
+            // instagram_page_id / instagram_account_id — without this row it
+            // drops every forwarded DM. Class-guarded: Inbox absent → skipped.
+            $this->mirrorChannelAccount($workspaceId, $account, $pageToken, $page);
+
             $connected++;
         }
 
@@ -198,6 +221,68 @@ class ConnectController extends Controller
     private function apiVersion(): string
     {
         return (string) config('instagram.api_version', 'v20.0');
+    }
+
+    /**
+     * Keep the Inbox module's channel_accounts row in sync with this connection
+     * (same persisted shape as the Inbox's own embedded-signup flow). This is
+     * what lets the Inbox InstagramDriver match inbound messages forwarded from
+     * our webhook — without the row it logs "no channel account matched" and
+     * drops the DM. Best-effort: any failure is logged, never fatal.
+     */
+    private function mirrorChannelAccount(int $workspaceId, InstagramAccount $account, string $pageToken, array $page): void
+    {
+        if (! class_exists(\App\Modules\Shared\Models\ChannelAccount::class)) {
+            return;
+        }
+
+        try {
+            $igId = $account->ig_user_id;
+            $pageId = (string) ($page['id'] ?? $account->page_id);
+            $name = $account->username ?: ($account->display_name ?: $igId);
+
+            $credentials = ['access_token' => $pageToken, 'instagram_account_id' => $igId];
+            $metaJson = [
+                'instagram_page_id' => $igId,
+                'instagram_account_id' => $igId,
+                'facebook_page_id' => $pageId,
+            ];
+
+            $existing = \App\Modules\Shared\Models\ChannelAccount::where('workspace_id', $workspaceId)
+                ->where('channel', 'instagram')
+                ->whereJsonContains('meta_json->instagram_page_id', $igId)
+                ->first();
+
+            if ($existing) {
+                // Merge so Inbox-side extras (e.g. assigned ai_chatbot_id) survive.
+                $existing->update([
+                    'credentials' => $credentials,
+                    'meta_json' => array_merge($existing->meta_json ?? [], $metaJson),
+                    'status' => 'active',
+                ]);
+            } else {
+                \App\Modules\Shared\Models\ChannelAccount::create([
+                    'workspace_id' => $workspaceId,
+                    'channel' => 'instagram',
+                    'provider' => 'meta',
+                    'display_name' => mb_substr((string) $name, 0, 128),
+                    'credentials' => $credentials,
+                    'meta_json' => $metaJson,
+                    'status' => 'active',
+                ]);
+            }
+
+            InstagramLog::connect('info', 'instagram_module: inbox channel_account synced', [
+                'ig_user_id' => $igId,
+                'workspace_id' => $workspaceId,
+                'updated' => (bool) $existing,
+            ]);
+        } catch (\Throwable $e) {
+            InstagramLog::connect('warning', 'instagram_module: inbox channel_account sync failed (DMs may not reach Inbox)', [
+                'ig_user_id' => $account->ig_user_id,
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 
     private function workspaceId(Request $request): int
