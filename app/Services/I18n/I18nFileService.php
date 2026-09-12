@@ -88,16 +88,24 @@ class I18nFileService
         return array_keys($a) !== range(0, count($a) - 1);
     }
 
-    private function cacheVersion(): string
+    /**
+     * Cache version includes the locale file's mtime so deploys that change
+     * translation files invalidate automatically. UI edits already bump
+     * i18n_version via invalidateCache().
+     */
+    private function cacheVersion(string $code): string
     {
-        return Cache::get('i18n_version', '0');
+        $version = Cache::get('i18n_version', '0');
+        $path = $this->path($code);
+        $mtime = File::exists($path) ? (string) File::lastModified($path) : '0';
+
+        return $version.'-'.$mtime;
     }
 
     /** Read locale file and return flat key => value. */
     public function getFlatDictionary(string $code): array
     {
-        $version = $this->cacheVersion();
-        $cacheKey = 'i18n:file:'.$code.':'.$version;
+        $cacheKey = 'i18n:file:'.$code.':'.$this->cacheVersion($code);
 
         return Cache::remember($cacheKey, 3600, function () use ($code) {
             $path = $this->path($code);
