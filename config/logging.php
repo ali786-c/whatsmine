@@ -145,6 +145,95 @@ return [
             'replace_placeholders' => true,
         ],
 
+        /*
+        |----------------------------------------------------------------------
+        | Instagram module — dedicated per-category logs
+        |----------------------------------------------------------------------
+        | Everything the Instagram comment-automation module does is written
+        | to storage/logs/instagram/ — one daily file per category plus a
+        | master instagram.log that receives every event. Every write goes
+        | to BOTH the master and the category file (see InstagramLog).
+        */
+        'instagram' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/instagram/instagram.log'),
+            'level' => env('LOG_LEVEL', 'debug'),
+            'days' => env('LOG_INSTAGRAM_DAYS', 14),
+            'replace_placeholders' => true,
+        ],
+
+        'instagram_webhook' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/instagram/webhook.log'),
+            'level' => env('LOG_LEVEL', 'debug'),
+            'days' => env('LOG_INSTAGRAM_DAYS', 14),
+            'replace_placeholders' => true,
+        ],
+
+        'instagram_comment' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/instagram/comment.log'),
+            'level' => env('LOG_LEVEL', 'debug'),
+            'days' => env('LOG_INSTAGRAM_DAYS', 14),
+            'replace_placeholders' => true,
+        ],
+
+        'instagram_dm' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/instagram/dm.log'),
+            'level' => env('LOG_LEVEL', 'debug'),
+            'days' => env('LOG_INSTAGRAM_DAYS', 14),
+            'replace_placeholders' => true,
+        ],
+
+        'instagram_send' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/instagram/send.log'),
+            'level' => env('LOG_LEVEL', 'debug'),
+            'days' => env('LOG_INSTAGRAM_DAYS', 14),
+            'replace_placeholders' => true,
+        ],
+
+        'instagram_delivery' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/instagram/delivery.log'),
+            'level' => env('LOG_LEVEL', 'debug'),
+            'days' => env('LOG_INSTAGRAM_DAYS', 14),
+            'replace_placeholders' => true,
+        ],
+
+        'instagram_funnel' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/instagram/funnel.log'),
+            'level' => env('LOG_LEVEL', 'debug'),
+            'days' => env('LOG_INSTAGRAM_DAYS', 14),
+            'replace_placeholders' => true,
+        ],
+
+        'instagram_mirror' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/instagram/mirror.log'),
+            'level' => env('LOG_LEVEL', 'debug'),
+            'days' => env('LOG_INSTAGRAM_DAYS', 14),
+            'replace_placeholders' => true,
+        ],
+
+        'instagram_connect' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/instagram/connect.log'),
+            'level' => env('LOG_LEVEL', 'debug'),
+            'days' => env('LOG_INSTAGRAM_DAYS', 14),
+            'replace_placeholders' => true,
+        ],
+
+        'instagram_timeout' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/instagram/timeout.log'),
+            'level' => env('LOG_LEVEL', 'debug'),
+            'days' => env('LOG_INSTAGRAM_DAYS', 14),
+            'replace_placeholders' => true,
+        ],
+
     ],
 
 ];

@@ -4,7 +4,6 @@ namespace App\Modules\Instagram\Services;
 
 use App\Modules\Instagram\Models\CommentAutomationLog;
 use App\Modules\Instagram\Models\FunnelParticipant;
-use Illuminate\Support\Facades\Log;
 
 /**
  * Enforces Meta's hard windows:
@@ -20,7 +19,7 @@ class FunnelTimeoutService
         $expired = $this->expireUnsentPrivateReplies() + $this->closeStaleFollowUps();
 
         if ($retried + $expired > 0) {
-            Log::info('instagram_module: funnel timeouts processed', [
+            InstagramLog::timeout('info', 'funnel timeouts processed', [
                 'retried' => $retried,
                 'expired_or_closed' => $expired,
             ]);
@@ -50,6 +49,10 @@ class FunnelTimeoutService
                 ? ['stage' => FunnelParticipant::STAGE_AWAITING_FOLLOW]
                 : ['stage' => FunnelParticipant::STAGE_DELIVERED, 'delivered_at' => now()],
             )->save();
+            InstagramLog::timeout('info', 'healed participant stuck in dm_sent (worker died mid-send)', [
+                'participant_id' => $participant->id,
+                'advanced_to' => $gated ? 'awaiting_follow' : 'delivered',
+            ]);
         }
 
         $stranded = FunnelParticipant::query()
@@ -68,7 +71,7 @@ class FunnelTimeoutService
                 app(CommentFunnelService::class)->resumePrivateReply($participant);
             } catch (\Throwable $e) {
                 // Still throttled / Meta still down — the next sweep retries.
-                Log::warning('instagram_module: stranded private-reply retry failed', [
+                InstagramLog::timeout('warning', 'stranded private-reply retry failed (next sweep will retry)', [
                     'participant_id' => $participant->id,
                     'error' => $e->getMessage(),
                 ]);
@@ -90,6 +93,11 @@ class FunnelTimeoutService
                 'stage' => FunnelParticipant::STAGE_EXPIRED,
                 'closed_at' => now(),
             ])->save();
+
+            InstagramLog::timeout('info', 'participant EXPIRED — 7-day private reply window elapsed', [
+                'participant_id' => $participant->id,
+                'comment_id' => $participant->comment_id,
+            ]);
 
             CommentAutomationLog::create([
                 'workspace_id' => $participant->workspace_id,
@@ -119,6 +127,11 @@ class FunnelTimeoutService
                 'stage' => FunnelParticipant::STAGE_CLOSED,
                 'closed_at' => now(),
             ])->save();
+
+            InstagramLog::timeout('info', 'participant CLOSED — 24h follow-up window elapsed', [
+                'participant_id' => $participant->id,
+                'comment_id' => $participant->comment_id,
+            ]);
 
             CommentAutomationLog::create([
                 'workspace_id' => $participant->workspace_id,

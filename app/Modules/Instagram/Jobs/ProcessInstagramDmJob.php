@@ -3,6 +3,7 @@
 namespace App\Modules\Instagram\Jobs;
 
 use App\Modules\Instagram\Services\CommentFunnelService;
+use App\Modules\Instagram\Services\InstagramLog;
 use App\Modules\Shared\Models\ChannelAccount;
 use App\Modules\Inbox\Services\InstagramDriver;
 use Illuminate\Bus\Queueable;
@@ -53,7 +54,7 @@ class ProcessInstagramDmJob implements ShouldQueue
     private function forwardToInbox(): void
     {
         if (! class_exists(InstagramDriver::class)) {
-            Log::info('instagram_module: Inbox driver unavailable — DM event logged only', [
+            InstagramLog::dm('info', 'Inbox driver unavailable — DM event logged only', [
                 'entry_id' => $this->entryId,
             ]);
 
@@ -63,12 +64,17 @@ class ProcessInstagramDmJob implements ShouldQueue
         try {
             // Reuse the Inbox module's exact processing logic so messages land on
             // the same contacts/conversations it would have created itself.
+            InstagramLog::dm('info', 'forwarding non-funnel DM to Inbox pipeline', [
+                'entry_id' => $this->entryId,
+                'event_type' => isset($this->event['message']) ? 'message' : (isset($this->event['postback']) ? 'postback' : 'other'),
+            ]);
+
             app(InstagramDriver::class)->processWebhookPayload([
                 'entry' => [['id' => $this->entryId, 'messaging' => [$this->event]]],
             ]);
         } catch (\Throwable $e) {
             // The funnel must never break because the Inbox integration changed.
-            Log::warning('instagram_module: forwarding DM to Inbox failed (event logged only)', [
+            InstagramLog::dm('warning', 'forwarding DM to Inbox failed (event logged only)', [
                 'entry_id' => $this->entryId,
                 'error' => $e->getMessage(),
             ]);

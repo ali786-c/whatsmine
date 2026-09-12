@@ -7,7 +7,6 @@ use App\Modules\Instagram\Models\CommentAutomationLog;
 use App\Modules\Instagram\Models\FunnelParticipant;
 use App\Modules\Instagram\Models\InstagramAccount;
 use Illuminate\Database\QueryException;
-use Illuminate\Support\Facades\Log;
 
 /**
  * The comment → DM → follow-gate → delivery state machine.
@@ -54,14 +53,14 @@ class CommentFunnelService
         ]);
 
         if ($commentId === '' || $commenterId === '' || $entryId === '') {
-            Log::info('instagram_module: comment missing ids — dropped', ['entry_id' => $entryId]);
+            InstagramLog::comment('info', 'comment missing ids — dropped', ['entry_id' => $entryId, 'comment_id' => $commentId, 'from_id' => $commenterId]);
 
             return;
         }
 
         $account = InstagramAccount::where('ig_user_id', $entryId)->where('status', 'active')->first();
         if (! $account) {
-            Log::info('instagram_module: comment for unconnected/inactive IG account', ['entry_id' => $entryId]);
+            InstagramLog::comment('info', 'comment for unconnected/inactive IG account — dropped', ['entry_id' => $entryId, 'comment_id' => $commentId]);
 
             return;
         }
@@ -123,7 +122,7 @@ class CommentFunnelService
         } catch (QueryException $e) {
             // Concurrent duplicate delivery lost the unique(comment_id) race — the
             // winner processes it; nothing left to do here.
-            Log::info('instagram_module: concurrent duplicate comment', ['comment_id' => $commentId]);
+            InstagramLog::comment('info', 'concurrent duplicate comment — race lost, winner processing', ['comment_id' => $commentId, 'account_id' => $account->id]);
 
             return;
         }
@@ -159,6 +158,13 @@ class CommentFunnelService
     {
         $replyText = $this->renderReply($automation, $participant->username, $participant);
 
+        InstagramLog::funnel('info', 'sending private reply', [
+            'participant_id' => $participant->id,
+            'comment_id' => $participant->comment_id,
+            'automation_id' => $automation->id,
+            'follow_gate' => (bool) $automation->follow_gate,
+        ]);
+
         $sent = $this->privateReplies->send($participant, $replyText);
         if (! $sent['ok']) {
             // Permanent (non-retryable) Graph rejection — close the funnel so it
@@ -175,12 +181,14 @@ class CommentFunnelService
         if ($automation->follow_gate) {
             $participant->forceFill(['stage' => FunnelParticipant::STAGE_AWAITING_FOLLOW])->save();
             $this->log($participant->account, $automation, $participant->comment_id, CommentAutomationLog::ACTION_AWAITING_FOLLOW, [], $participant);
+            InstagramLog::funnel('info', 'stage → awaiting_follow (private reply sent, gate on)', ['participant_id' => $participant->id, 'comment_id' => $participant->comment_id]);
         } else {
             // No gate: the delivery was embedded in the private reply — mark done.
             $participant->forceFill([
                 'stage' => FunnelParticipant::STAGE_DELIVERED,
                 'delivered_at' => now(),
             ])->save();
+            InstagramLog::funnel('info', 'stage → delivered (no gate, delivery embedded in private reply)', ['participant_id' => $participant->id, 'comment_id' => $participant->comment_id]);
         }
     }
 
@@ -207,6 +215,8 @@ class CommentFunnelService
             ->first();
 
         if (! $participant) {
+            InstagramLog::dm('info', 'DM reply is not a funnel thread — forwarded to Inbox pipeline', ['entry_id' => $entryId, 'sender_id' => $senderId]);
+
             return false; // not a funnel thread — the Inbox pipeline handles normal DMs
         }
 
@@ -227,9 +237,11 @@ class CommentFunnelService
         // window already elapsed closes the funnel instead.
         if ($participant->dm_thread_opened_at === null) {
             $participant->forceFill(['dm_thread_opened_at' => now()])->save();
+            InstagramLog::dm('info', '24h follow-up window OPENED by participant reply', ['participant_id' => $participant->id, 'comment_id' => $participant->comment_id, 'username' => $participant->username]);
         } elseif (! $participant->followUpWindowOpen()) {
             $participant->forceFill(['stage' => FunnelParticipant::STAGE_CLOSED, 'closed_at' => now()])->save();
             $this->log($account, $automation, $participant->comment_id, CommentAutomationLog::ACTION_CLOSED, $event, $participant, '24h follow-up window elapsed');
+            InstagramLog::dm('warning', 'participant closed — 24h follow-up window elapsed', ['participant_id' => $participant->id, 'comment_id' => $participant->comment_id]);
 
             return true;
         }
@@ -241,6 +253,7 @@ class CommentFunnelService
 
         if ($keyword === '' || $keywordMatched) {
             $delivery = (array) ($automation?->delivery ?? []);
+            InstagramLog::dm('info', 'reply received — triggering delivery', ['participant_id' => $participant->id, 'text' => mb_substr($text, 0, 120), 'keyword_matched' => $keywordMatched, 'delivery_type' => $delivery['type'] ?? 'text']);
             $this->deliveries->deliver($participant, $delivery);
 
             return true;
@@ -251,6 +264,7 @@ class CommentFunnelService
         if ($participant->nudge_count < $maxNudges) {
             $participant->increment('nudge_count');
             $nudge = "Just reply {$keyword} and I'll send it right over! 😊";
+            InstagramLog::dm('info', 'reply did not match keyword — sending nudge', ['participant_id' => $participant->id, 'nudge_count' => $participant->nudge_count, 'expected_keyword' => $keyword, 'received_text' => mb_substr($text, 0, 120)]);
 
             try {
                 $this->client->sendMessage($account, $senderId, $nudge);

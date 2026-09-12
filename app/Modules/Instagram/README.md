@@ -34,6 +34,33 @@ A **fully separate** module (`App\Modules\Instagram`) that automates the comment
    php artisan queue:work --queue=instagram,default
    ```
 
+## Dedicated logs
+
+Everything the module does is written to its own folder — `storage/logs/instagram/` — with a daily file per category plus a master file receiving every event (writes go to both; all writes are exception-guarded so logging can never break the funnel):
+
+| File | What lands there |
+|---|---|
+| `instagram-YYYY-MM-DD.log` | **Master — every event** |
+| `webhook-YYYY-MM-DD.log` | Raw webhook receives, signature/token failures, dispatch counts |
+| `comment-YYYY-MM-DD.log` | Comments received, matched/no-match, ignored (own/reply), drops |
+| `dm-YYYY-MM-DD.log` | Participant DM replies, 24h-window opens, keyword matches, nudges, Inbox forwarding |
+| `send-YYYY-MM-DD.log` | Private-reply Graph sends, successes, failures with codes |
+| `delivery-YYYY-MM-DD.log` | Lead deliveries (link/file/text) with results |
+| `funnel-YYYY-MM-DD.log` | Stage transitions (commented → awaiting_follow → delivered …) |
+| `mirror-YYYY-MM-DD.log` | Inbox mirroring outcomes |
+| `connect-YYYY-MM-DD.log` | OAuth connects, token exchanges, webhook registrations |
+| `timeout-YYYY-MM-DD.log` | 7d/24h sweeps, stranded-send self-healing |
+
+Handy tail commands:
+
+```bash
+tail -f storage/logs/instagram/instagram-$(date +%F).log          # everything
+tail -f storage/logs/instagram/send-$(date +%F).log               # only sends
+grep FAILED storage/logs/instagram/*.log                          # all failures today
+```
+
+Retention: 14 days (configurable via `LOG_INSTAGRAM_DAYS`). The DB-level audit trail (`comment_automation_logs` + Logs page) is separate and unaffected.
+
 ## Configuration reference
 
 | Env key | Default | Meaning |

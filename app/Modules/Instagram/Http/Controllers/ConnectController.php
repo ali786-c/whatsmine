@@ -5,6 +5,7 @@ namespace App\Modules\Instagram\Http\Controllers;
 use App\Http\Controllers\Controller;
 use App\Modules\Instagram\Models\InstagramAccount;
 use App\Modules\Instagram\Services\InstagramGraphClient;
+use App\Modules\Instagram\Services\InstagramLog;
 use App\Modules\Integrations\Services\CredentialResolver;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -74,7 +75,7 @@ class ConnectController extends Controller
             ]);
 
         if (! $pagesRes->successful()) {
-            Log::warning('instagram_module: pages fetch failed', ['response' => $pagesRes->json()]);
+            InstagramLog::connect('warning', 'instagram_module: pages fetch failed', ['response' => $pagesRes->json()]);
 
             return redirect()->route('client.instagram.setup')
                 ->with('flash.error', 'Could not fetch your Facebook pages: '.($pagesRes->json('error.message') ?? 'unknown error'));
@@ -109,7 +110,7 @@ class ConnectController extends Controller
             try {
                 app(InstagramGraphClient::class)->subscribeAccountFields($account);
             } catch (\Throwable $e) {
-                Log::warning('instagram_module: account field subscription failed', [
+                InstagramLog::connect('warning', 'instagram_module: account field subscription failed', [
                     'ig_user_id' => $igId,
                     'error' => $e->getMessage(),
                 ]);
@@ -167,7 +168,7 @@ class ConnectController extends Controller
         }
 
         if (! $res->successful() || ! $res->json('access_token')) {
-            Log::warning('instagram_module: code exchange failed', ['response' => $res->json() ?: $res->body()]);
+            InstagramLog::connect('warning', 'instagram_module: code exchange failed', ['response' => $res->json() ?: $res->body()]);
 
             return null;
         }

@@ -9,7 +9,6 @@ use App\Modules\Shared\Models\ChannelAccount;
 use App\Modules\Shared\Models\Contact;
 use App\Modules\Shared\Models\Conversation;
 use App\Modules\Shared\Models\Message;
-use Illuminate\Support\Facades\Log;
 
 /**
  * Optional, one-directional bridge into the shared Inbox: funnel DM threads are
@@ -57,9 +56,10 @@ class InboxMirrorService
 
             $conversation->update(['last_message_at' => now()]);
 
-            Log::info('instagram_module: mirrored outbound to inbox', [
+            InstagramLog::mirror('info', 'outbound mirrored to Inbox', [
                 'message_id' => $message->id,
                 'conversation_id' => $conversation->id,
+                'participant_id' => $participant->id,
             ]);
         } catch (\Throwable $e) {
             $this->logMirrorFailure('outbound', $participant, $e);
@@ -101,9 +101,10 @@ class InboxMirrorService
 
             MessageReceived::dispatch($message);
 
-            Log::info('instagram_module: mirrored inbound to inbox', [
+            InstagramLog::mirror('info', 'inbound mirrored to Inbox', [
                 'message_id' => $message->id,
                 'conversation_id' => $conversation->id,
+                'participant_id' => $participant->id,
             ]);
         } catch (\Throwable $e) {
             $this->logMirrorFailure('inbound', $participant, $e);
@@ -165,7 +166,7 @@ class InboxMirrorService
 
     private function logMirrorFailure(string $direction, FunnelParticipant $participant, \Throwable $e): void
     {
-        Log::warning('instagram_module: inbox mirroring failed (funnel unaffected)', [
+        InstagramLog::mirror('warning', 'inbox mirroring failed (funnel unaffected)', [
             'direction' => $direction,
             'participant_id' => $participant->id,
             'error' => $e->getMessage(),

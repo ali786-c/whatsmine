@@ -5,7 +5,6 @@ namespace App\Modules\Instagram\Services;
 use App\Modules\Instagram\Exceptions\InstagramGraphException;
 use App\Modules\Instagram\Models\CommentAutomationLog;
 use App\Modules\Instagram\Models\FunnelParticipant;
-use Illuminate\Support\Facades\Log;
 
 /**
  * Builds and sends the "required thing" (lead delivery): text, link or file.
@@ -56,6 +55,14 @@ class LeadDeliveryService
 
         $type = (string) ($delivery['type'] ?? 'text');
 
+        InstagramLog::delivery('info', 'delivering lead follow-up', [
+            'participant_id' => $participant->id,
+            'comment_id' => $participant->comment_id,
+            'type' => $type,
+            'url' => $delivery['url'] ?? null,
+            'filename' => $delivery['filename'] ?? null,
+        ]);
+
         try {
             $messageId = null;
             $res = null;
@@ -91,6 +98,7 @@ class LeadDeliveryService
             ])->save();
 
             $log(CommentAutomationLog::ACTION_DELIVERED, ['response_json' => $res]);
+            InstagramLog::delivery('info', 'lead DELIVERED', ['participant_id' => $participant->id, 'comment_id' => $participant->comment_id, 'type' => $type, 'message_id' => $messageId]);
 
             // Mirror the delivered content locally for the Inbox thread.
             $this->mirror->mirrorOutbound(
@@ -108,8 +116,11 @@ class LeadDeliveryService
 
             $log(CommentAutomationLog::ACTION_DELIVERY_FAILED, ['error' => $e->getMessage()]);
 
-            Log::warning('instagram_module: lead delivery failed', [
+            InstagramLog::delivery('error', 'lead delivery FAILED', [
                 'participant_id' => $participant->id,
+                'comment_id' => $participant->comment_id,
+                'type' => $type,
+                'code' => $e->graphErrorCode,
                 'error' => $e->getMessage(),
             ]);
 

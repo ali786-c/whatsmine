@@ -6,7 +6,6 @@ use App\Modules\Instagram\Exceptions\InstagramGraphException;
 use App\Modules\Instagram\Models\CommentAutomationLog;
 use App\Modules\Instagram\Models\FunnelParticipant;
 use App\Modules\Instagram\Models\InstagramAccount;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\RateLimiter;
 
 /**
@@ -64,6 +63,8 @@ class PrivateReplyService
             throw new InstagramGraphException('Per-account send rate limit reached', graphErrorCode: 4, httpStatus: 429);
         }
 
+        InstagramLog::send('info', 'sending private reply via Graph', ['participant_id' => $participant->id, 'comment_id' => $participant->comment_id, 'account_id' => $account->id, 'text_preview' => mb_substr($text, 0, 120)]);
+
         try {
             $res = $this->client->sendPrivateReply($account, $participant->comment_id, $text);
 
@@ -73,6 +74,7 @@ class PrivateReplyService
             ])->save();
 
             $log(CommentAutomationLog::ACTION_DM_SENT, ['response_json' => $res]);
+            InstagramLog::send('info', 'private reply SENT', ['participant_id' => $participant->id, 'comment_id' => $participant->comment_id, 'message_id' => $res['message_id'] ?? null]);
 
             $this->mirror->mirrorOutbound($participant, $text, $res['message_id'] ?? null, $res);
 
@@ -87,10 +89,13 @@ class PrivateReplyService
                 'response_json' => ['code' => $e->graphErrorCode, 'subcode' => $e->graphErrorSubcode, 'http' => $e->httpStatus],
             ]);
 
-            Log::warning('instagram_module: private reply failed', [
+            InstagramLog::send($e->shouldRetry() ? 'warning' : 'error', 'private reply FAILED', [
                 'participant_id' => $participant->id,
                 'code' => $e->graphErrorCode,
+                'subcode' => $e->graphErrorSubcode,
+                'http' => $e->httpStatus,
                 'retryable' => $e->shouldRetry(),
+                'token_permission_error' => $e->isTokenPermissionError(),
                 'error' => $e->getMessage(),
             ]);
 

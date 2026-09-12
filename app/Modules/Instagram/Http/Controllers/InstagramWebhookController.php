@@ -6,12 +6,12 @@ use App\Http\Controllers\Concerns\FlushesWebhookResponse;
 use App\Http\Controllers\Controller;
 use App\Modules\Instagram\Jobs\ProcessInstagramCommentJob;
 use App\Modules\Instagram\Jobs\ProcessInstagramDmJob;
+use App\Modules\Instagram\Services\InstagramLog;
 use App\Modules\Integrations\Services\CredentialResolver;
 use App\Services\WebhookIdempotencyService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
-use Illuminate\Support\Facades\Log;
 
 /**
  * The module's own endpoint for Meta's `instagram` webhook object. Deliberately
@@ -48,7 +48,7 @@ class InstagramWebhookController extends Controller
         $verifyToken = $meta?->verifyToken() ?? '';
 
         if ($verifyToken === '' || ! hash_equals($verifyToken, (string) $token)) {
-            Log::warning('instagram_module.webhook.invalid_token', ['ip' => $request->ip()]);
+            InstagramLog::webhook('warning', 'instagram_module.webhook.invalid_token', ['ip' => $request->ip()]);
 
             abort(403);
         }
@@ -57,12 +57,12 @@ class InstagramWebhookController extends Controller
         if ($appSecret) {
             $expected = 'sha256='.hash_hmac('sha256', $request->getContent(), $appSecret);
             if (! hash_equals($expected, $request->header('X-Hub-Signature-256', ''))) {
-                Log::warning('instagram_module.webhook.signature_mismatch', ['ip' => $request->ip()]);
+                InstagramLog::webhook('warning', 'instagram_module.webhook.signature_mismatch', ['ip' => $request->ip()]);
 
                 abort(401, 'Invalid signature');
             }
         } elseif (app()->environment('production')) {
-            Log::critical('instagram_module.webhook.no_secret', ['ip' => $request->ip()]);
+            InstagramLog::webhook('critical', 'instagram_module.webhook.no_secret', ['ip' => $request->ip()]);
 
             abort(401, 'App secret not configured');
         }
@@ -105,7 +105,7 @@ class InstagramWebhookController extends Controller
             return response()->json(['status' => 'ok']);
         }
 
-        Log::info('instagram_module.webhook.dispatching', [
+        InstagramLog::webhook('info', 'instagram_module.webhook.dispatching', [
             'comments' => count($newComments),
             'dm_events' => count($newDmEvents),
         ]);
