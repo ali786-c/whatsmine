@@ -23,6 +23,7 @@ class WhatsappEmbeddedSignupController extends Controller
             'code'             => ['required', 'string', 'max:2048'],
             'waba_id'          => ['required', 'string', 'max:64'],
             'phone_number_id'  => ['nullable', 'string', 'max:64'],
+            'session_event'    => ['nullable', 'string', 'max:255'],
         ]);
 
         $workspaceId = $request->user()->current_workspace_id ?? $request->user()->workspace_id;
@@ -185,7 +186,19 @@ class WhatsappEmbeddedSignupController extends Controller
             try {
                 $details = CloudApiClient::fetchPhoneNumberDetails($validated['phone_number_id'], $accessToken);
                 $this->attachPhoneNumber($waba->fresh(), $validated['phone_number_id'], $details ?? ['id' => $validated['phone_number_id']]);
-                $this->registerNumber($validated['phone_number_id'], $accessToken, $validated['waba_id']);
+                
+                // Skip registering phone number if this is a coexistence onboarding
+                if (($validated['session_event'] ?? '') !== 'FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING') {
+                    $this->registerNumber($validated['phone_number_id'], $accessToken, $validated['waba_id']);
+                } else {
+                    Log::info('Skipped phone registration for Coexistence number, dispatching sync job', ['phone_number_id' => $validated['phone_number_id']]);
+                    \App\Modules\Whatsapp\Jobs\SyncCoexistenceDataJob::dispatch(
+                        $workspaceId, 
+                        $validated['phone_number_id'], 
+                        $accessToken
+                    )->onQueue('whatsapp');
+                }
+                
                 $phoneCount = max($phoneCount, 1);
             } catch (\Throwable $e) {
                 Log::warning('WhatsApp embedded signup: session phone attach failed', [
@@ -286,7 +299,7 @@ class WhatsappEmbeddedSignupController extends Controller
                 'object'       => 'whatsapp_business_account',
                 'callback_url' => $callbackUrl,
                 'verify_token' => $globalVerify,
-                'fields'       => 'messages,message_template_status_update,phone_number_name_update,phone_number_quality_update,account_update',
+                'fields'       => implode(',', CloudApiClient::WEBHOOK_SUBSCRIPTION_FIELDS),
             ]);
 
             if (! $res->successful()) {

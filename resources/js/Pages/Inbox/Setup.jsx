@@ -1,4 +1,4 @@
-﻿import { Head, router, usePage, Link } from '@inertiajs/react';
+import { Head, router, usePage, Link } from '@inertiajs/react';
 import ClientLayout from '@/Layouts/ClientLayout';
 import {
     Check, Copy, Link2, AlertTriangle,
@@ -733,7 +733,8 @@ function waitForWabaSessionInfo(timeout = 120000) {
                 if (parsed?.type === 'WA_EMBEDDED_SIGNUP') {
                     clearTimeout(timer);
                     window.removeEventListener('message', handler);
-                    resolve(parsed.data ?? {});
+                    const result = { ...(parsed.data ?? {}), session_event: parsed.event };
+                    resolve(result);
                 }
             } catch (_) {}
         }
@@ -896,7 +897,7 @@ function EmbeddedSignupButton({ configId, appId, channel, label, color, onCode, 
         const sessionInfoPromise = isWhatsapp ? waitForWabaSessionInfo() : Promise.resolve(null);
 
         const extrasMap = {
-            whatsapp:  { setup: {}, featureType: '', sessionInfoVersion: '3' },
+            whatsapp:  { setup: {}, featureType: 'whatsapp_business_app_onboarding', sessionInfoVersion: '3' },
             instagram: { feature_type: 'instagram_management' },
             messenger: { feature_type: 'messenger_chat' },
         };

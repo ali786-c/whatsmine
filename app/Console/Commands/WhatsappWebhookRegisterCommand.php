@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Modules\Integrations\Services\CredentialResolver;
 use App\Modules\Whatsapp\Models\WhatsappBusinessAccount;
+use App\Modules\Whatsapp\Services\CloudApiClient;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Http;
 
@@ -38,7 +39,7 @@ class WhatsappWebhookRegisterCommand extends Command
 
         if ($this->option('dry-run')) {
             $this->warn('[dry-run] Would POST to: https://graph.facebook.com/v20.0/' . $appId . '/subscriptions');
-            $this->warn('[dry-run] With fields: messages, message_template_status_update, phone_number_name_update, phone_number_quality_update, account_update');
+            $this->warn('[dry-run] With fields: ' . implode(', ', CloudApiClient::WEBHOOK_SUBSCRIPTION_FIELDS));
             return self::SUCCESS;
         }
 
@@ -50,7 +51,7 @@ class WhatsappWebhookRegisterCommand extends Command
             'object'       => 'whatsapp_business_account',
             'callback_url' => $callbackUrl,
             'verify_token' => $verifyToken,
-            'fields'       => 'messages,message_template_status_update,phone_number_name_update,phone_number_quality_update,account_update',
+            'fields'       => implode(',', CloudApiClient::WEBHOOK_SUBSCRIPTION_FIELDS),
         ]);
 
         if (! $res->successful()) {

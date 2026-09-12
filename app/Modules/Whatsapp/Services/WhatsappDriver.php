@@ -89,13 +89,25 @@ class WhatsappDriver implements ChannelDriverInterface
                     continue;
                 }
 
-                if (in_array($field, ['phone_number_quality_update', 'phone_number_name_update', 'account_update'], true)) {
-                    $this->processPhoneNumberUpdate($value);
+                if (in_array($field, ['phone_number_quality_update', 'phone_number_name_update', 'account_update', 'account_offboarded', 'account_reconnected'], true)) {
+                    $this->processPhoneNumberUpdate($value, $wabaId);
 
                     continue;
                 }
 
-                foreach ($value['messages'] ?? [] as $msg) {
+                if ($field === 'smb_app_state_sync') {
+                    Log::info('Coexistence: Contacts synced', ['state_sync' => $value['state_sync'] ?? []]);
+                    continue;
+                }
+
+                if ($field === 'history') {
+                    Log::info('Coexistence: History payload received');
+                    continue;
+                }
+
+                // Treat message_echoes the same as messages to show outbound manual messages
+                $messagesToProcess = array_merge($value['messages'] ?? [], $value['message_echoes'] ?? []);
+                foreach ($messagesToProcess as $msg) {
                     try {
                         $processed[] = $this->processInboundMessage($value, $msg, $wabaId);
                     } catch (\Throwable $e) {
@@ -153,8 +165,21 @@ class WhatsappDriver implements ChannelDriverInterface
             ]));
     }
 
-    private function processPhoneNumberUpdate(array $value): void
+    private function processPhoneNumberUpdate(array $value, string $wabaId = ''): void
     {
+        $event = strtoupper((string) ($value['event'] ?? ''));
+        
+        // Handle WABA-level offboard / reconnect which may omit phone_number_id
+        if (in_array($event, ['ACCOUNT_OFFBOARDED', 'ACCOUNT_RECONNECTED', 'PARTNER_REMOVED'], true)) {
+            Log::info("WABA Account Event: {$event}", [
+                'waba_id' => $wabaId,
+                'phone_number' => $value['phone_number'] ?? null,
+                'disconnection_info' => $value['disconnection_info'] ?? null,
+            ]);
+            // Here you could update the ChannelAccount status or WhatsappBusinessAccount status
+            // to reflect that the user offboarded or reconnected.
+        }
+
         $phoneNumberId = $value['phone_number_id'] ?? null;
         if (! $phoneNumberId) {
             return;

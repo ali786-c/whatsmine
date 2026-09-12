@@ -12,6 +12,29 @@ class CloudApiClient
 {
     private const BASE = 'https://graph.facebook.com/v20.0';
 
+    /**
+     * Webhook fields the Meta App subscribes to for the whatsapp_business_account
+     * object. Used by every POST to /{app_id}/subscriptions — that endpoint
+     * REPLACES the full field list on each call, so every registrar must send
+     * the complete set, including the coexistence fields (history,
+     * smb_app_state_sync, smb_message_echoes) or those webhooks silently stop
+     * arriving after the next embedded signup.
+     *
+     * Note: ACCOUNT_OFFBOARDED / ACCOUNT_RECONNECTED / PARTNER_REMOVED are
+     * event types delivered INSIDE the account_update field, not fields of
+     * their own. Edit/revoke arrive inside the messages field.
+     */
+    public const WEBHOOK_SUBSCRIPTION_FIELDS = [
+        'messages',
+        'message_template_status_update',
+        'phone_number_name_update',
+        'phone_number_quality_update',
+        'account_update',
+        'history',
+        'smb_app_state_sync',
+        'smb_message_echoes',
+    ];
+
     public function __construct(
         private readonly string $phoneNumberId,
         private readonly string $accessToken,
