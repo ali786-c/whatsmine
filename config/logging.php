@@ -157,7 +157,7 @@ return [
         'instagram' => [
             'driver' => 'daily',
             'path' => storage_path('logs/instagram/instagram.log'),
-            'level' => env('LOG_LEVEL', 'debug'),
+            'level' => 'debug',
             'days' => env('LOG_INSTAGRAM_DAYS', 14),
             'replace_placeholders' => true,
         ],
@@ -165,7 +165,7 @@ return [
         'instagram_webhook' => [
             'driver' => 'daily',
             'path' => storage_path('logs/instagram/webhook.log'),
-            'level' => env('LOG_LEVEL', 'debug'),
+            'level' => 'debug',
             'days' => env('LOG_INSTAGRAM_DAYS', 14),
             'replace_placeholders' => true,
         ],
@@ -173,7 +173,7 @@ return [
         'instagram_comment' => [
             'driver' => 'daily',
             'path' => storage_path('logs/instagram/comment.log'),
-            'level' => env('LOG_LEVEL', 'debug'),
+            'level' => 'debug',
             'days' => env('LOG_INSTAGRAM_DAYS', 14),
             'replace_placeholders' => true,
         ],
@@ -181,7 +181,7 @@ return [
         'instagram_dm' => [
             'driver' => 'daily',
             'path' => storage_path('logs/instagram/dm.log'),
-            'level' => env('LOG_LEVEL', 'debug'),
+            'level' => 'debug',
             'days' => env('LOG_INSTAGRAM_DAYS', 14),
             'replace_placeholders' => true,
         ],
@@ -189,7 +189,7 @@ return [
         'instagram_send' => [
             'driver' => 'daily',
             'path' => storage_path('logs/instagram/send.log'),
-            'level' => env('LOG_LEVEL', 'debug'),
+            'level' => 'debug',
             'days' => env('LOG_INSTAGRAM_DAYS', 14),
             'replace_placeholders' => true,
         ],
@@ -197,7 +197,7 @@ return [
         'instagram_delivery' => [
             'driver' => 'daily',
             'path' => storage_path('logs/instagram/delivery.log'),
-            'level' => env('LOG_LEVEL', 'debug'),
+            'level' => 'debug',
             'days' => env('LOG_INSTAGRAM_DAYS', 14),
             'replace_placeholders' => true,
         ],
@@ -205,7 +205,7 @@ return [
         'instagram_funnel' => [
             'driver' => 'daily',
             'path' => storage_path('logs/instagram/funnel.log'),
-            'level' => env('LOG_LEVEL', 'debug'),
+            'level' => 'debug',
             'days' => env('LOG_INSTAGRAM_DAYS', 14),
             'replace_placeholders' => true,
         ],
@@ -213,7 +213,7 @@ return [
         'instagram_mirror' => [
             'driver' => 'daily',
             'path' => storage_path('logs/instagram/mirror.log'),
-            'level' => env('LOG_LEVEL', 'debug'),
+            'level' => 'debug',
             'days' => env('LOG_INSTAGRAM_DAYS', 14),
             'replace_placeholders' => true,
         ],
@@ -221,7 +221,7 @@ return [
         'instagram_connect' => [
             'driver' => 'daily',
             'path' => storage_path('logs/instagram/connect.log'),
-            'level' => env('LOG_LEVEL', 'debug'),
+            'level' => 'debug',
             'days' => env('LOG_INSTAGRAM_DAYS', 14),
             'replace_placeholders' => true,
         ],
@@ -229,7 +229,7 @@ return [
         'instagram_timeout' => [
             'driver' => 'daily',
             'path' => storage_path('logs/instagram/timeout.log'),
-            'level' => env('LOG_LEVEL', 'debug'),
+            'level' => 'debug',
             'days' => env('LOG_INSTAGRAM_DAYS', 14),
             'replace_placeholders' => true,
         ],
