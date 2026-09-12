@@ -65,10 +65,10 @@ Facebook Login for Business → **Configurations** → **Create Configuration**:
 > ⚠️ This Config ID must be **different** from the WhatsApp Embedded Signup Config ID. Using the same one makes the Instagram login show WhatsApp permissions.
 
 ### 3. OAuth redirect URI
-Settings → Basic → Website platform → **Valid OAuth Redirect URIs** must contain exactly:
+**Facebook Login for Business → Settings → Valid OAuth Redirect URIs** must contain exactly (the `App Domains` field alone is NOT enough for OAuth — this exact URI, including `/setup`, is required or Meta shows the "Can't Load URL" error):
 
 ```
-https://wa.careerinpak.com/app/instagram
+https://wa.careerinpak.com/app/instagram/setup
 ```
 
 ### 4. Copy credentials

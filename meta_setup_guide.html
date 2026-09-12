@@ -144,9 +144,10 @@ Bot delivery bhejta hai (link / file / text)</pre></div>
     </div>
 
     <div class="sub"><h3><span class="n">1.3</span> OAuth Redirect URI</h3>
-      <ol class="plain"><li><b>Settings → Basic</b> → <b>Valid OAuth Redirect URIs</b> mein add karo:</li></ol>
-      <div class="cmd"><pre>https://wa.careerinpak.com/app/instagram</pre><button class="copy">Copy</button></div>
-      <label class="chk"><input type="checkbox" data-k="s13"><span>Redirect URI add kiya</span></label>
+      <ol class="plain"><li><b>Facebook Login for Business → Settings</b> → <b>Valid OAuth Redirect URIs</b> mein add karo (exact — copy button use karo):</li></ol>
+      <div class="cmd"><pre>https://wa.careerinpak.com/app/instagram/setup</pre><button class="copy">Copy</button></div>
+      <div class="note danger"><div class="ic">⚠️</div><div><b>App Domains</b> field akela kaafi NAHI hai — OAuth ke liye <b>Valid OAuth Redirect URIs</b> mein <b>exact URI</b> (including <code class="inline">/setup</code>) honi hi chahiye, warna "Can't Load URL" error aata hai. Upar wali App Domains mein <code class="inline">wa.careerinpak.com</code> bhi hona chahiye (already added).</div></div>
+      <label class="chk"><input type="checkbox" data-k="s13"><span>Redirect URI (with /setup) Valid OAuth Redirect URIs mein add kiya</span></label>
     </div>
 
     <div class="sub"><h3><span class="n">1.4</span> App Mode</h3>
