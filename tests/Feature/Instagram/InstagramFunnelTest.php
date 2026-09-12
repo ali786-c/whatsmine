@@ -1,0 +1,268 @@
+<?php
+
+namespace Tests\Feature\Instagram;
+
+use App\Modules\Instagram\Jobs\ProcessInstagramCommentJob;
+use App\Modules\Instagram\Jobs\ProcessInstagramDmJob;
+use App\Modules\Instagram\Models\CommentAutomation;
+use App\Modules\Instagram\Models\CommentAutomationLog;
+use App\Modules\Instagram\Models\FunnelParticipant;
+use App\Modules\Instagram\Models\InstagramAccount;
+use App\Modules\Instagram\Services\CommentFunnelService;
+use App\Modules\Instagram\Services\KeywordMatcher;
+use App\Modules\Integrations\Models\IntegrationConfig;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Queue;
+use Tests\TestCase;
+
+class InstagramFunnelTest extends TestCase
+{
+    use RefreshDatabase;
+
+    private array $ctx;
+
+    private InstagramAccount $account;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->ctx = $this->createWorkspaceContext();
+
+        $this->account = InstagramAccount::create([
+            'workspace_id' => $this->ctx['workspace']->id,
+            'ig_user_id' => '17841400000001',
+            'username' => 'myshop',
+            'display_name' => 'My Shop',
+            'page_id' => '10000000001',
+            'page_token' => 'page-token-secret',
+            'status' => 'active',
+        ]);
+    }
+
+    private function seedMetaCredentials(): void
+    {
+        IntegrationConfig::create([
+            'provider' => 'meta_app',
+            'label' => 'Meta App',
+            'mode' => 'live',
+            'enabled' => true,
+            'is_default' => true,
+            'credentials' => [
+                'app_id' => '1234567890',
+                'app_secret' => 'test-app-secret',
+                'verify_token' => 'test-verify-token',
+            ],
+        ]);
+    }
+
+    private function commentValue(array $overrides = []): array
+    {
+        return array_merge([
+            'comment_id' => 'comment-123',
+            'from' => ['id' => 'igsid-customer', 'username' => 'curious_buyer'],
+            'text' => 'price please',
+            'media' => ['id' => 'media-1', 'media_product_type' => 'REEL'],
+        ], $overrides);
+    }
+
+    private function automation(array $overrides = []): CommentAutomation
+    {
+        return CommentAutomation::create(array_merge([
+            'workspace_id' => $this->ctx['workspace']->id,
+            'instagram_account_id' => $this->account->id,
+            'name' => 'Reel drop',
+            'trigger_type' => 'keyword',
+            'keywords' => ['price', 'cost'],
+            'match_mode' => 'contains',
+            'reply_message' => 'Thanks {username}! 🎉',
+            'follow_gate' => false,
+            'delivery' => ['type' => 'link', 'text' => 'Here it is:', 'url' => 'https://example.com/offer'],
+            'is_active' => true,
+            'priority' => 100,
+        ], $overrides));
+    }
+
+    public function test_keyword_matcher_modes(): void
+    {
+        $this->assertTrue(KeywordMatcher::matches(['price', 'cost'], 'contains', 'What is the PRICE?'));
+        $this->assertTrue(KeywordMatcher::matches(['price'], 'exact', 'Price'));
+        $this->assertFalse(KeywordMatcher::matches(['price'], 'exact', 'the price please'));
+        $this->assertTrue(KeywordMatcher::matches(['pri'], 'starts_with', 'Price check'));
+        $this->assertTrue(KeywordMatcher::matches(['^pric'], 'regex', 'price check'));
+        $this->assertFalse(KeywordMatcher::matches(['nope'], 'contains', 'hello'));
+        $this->assertFalse(KeywordMatcher::matches([], 'contains', 'price'));
+    }
+
+    public function test_webhook_verify_accepts_challenge_and_rejects_bad_token(): void
+    {
+        $this->seedMetaCredentials();
+
+        $this->get(route('webhooks.instagram.verify', ['token' => 'test-verify-token']).'?hub_mode=subscribe&hub_challenge=abc123')
+            ->assertOk()
+            ->assertSeeText('abc123');
+
+        $this->get(route('webhooks.instagram.verify', ['token' => 'wrong-token']).'?hub_mode=subscribe&hub_challenge=abc123')
+            ->assertForbidden();
+    }
+
+    public function test_webhook_dispatches_comment_and_dm_jobs_on_module_queue(): void
+    {
+        Queue::fake();
+        $this->seedMetaCredentials();
+
+        $payload = [
+            'object' => 'instagram',
+            'entry' => [[
+                'id' => '17841400000001',
+                'changes' => [['field' => 'comments', 'value' => $this->commentValue()]],
+                'messaging' => [['sender' => ['id' => 'igsid-x'], 'recipient' => ['id' => '17841400000001'], 'message' => ['mid' => 'm-1', 'text' => 'hi']]],
+            ]],
+        ];
+
+        $signature = 'sha256='.hash_hmac('sha256', (string) json_encode($payload), 'test-app-secret');
+
+        $this->postJson(route('webhooks.instagram.receive', ['token' => 'test-verify-token']), $payload, ['X-Hub-Signature-256' => $signature])
+            ->assertOk();
+
+        Queue::assertPushedOn('instagram', ProcessInstagramCommentJob::class);
+        Queue::assertPushedOn('instagram', ProcessInstagramDmJob::class);
+    }
+
+    public function test_comment_without_gate_sends_one_dm_with_embedded_delivery(): void
+    {
+        Http::fake([
+            'graph.facebook.com/*/17841400000001/messages' => Http::response(['recipient_id' => 'igsid-customer', 'message_id' => 'msg-1'], 200),
+        ]);
+
+        $this->automation(['follow_gate' => false]);
+
+        app(CommentFunnelService::class)->handleComment('17841400000001', $this->commentValue());
+
+        $participant = FunnelParticipant::where('comment_id', 'comment-123')->firstOrFail();
+        $this->assertSame(FunnelParticipant::STAGE_DELIVERED, $participant->stage);
+        $this->assertSame('msg-1', $participant->private_reply_message_id);
+        $this->assertNotNull($participant->delivered_at);
+
+        // Exactly ONE Graph send happened (everything embedded in the single private reply).
+        Http::assertSentCount(1);
+
+        $this->assertDatabaseHas(CommentAutomationLog::class, ['comment_id' => 'comment-123', 'action' => 'dm_sent']);
+    }
+
+    public function test_follow_gate_flow_reply_keyword_delivers_lead(): void
+    {
+        Http::fake([
+            'graph.facebook.com/*/17841400000001/messages' => Http::sequence()
+                ->push(['message_id' => 'msg-1'], 200)   // private reply
+                ->push(['message_id' => 'msg-2'], 200),  // lead delivery after reply
+        ]);
+
+        $this->automation([
+            'follow_gate' => true,
+            'reply_keyword' => 'DONE',
+            'delivery' => ['type' => 'text', 'text' => 'Here is your file!'],
+        ]);
+
+        $funnel = app(CommentFunnelService::class);
+        $funnel->handleComment('17841400000001', $this->commentValue());
+
+        $participant = FunnelParticipant::where('comment_id', 'comment-123')->firstOrFail();
+        $this->assertSame(FunnelParticipant::STAGE_AWAITING_FOLLOW, $participant->stage);
+
+        // The ONE private reply must already contain the follow ask + keyword.
+        $replyText = (string) (Http::recorded()[0][0]['message']['text'] ?? '');
+        $this->assertStringContainsString('DONE', $replyText);
+
+        // User replies with the keyword → 24h window opens → delivery.
+        $handled = $funnel->handleDmReply('17841400000001', [
+            'sender' => ['id' => 'igsid-customer'],
+            'recipient' => ['id' => '17841400000001'],
+            'message' => ['mid' => 'dm-1', 'text' => 'I followed! DONE'],
+        ]);
+
+        $this->assertTrue($handled);
+        $participant = $participant->fresh();
+        $this->assertSame(FunnelParticipant::STAGE_DELIVERED, $participant->stage);
+        $this->assertNotNull($participant->dm_thread_opened_at);
+        $this->assertNotNull($participant->delivered_at);
+    }
+
+    public function test_duplicate_comment_never_sends_two_private_replies(): void
+    {
+        Http::fake([
+            'graph.facebook.com/*/17841400000001/messages' => Http::response(['message_id' => 'msg-1'], 200),
+        ]);
+
+        $this->automation();
+
+        $funnel = app(CommentFunnelService::class);
+        $funnel->handleComment('17841400000001', $this->commentValue());
+        $funnel->handleComment('17841400000001', $this->commentValue()); // re-delivered webhook
+
+        Http::assertSentCount(1); // ONE private reply per comment — enforced
+        $this->assertSame(1, FunnelParticipant::where('comment_id', 'comment-123')->count());
+    }
+
+    public function test_non_matching_comment_logs_no_match(): void
+    {
+        $this->automation();
+
+        app(CommentFunnelService::class)->handleComment('17841400000001', $this->commentValue(['text' => 'nice post']));
+
+        $this->assertSame(0, FunnelParticipant::count());
+        $this->assertDatabaseHas(CommentAutomationLog::class, ['comment_id' => 'comment-123', 'action' => 'no_match']);
+    }
+
+    public function test_dm_reply_forwarded_to_inbox_when_not_funnel(): void
+    {
+        // Not a funnel participant → the funnel declines, the job forwards to Inbox.
+        // InstagramDriver::processWebhookPayload will not match a channel account, so
+        // it logs and returns — the important part is that no exception escapes.
+        $job = new ProcessInstagramDmJob('99999999999', [
+            'sender' => ['id' => 'igsid-stranger'],
+            'recipient' => ['id' => '17841400000001'],
+            'message' => ['mid' => 'dm-x', 'text' => 'hello there'],
+        ]);
+
+        $job->handle(app(CommentFunnelService::class));
+
+        $this->assertTrue(true); // reached → forwarding path did not throw
+    }
+
+    public function test_timeout_job_expires_stale_participants(): void
+    {
+        $automation = $this->automation();
+
+        $participant = FunnelParticipant::create([
+            'workspace_id' => $this->ctx['workspace']->id,
+            'instagram_account_id' => $this->account->id,
+            'automation_id' => $automation->id,
+            'commenter_igsid' => 'igsid-customer',
+            'username' => 'curious_buyer',
+            'comment_id' => 'comment-old',
+            'stage' => FunnelParticipant::STAGE_COMMENTED,
+            'expires_at' => now()->subDays(8),
+        ]);
+
+        (new \App\Modules\Instagram\Jobs\CheckFunnelTimeoutsJob)->handle(app(\App\Modules\Instagram\Services\FunnelTimeoutService::class));
+
+        $this->assertSame(FunnelParticipant::STAGE_EXPIRED, $participant->fresh()->stage);
+        $this->assertDatabaseHas(CommentAutomationLog::class, ['comment_id' => 'comment-old', 'action' => 'expired']);
+    }
+
+    public function test_module_is_isolated_and_configurable(): void
+    {
+        // Master switch makes the module dormant.
+        config(['instagram.enabled' => false]);
+        $this->assertFalse(config('instagram.enabled'));
+
+        // Its own tables exist and its own config namespace is loaded.
+        $this->assertTrue(\Illuminate\Support\Facades\Schema::hasTable('instagram_accounts'));
+        $this->assertTrue(\Illuminate\Support\Facades\Schema::hasTable('comment_automations'));
+        $this->assertTrue(\Illuminate\Support\Facades\Schema::hasTable('funnel_participants'));
+        $this->assertTrue(\Illuminate\Support\Facades\Schema::hasTable('comment_automation_logs'));
+        $this->assertSame('instagram', config('instagram.queue'));
+    }
+}

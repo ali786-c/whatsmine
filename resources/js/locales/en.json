@@ -109,13 +109,17 @@
         "group_contacts": "Contacts",
         "group_broadcasting": "Broadcasting",
         "group_automations": "Automations",
+        "group_instagram": "Instagram",
         "group_ecommerce": "E-Commerce",
         "group_ai": "AI",
         "group_leads": "Leads",
         "group_reports": "Reports",
         "group_support": "Support",
         "group_billing": "Billing",
-        "group_developer": "Developer"
+        "group_developer": "Developer",
+        "instagram_setup": "Connect",
+        "instagram_automations": "Comment Automations",
+        "instagram_logs": "Funnel Logs"
     },
     "welcome": {
         "title": "Build websites with AI.",

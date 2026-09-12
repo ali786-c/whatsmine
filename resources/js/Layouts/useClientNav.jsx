@@ -5,7 +5,7 @@ import {
     LayoutDashboard, CreditCard, Package, FileText, Users, Settings,
     Layers, Webhook, Key, BookOpen, Image, Radio, Inbox, Bot, Database,
     Zap, Share2, MapPin, Tag, LifeBuoy, ExternalLink, Mail, MessageSquare,
-    ShoppingBag,
+    ShoppingBag, BarChart2,
 } from 'lucide-react';
 
 const iconClass = 'h-4 w-4';
@@ -106,6 +106,18 @@ export default function useClientNav() {
         { label: t('nav.lead_scraper'), href: safeRoute('client.leads.index'), icon: <MapPin className={iconClass} />, activePattern: 'client.leads.*' },
     ];
 
+    // Instagram comment-automation module: only shown when the module is present
+    // (its routes exist). Deleting app/Modules/Instagram removes this menu item
+    // automatically — no dead links, no other file changes.
+    const instagramItems = [];
+    if (typeof route === 'function' && route().has('client.instagram.setup')) {
+        instagramItems.push(
+            { label: t('nav.instagram_setup'), href: safeRoute('client.instagram.setup'), icon: <Share2 className={iconClass} />, activePattern: 'client.instagram.setup' },
+            { label: t('nav.instagram_automations'), href: safeRoute('client.instagram.automations.index'), icon: <Zap className={iconClass} />, activePattern: 'client.instagram.automations.*' },
+            { label: t('nav.instagram_logs'), href: safeRoute('client.instagram.logs.index'), icon: <BarChart2 className={iconClass} />, activePattern: 'client.instagram.logs.*' },
+        );
+    }
+
     const automationItems = [
         { label: t('nav.automations'), href: safeRoute('client.automations.index'), icon: <Zap className={iconClass} />, activePattern: 'client.automations.*' },
     ];
@@ -136,6 +148,7 @@ export default function useClientNav() {
         { type: 'group', label: t('nav.group_ecommerce'),    items: ecommerceItems },
         { type: 'group', label: t('nav.group_ai'),            items: aiItems },
         { type: 'group', label: t('nav.group_leads'),         items: leadsItems },
+        ...(instagramItems.length > 0 ? [{ type: 'group', label: t('nav.group_instagram'), items: instagramItems }] : []),
         { type: 'group', label: t('nav.group_reports'),       items: reportsItems },
         { type: 'group', label: t('nav.group_support'),       items: supportItems },
         { type: 'group', label: t('nav.group_billing'),       items: billingItems },
