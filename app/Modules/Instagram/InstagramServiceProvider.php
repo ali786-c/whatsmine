@@ -20,7 +20,7 @@ class InstagramServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
-        $this->mergeConfigFrom(__DIR__.'/../../config/instagram.php', 'instagram');
+        $this->mergeConfigFrom(__DIR__.'/../../../config/instagram.php', 'instagram');
     }
 
     public function boot(): void
