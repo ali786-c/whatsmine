@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="ur">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Meta Setup Guide — Instagram Comment Automation</title>
+<style>
+  :root{
+    --bg:#0f1117; --card:#171a23; --card2:#1d212e; --border:#2a2f3e;
+    --text:#e7eaf3; --muted:#9aa3b8; --brand:#6366f1; --brand2:#8b5cf6;
+    --green:#22c55e; --amber:#f59e0b; --red:#ef4444; --cyan:#06b6d4;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--text);line-height:1.65;padding-bottom:80px}
+  .wrap{max-width:860px;margin:0 auto;padding:0 20px}
+
+  header{background:linear-gradient(135deg,#4f46e5 0%,#7c3aed 50%,#db2777 100%);padding:48px 0 40px;text-align:center;margin-bottom:36px}
+  header h1{font-size:1.9rem;font-weight:800;color:#fff;letter-spacing:-.02em}
+  header p{color:#e0e7ff;margin-top:8px;font-size:.95rem}
+  header .insta{width:64px;height:64px;margin:0 auto 16px;border-radius:18px;background:rgba(255,255,255,.15);display:flex;align-items:center;justify-content:center;font-size:2rem;backdrop-filter:blur(4px)}
+
+  .progress-bar{position:sticky;top:0;z-index:50;background:rgba(15,17,23,.92);backdrop-filter:blur(8px);border-bottom:1px solid var(--border);padding:10px 0;margin-bottom:28px}
+  .progress-inner{display:flex;align-items:center;gap:14px}
+  .progress-track{flex:1;height:8px;background:var(--card2);border-radius:99px;overflow:hidden}
+  .progress-fill{height:100%;width:0%;background:linear-gradient(90deg,var(--green),#4ade80);border-radius:99px;transition:width .3s}
+  .progress-label{font-size:.8rem;color:var(--muted);white-space:nowrap;font-weight:600}
+
+  .step{background:var(--card);border:1px solid var(--border);border-radius:16px;margin-bottom:24px;overflow:hidden}
+  .step-head{display:flex;align-items:center;gap:14px;padding:18px 22px;background:var(--card2);border-bottom:1px solid var(--border)}
+  .step-num{min-width:40px;height:40px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:1.05rem;color:#fff}
+  .step-head h2{font-size:1.08rem;font-weight:700}
+  .step-head .time{margin-left:auto;font-size:.75rem;color:var(--muted);background:var(--bg);padding:4px 10px;border-radius:99px;white-space:nowrap}
+  .step-body{padding:20px 22px}
+  .sub{margin:14px 0;padding:14px 16px;background:var(--card2);border:1px solid var(--border);border-radius:12px}
+  .sub h3{font-size:.92rem;font-weight:700;color:var(--brand);margin-bottom:8px;display:flex;align-items:center;gap:8px}
+  .sub h3 .n{background:var(--brand);color:#fff;font-size:.7rem;min-width:20px;height:20px;border-radius:6px;display:inline-flex;align-items:center;justify-content:center}
+  p{font-size:.9rem;color:var(--text)}
+  .muted{color:var(--muted);font-size:.85rem}
+  ol.plain{margin:8px 0 0 20px}
+  ol.plain li{font-size:.88rem;margin:5px 0}
+  code.inline{background:var(--bg);border:1px solid var(--border);padding:2px 7px;border-radius:6px;font-size:.8rem;color:var(--cyan);font-family:ui-monospace,'Cascadia Code',Consolas,monospace}
+
+  .cmd{position:relative;background:#0a0c11;border:1px solid var(--border);border-radius:10px;margin:10px 0}
+  .cmd pre{padding:13px 44px 13px 14px;overflow-x:auto;font-family:ui-monospace,'Cascadia Code',Consolas,monospace;font-size:.8rem;color:#a5f3fc;white-space:pre}
+  .copy{position:absolute;top:8px;right:8px;background:var(--card2);border:1px solid var(--border);color:var(--muted);border-radius:7px;padding:4px 8px;font-size:.7rem;cursor:pointer;font-weight:600}
+  .copy:hover{color:#fff;border-color:var(--brand)}
+
+  table{width:100%;border-collapse:collapse;margin:10px 0;font-size:.85rem}
+  th{background:var(--card2);text-align:left;padding:9px 12px;color:var(--muted);font-size:.75rem;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid var(--border)}
+  td{padding:9px 12px;border-bottom:1px solid var(--border);vertical-align:top}
+  tr:last-child td{border-bottom:none}
+
+  .chips{display:flex;flex-wrap:wrap;gap:7px;margin:10px 0}
+  .chip{background:rgba(99,102,241,.12);border:1px solid rgba(99,102,241,.35);color:#a5b4fc;font-size:.75rem;font-family:ui-monospace,monospace;padding:4px 10px;border-radius:99px;font-weight:600}
+
+  .note{display:flex;gap:10px;border-radius:10px;padding:12px 14px;margin:12px 0;font-size:.85rem}
+  .note.warn{background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.3)}
+  .note.danger{background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.3)}
+  .note.ok{background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.3)}
+  .note .ic{font-size:1rem;flex-shrink:0}
+  .note b{color:#fff}
+
+  .chk{display:flex;align-items:flex-start;gap:10px;padding:9px 12px;border-radius:9px;cursor:pointer;font-size:.87rem;transition:background .15s}
+  .chk:hover{background:var(--card2)}
+  .chk input{margin-top:4px;accent-color:var(--green);width:16px;height:16px;cursor:pointer;flex-shrink:0}
+  .chk.done span{color:var(--muted);text-decoration:line-through}
+
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  @media(max-width:640px){.grid2{grid-template-columns:1fr}}
+  .mini{background:var(--card2);border:1px solid var(--border);border-radius:10px;padding:12px 14px}
+  .mini b{font-size:.85rem}
+  .mini p{font-size:.8rem;color:var(--muted);margin-top:3px}
+
+  .diagram{background:#0a0c11;border:1px solid var(--border);border-radius:10px;padding:16px;margin:12px 0;overflow-x:auto}
+  .diagram pre{font-family:ui-monospace,monospace;font-size:.75rem;color:#86efac;line-height:1.5;white-space:pre}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="insta">📸</div>
+  <h1>Instagram Comment Automation — Full Setup</h1>
+  <p>Meta Dashboard → Admin Panel → VPS → Connect → Pehla Automation — sab kuch step-wise, checkboxes ke saath</p>
+</header>
+
+<div class="progress-bar"><div class="wrap progress-inner">
+  <div class="progress-track"><div class="progress-fill" id="pfill"></div></div>
+  <div class="progress-label" id="plabel">0 / 24 done</div>
+</div></div>
+
+<div class="wrap">
+
+<!-- FLOW -->
+<div class="step">
+  <div class="step-head"><div class="step-num" style="background:linear-gradient(135deg,#06b6d4,#3b82f6)">ℹ️</div><h2>Yeh System Kaise Kaam Karta Hai</h2><span class="time">1 min</span></div>
+  <div class="step-body">
+    <div class="diagram"><pre>Customer comments "price" on your reel
+        │
+        ▼
+Meta webhook ──► /webhooks/instagram/{token}
+        │
+        ▼
+Bot EK private-reply DM bhejta hai
+(hook + follow ask + keyword — sab ek message mein)
+        │
+        ▼
+Customer follow kare + "DONE" reply kare ──► 24h window OPEN
+        │
+        ▼
+Bot delivery bhejta hai (link / file / text)</pre></div>
+    <div class="note ok"><div class="ic">✅</div><div><b>App ID / App Secret WhatsApp wale hi hain — SAME.</b> Sirf Config ID alag banani hai. Naya Meta app banane ki zaroorat NAHI.</div></div>
+  </div>
+</div>
+
+<!-- STEP 1 -->
+<div class="step">
+  <div class="step-head"><div class="step-num" style="background:linear-gradient(135deg,#4f46e5,#7c3aed)">1</div><h2>Meta App Dashboard Setup</h2><span class="time">~10 min</span></div>
+  <div class="step-body">
+
+    <div class="sub"><h3><span class="n">1.1</span> Product Add Karo</h3>
+      <ol class="plain">
+        <li><a href="https://developers.facebook.com/apps" target="_blank" style="color:var(--brand)">developers.facebook.com/apps</a> → apna <b>WhatsApp wala app</b> kholo (naya mat banao)</li>
+        <li>Left menu → <b>Add Product</b> → <b>Facebook Login for Business</b> → <b>Set Up</b></li>
+      </ol>
+      <label class="chk"><input type="checkbox" data-k="s11"><span>Facebook Login for Business product add kiya</span></label>
+    </div>
+
+    <div class="sub"><h3><span class="n">1.2</span> Login Configuration Banao (Config ID)</h3>
+      <ol class="plain">
+        <li>Left menu → <b>Facebook Login for Business → Configurations → Create Configuration</b></li>
+        <li>Name: <code class="inline">Instagram Automation</code></li>
+        <li>Yeh <b>5 permissions</b> add karo:</li>
+      </ol>
+      <div class="chips">
+        <span class="chip">pages_show_list</span>
+        <span class="chip">pages_read_engagement</span>
+        <span class="chip">instagram_basic</span>
+        <span class="chip">instagram_manage_comments</span>
+        <span class="chip">instagram_manage_messages</span>
+      </div>
+      <ol class="plain" start="4"><li><b>Save</b> → jo <b>Config ID</b> bane usse copy kar lo 📋</li></ol>
+      <div class="note danger"><div class="ic">⚠️</div><div>Yeh Config ID <b>WhatsApp wali config se BILKUL alag</b> honi chahiye. Same di to Instagram login par WhatsApp permissions aayengi aur kaam nahi karega.</div></div>
+      <label class="chk"><input type="checkbox" data-k="s12"><span>Social config banayi + Config ID copy ki</span></label>
+    </div>
+
+    <div class="sub"><h3><span class="n">1.3</span> OAuth Redirect URI</h3>
+      <ol class="plain"><li><b>Settings → Basic</b> → <b>Valid OAuth Redirect URIs</b> mein add karo:</li></ol>
+      <div class="cmd"><pre>https://wa.careerinpak.com/app/instagram</pre><button class="copy">Copy</button></div>
+      <label class="chk"><input type="checkbox" data-k="s13"><span>Redirect URI add kiya</span></label>
+    </div>
+
+    <div class="sub"><h3><span class="n">1.4</span> App Mode</h3>
+      <ol class="plain">
+        <li><b>Settings → Basic</b> → upar toggle se app <b>Live</b> karo</li>
+        <li>Agar Development pe rehna ho: jis Facebook account se connect karoge woh <b>Roles → Admin/Developer</b> mein hona chahiye</li>
+      </ol>
+      <div class="note warn"><div class="ic">ℹ️</div><div><b>Apne accounts</b> ke liye App Review ki zaroorat NAHI. Doosron ke (SaaS clients) accounts ke liye pehle App Review pass karna hoga (<code class="inline">instagram_manage_comments</code> + <code class="inline">instagram_manage_messages</code> Advanced Access hain).</div></div>
+      <label class="chk"><input type="checkbox" data-k="s14"><span>App Live hai ya role check kar liya</span></label>
+    </div>
+
+    <div class="note ok"><div class="ic">🚫</div><div><b>Webhook Dashboard mein manually set NAHI karna.</b> App khud register karti hai (unified registrar). Messenger → "Connected Tools" sirf tab jab Inbox mein IG DMs bhi chahiye.</div></div>
+
+  </div>
+</div>
+
+<!-- STEP 2 -->
+<div class="step">
+  <div class="step-head"><div class="step-num" style="background:linear-gradient(135deg,#4f46e5,#7c3aed)">2</div><h2>Admin Panel — Meta App Settings</h2><span class="time">~2 min</span></div>
+  <div class="step-body">
+    <p><b>Admin → Integrations → Meta App</b> kholo:</p>
+    <table>
+      <tr><th>Field</th><th>Kya dalna hai</th></tr>
+      <tr><td><b>App ID</b></td><td>Already hoga (WhatsApp ka) — <b>mat chhedo</b> ✋</td></tr>
+      <tr><td><b>App Secret</b></td><td>Already hoga — <b>mat chhedo</b> ✋</td></tr>
+      <tr><td><b>Webhook Verify Token</b></td><td>Already hoga — <b>mat chhedo</b> ✋</td></tr>
+      <tr><td><b>Config ID (Instagram/Messenger)</b></td><td>🆕 <b>YEH NAYA DALNA</b> — Step 1.2 wala Config ID</td></tr>
+      <tr><td><b>Enabled toggle</b></td><td>ON hona chahiye (meta_app row)</td></tr>
+    </table>
+    <div class="note warn"><div class="ic">⚠️</div><div>Agar dono Config IDs same hon to panel khud <b>red warning</b> dikhayega — phir Social config dobara check karo.</div></div>
+    <label class="chk"><input type="checkbox" data-k="s21"><span>config_id_social dal di + enabled ON + Save</span></label>
+  </div>
+</div>
+
+<!-- STEP 3 -->
+<div class="step">
+  <div class="step-head"><div class="step-num" style="background:linear-gradient(135deg,#059669,#10b981)">3</div><h2>VPS — Code Pull + Caches</h2><span class="time">~2 min</span></div>
+  <div class="step-body">
+    <div class="cmd"><pre>cd /www/wwwroot/wa.careerinpak.com
+
+git pull origin master
+
+php artisan config:cache
+php artisan route:cache
+php artisan view:cache
+php artisan cache:clear
+
+sudo systemctl restart php8.2-fpm 2>/dev/null || sudo systemctl restart php-fpm</pre><button class="copy">Copy</button></div>
+    <p class="muted">npm / composer / migrate nahi karna — sab already done hai, built assets repo mein commit hain.</p>
+    <label class="chk"><input type="checkbox" data-k="s31"><span>Pull + caches + php-fpm restart ho gaya</span></label>
+  </div>
+</div>
+
+<!-- STEP 4 -->
+<div class="step">
+  <div class="step-head"><div class="step-num" style="background:linear-gradient(135deg,#059669,#10b981)">4</div><h2>VPS — Queue Worker + Cron (ek dafa)</h2><span class="time">~5 min</span></div>
+  <div class="step-body">
+
+    <div class="sub"><h3><span class="n">4.1</span> Supervisor Worker (instagram queue)</h3>
+      <p class="muted">Worker conf file kholo (naam different ho sakta hai):</p>
+      <div class="cmd"><pre>nano /etc/supervisor/conf.d/laravel-worker.conf   # ls /etc/supervisor/conf.d/ se dekho</pre><button class="copy">Copy</button></div>
+      <p><code class="inline">command=</code> line aisi honi chahiye:</p>
+      <div class="cmd"><pre>command=php /www/wwwroot/wa.careerinpak.com/artisan queue:work --queue=instagram,default --tries=3 --timeout=60 --sleep=3</pre><button class="copy">Copy</button></div>
+      <div class="cmd"><pre>sudo supervisorctl reread && sudo supervisorctl update && sudo supervisorctl restart all</pre><button class="copy">Copy</button></div>
+      <div class="note danger"><div class="ic">🔥</div><div><b>Iske bina funnel kaam NAHI karega</b> — webhook aayega magar jobs queue mein pending rahenge.</div></div>
+      <label class="chk"><input type="checkbox" data-k="s41"><span>Worker mein instagram queue add + restart</span></label>
+    </div>
+
+    <div class="sub"><h3><span class="n">4.2</span> Scheduler Cron</h3>
+      <div class="cmd"><pre>crontab -l | grep schedule:run</pre><button class="copy">Copy</button></div>
+      <p class="muted">Output nahi aya? <code class="inline">crontab -e</code> karke yeh line add karo:</p>
+      <div class="cmd"><pre>* * * * * cd /www/wwwroot/wa.careerinpak.com && php artisan schedule:run >> /dev/null 2>&1</pre><button class="copy">Copy</button></div>
+      <label class="chk"><input type="checkbox" data-k="s42"><span>Cron active hai</span></label>
+    </div>
+
+    <div class="sub"><h3><span class="n">4.3</span> Quick Verify</h3>
+      <div class="cmd"><pre>php artisan route:list | grep instagram
+
+curl "https://wa.careerinpak.com/webhooks/instagram/VERIFY_TOKEN?hub.mode=subscribe&hub.verify_token=VERIFY_TOKEN&hub.challenge=hello"</pre><button class="copy">Copy</button></div>
+      <p class="muted">Curl ka response <code class="inline">hello</code> aana chahiye (VERIFY_TOKEN ki jagah apna admin panel wala token).</p>
+      <label class="chk"><input type="checkbox" data-k="s43"><span>Routes dikh rahe + curl "hello" return kar raha</span></label>
+    </div>
+
+  </div>
+</div>
+
+<!-- STEP 5 -->
+<div class="step">
+  <div class="step-head"><div class="step-num" style="background:linear-gradient(135deg,#db2777,#f472b6)">5</div><h2>Client Panel — Account Connect</h2><span class="time">~1 min</span></div>
+  <div class="step-body">
+    <ol class="plain">
+      <li>App kholo → sidebar <b>Instagram → Connect</b></li>
+      <li><b>Connect Instagram</b> button → Facebook popup → <b>Continue as &lt;aap&gt;</b> → <b>Allow</b> sab permissions</li>
+      <li>Success flash: <code class="inline">Connected 1 Instagram account</code> ✅</li>
+    </ol>
+    <div class="note warn"><div class="ic">ℹ️</div><div>IG account <b>Professional</b> hona chahiye — personal ho to: Instagram app → Settings → Account type → <b>Switch to Professional</b>. Aur kisi Facebook Page se linked ho.</div></div>
+    <label class="chk"><input type="checkbox" data-k="s51"><span>Instagram account connect ho gaya</span></label>
+  </div>
+</div>
+
+<!-- STEP 6 -->
+<div class="step">
+  <div class="step-head"><div class="step-num" style="background:linear-gradient(135deg,#db2777,#f472b6)">6</div><h2>Pehla Automation Banao</h2><span class="time">~3 min</span></div>
+  <div class="step-body">
+    <p><b>Instagram → Comment Automations → New:</b></p>
+    <table>
+      <tr><th>Step</th><th>Example</th></tr>
+      <tr><td><b>1. Trigger</b></td><td>Keywords: <code class="inline">price, rate</code> (contains) — ya All comments. <b>Pick posts</b> se specific reels bhi select kar sakte ho (khali = all posts)</td></tr>
+      <tr><td><b>2. Private reply</b></td><td>"Thanks for commenting! 🎉 Follow karo aur <b>DONE</b> reply karo — link foran bhejta hoon" — <b>Follow gate: ON</b>, keyword <code class="inline">DONE</code></td></tr>
+      <tr><td><b>3. Delivery</b></td><td>Link / file URL / text — jo "required cheez" hai</td></tr>
+      <tr><td><b>Enabled</b></td><td>✅ ON → Save</td></tr>
+    </table>
+    <div class="note ok"><div class="ic">💡</div><div><b>Per-post rule:</b> specific posts wali automation hamesha account-wide automation ko override karti hai apne posts pe.</div></div>
+    <label class="chk"><input type="checkbox" data-k="s61"><span>Automation banayi + enabled</span></label>
+  </div>
+</div>
+
+<!-- STEP 7 -->
+<div class="step">
+  <div class="step-head"><div class="step-num" style="background:linear-gradient(135deg,#f59e0b,#fbbf24)">7</div><h2>Live Test 🚀</h2><span class="time">~2 min</span></div>
+  <div class="step-body">
+    <ol class="plain">
+      <li><b>Doosre phone/account</b> se reel pe comment karo: <code class="inline">price</code></li>
+      <li>5–10 sec mein commenter ko <b>DM</b> jayegi (Request folder ya Inbox mein)</li>
+      <li>Woh <b>follow</b> kare + <code class="inline">DONE</code> reply kare → <b>delivery foran</b> jayegi</li>
+      <li>Sab kuch <b>Instagram → Funnel Logs</b> mein dikhega</li>
+    </ol>
+    <div class="note warn"><div class="ic">ℹ️</div><div><b>Ek comment = 1 DM</b> (Meta rule). Test repeat karna ho to naya comment karo.</div></div>
+    <label class="chk"><input type="checkbox" data-k="s71"><span>End-to-end funnel chal gaya 🎉</span></label>
+  </div>
+</div>
+
+<!-- TROUBLESHOOT -->
+<div class="step">
+  <div class="step-head"><div class="step-num" style="background:linear-gradient(135deg,#64748b,#94a3b8)">🛠️</div><h2>Kuch Na Ho To — Troubleshooting</h2><span class="time"></span></div>
+  <div class="step-body">
+    <div class="cmd"><pre>tail -f /www/wwwroot/wa.careerinpak.com/storage/logs/laravel.log | grep instagram</pre><button class="copy">Copy</button></div>
+    <table>
+      <tr><th>Symptom</th><th>Fix</th></tr>
+      <tr><td>Funnel Logs khali + DM nahi gayi</td><td>Webhook registration — koi bhi account <b>dobara connect</b> karo (registrar khud register karega). Step 4.3 wala curl bhi chalao.</td></tr>
+      <tr><td>Job pending pada hai</td><td>Supervisor command mein <code class="inline">instagram</code> queue nahi hai (Step 4.1)</td></tr>
+      <tr><td>Permission error in logs</td><td>Step 1.2 ki 5 permissions config mein missing hain</td></tr>
+      <tr><td>Token error</td><td>Setup page se account <b>disconnect → reconnect</b></td></tr>
+      <tr><td>Connect button pe Meta credentials error</td><td>Admin → Meta App: App ID/Secret bhare hain + <b>enabled toggle ON</b>?</td></tr>
+      <tr><td>DM Inbox mein nahi dikh rahi</td><td>Messenger product + Connected Tools enable karo (Inbox DMs ke liye chahiye)</td></tr>
+    </table>
+  </div>
+</div>
+
+<p style="text-align:center;color:var(--muted);font-size:.8rem;margin-top:30px">
+  Instagram Comment Automation · wa.careerinpak.com · Guide version 1.0 · Sep 2026
+</p>
+
+</div>
+
+<script>
+// Copy buttons
+document.querySelectorAll('.copy').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    navigator.clipboard.writeText(btn.parentElement.querySelector('pre').innerText);
+    btn.textContent='Copied ✓';
+    setTimeout(()=>btn.textContent='Copy',1400);
+  });
+});
+
+// Checkboxes + progress (localStorage persist)
+const boxes=[...document.querySelectorAll('.chk input')];
+const KEY='ig_setup_progress_v1';
+const saved=JSON.parse(localStorage.getItem(KEY)||'{}');
+function refresh(){
+  const done=boxes.filter(b=>b.checked).length;
+  document.getElementById('pfill').style.width=(done/boxes.length*100)+'%';
+  document.getElementById('plabel').textContent=done+' / '+boxes.length+' done';
+}
+boxes.forEach(b=>{
+  b.checked=!!saved[b.dataset.k];
+  b.closest('.chk').classList.toggle('done',b.checked);
+  b.addEventListener('change',()=>{
+    saved[b.dataset.k]=b.checked;
+    localStorage.setItem(KEY,JSON.stringify(saved));
+    b.closest('.chk').classList.toggle('done',b.checked);
+    refresh();
+  });
+});
+refresh();
+</script>
+</body>
+</html>
