@@ -62,17 +62,10 @@ class ConnectController extends Controller
 
         $longToken = $this->exchangeForLongLivedToken($shortToken);
 
-        // Point the app-level `instagram` object at THIS module's endpoint with the
-        // full field set (superset of the Inbox module's registration — `comments`
-        // added; messaging fields identical so Inbox behaviour is unchanged).
-        if (filled($meta->verifyToken())) {
-            app(InstagramGraphClient::class)->registerAppSubscription(
-                $meta->appId(),
-                (string) $meta->appSecret(),
-                (string) $meta->verifyToken(),
-                route('webhooks.instagram.receive', ['token' => $meta->verifyToken()]),
-            );
-        }
+        // Register the app-level `instagram` object through the SHARED registrar —
+        // the same one the Inbox connect flow uses. One callback URL, one superset
+        // field list, identical outcome no matter which connect flow runs last.
+        app(\App\Modules\Shared\Services\MetaWebhookRegistrar::class)->registerInstagramObject();
 
         $pagesRes = Http::withToken($longToken)
             ->get("https://graph.facebook.com/{$this->apiVersion()}/me/accounts", [

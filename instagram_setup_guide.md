@@ -95,7 +95,7 @@ Go to **Admin → Integrations → Meta App** and fill:
 
 Save. The Setup page (`Instagram → Connect`) should now show no configuration warning and an active **Connect Instagram** button.
 
-> No manual webhook setup in the Meta Dashboard is required — the module **registers the app subscription itself** on first connect (object `instagram`, fields `comments, messages, messaging_postbacks, message_reactions`, callback `/webhooks/instagram/{verify_token}`).
+> No manual webhook setup in the Meta Dashboard is required — the app registers the `instagram` webhook object **itself through one shared registrar** used by both connect flows (Inbox and Instagram). One callback URL (`/webhooks/instagram/{verify_token}`), one field set (`comments, messages, messaging_postbacks, message_reactions`) — whichever flow connects first or last, the subscription stays identical. The module endpoint forwards DM events into the Inbox pipeline, so **both features run from this single subscription**. Do **not** manually set the instagram callback to `/webhooks/meta` in the Dashboard — that would overwrite the shared registration and kill comment automation.
 
 ---
 

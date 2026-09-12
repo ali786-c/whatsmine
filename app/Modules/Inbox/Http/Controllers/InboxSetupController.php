@@ -536,69 +536,20 @@ class InboxSetupController extends Controller
     }
 
     /**
-     * Register the app-level `instagram` webhook subscription so Meta knows which
-     * callback URL to deliver Instagram events to. Uses the App Access Token
-     * ({app_id}|{app_secret}) and points at our /webhooks/meta/{verify_token}
-     * endpoint. Idempotent: re-registering the same URL/fields is a no-op on Meta.
+     * Register the app-level `instagram` webhook subscription.
+     *
+     * Delegated to the shared MetaWebhookRegistrar: Meta allows ONE callback URL
+     * per webhook object and each POST /{app_id}/subscriptions REPLACES the whole
+     * field list. Both this flow and the Instagram comment-automation module's
+     * connect flow must therefore produce the SAME subscription — otherwise
+     * whichever ran last would silently disable the other (e.g. dropping the
+     * `comments` field would kill comment automation). The registrar registers
+     * the superset field list against the Instagram module's endpoint, which
+     * forwards `messaging` events into this module's pipeline.
      */
     private function registerInstagramAppWebhook(): void
     {
-        $meta        = CredentialResolver::system()->meta();
-        $appId       = $meta?->appId();
-        $appSecret   = $meta?->appSecret();
-        $verifyToken = $meta?->verifyToken();
-
-        if (! $appId || ! $appSecret || ! $verifyToken) {
-            Log::warning('Instagram embedded signup: cannot register app webhook — missing app id/secret/verify token', [
-                'has_app_id'       => (bool) $appId,
-                'has_app_secret'   => (bool) $appSecret,
-                'has_verify_token' => (bool) $verifyToken,
-            ]);
-
-            return;
-        }
-
-        $callbackUrl = route('webhooks.meta.receive', ['token' => $verifyToken]);
-
-        try {
-            $res = Http::post("https://graph.facebook.com/v20.0/{$appId}/subscriptions", [
-                'access_token' => $appId . '|' . $appSecret,
-                'object'       => 'instagram',
-                'callback_url' => $callbackUrl,
-                'verify_token' => $verifyToken,
-                'fields'       => 'messages,messaging_postbacks,message_reactions',
-            ]);
-
-            if (! $res->successful()) {
-                Log::warning('Instagram embedded signup: app webhook registration failed', [
-                    'callback_url' => $callbackUrl,
-                    'status'       => $res->status(),
-                    'response'     => $res->json(),
-                ]);
-
-                return;
-            }
-
-            Log::info('Instagram embedded signup: app webhook registered', [
-                'callback_url' => $callbackUrl,
-                'response'     => $res->json(),
-            ]);
-
-            // Read back what Meta actually stored so we can confirm the instagram
-            // object has our callback URL and is marked active.
-            $check = Http::get("https://graph.facebook.com/v20.0/{$appId}/subscriptions", [
-                'access_token' => $appId . '|' . $appSecret,
-            ]);
-            Log::info('Instagram embedded signup: app subscriptions snapshot', [
-                'status'   => $check->status(),
-                'response' => $check->json(),
-            ]);
-        } catch (\Throwable $e) {
-            Log::warning('Instagram embedded signup: app webhook registration exception', [
-                'callback_url' => $callbackUrl,
-                'error'        => $e->getMessage(),
-            ]);
-        }
+        \App\Modules\Shared\Services\MetaWebhookRegistrar::registerInstagramObject();
     }
 
     /**

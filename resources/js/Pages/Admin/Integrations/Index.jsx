@@ -113,26 +113,26 @@ const SETUP_GUIDES = {
                 ],
             },
             {
-                heading: 'Step 4 — Instagram Business DMs',
+                heading: 'Step 4 — Instagram DMs & Comment Automation (unified)',
                 icon: 'instagram',
-                note: 'Allows receiving and sending Instagram Direct Messages in the Inbox.',
+                note: 'Instagram DMs (Inbox) and comment automation share ONE webhook — the app registers it automatically on first connect. No manual webhook setup required.',
                 steps: [
                     'Add "Messenger" product to your app (Instagram DMs use the Messenger API).',
                     'Go to Messenger → Instagram Settings → enable "Connected Tools".',
-                    'Set the Webhook callback URL to: {APP_URL}/webhooks/meta/{VERIFY_TOKEN} (shown in Channel Setup).',
-                    'Subscribe to these webhook fields:',
+                    'Connect an Instagram account in the client panel (Instagram → Connect). The app then registers the instagram webhook itself with the full field set (comments + messages).',
+                    'Do NOT manually set the instagram webhook callback to /webhooks/meta — both features share one callback and the app keeps it correct automatically.',
                 ],
                 permissions: [
                     'instagram_basic',
+                    'instagram_manage_comments',
                     'instagram_manage_messages',
                     'pages_manage_metadata',
                 ],
                 webhookFields: [
+                    'comments',
                     'messages',
                     'messaging_postbacks',
-                    'messaging_optins',
-                    'message_deliveries',
-                    'message_reads',
+                    'message_reactions',
                 ],
             },
             {

@@ -15,7 +15,7 @@ A **fully separate** module (`App\Modules\Instagram`) that automates the comment
 | Queue | Jobs run on the dedicated `instagram` queue — a stalled worker cannot delay WhatsApp/Inbox jobs. |
 | Config | Own namespace `config/instagram.php` (`INSTAGRAM_*` env keys) with an `INSTAGRAM_ENABLED` master switch — `false` makes the module dormant without deleting anything. |
 | Inbox bridge | One-directional and best-effort: the funnel mirrors threads into the Inbox (guarded by try/catch + `INSTAGRAM_MIRROR_TO_INBOX`). If the Inbox integration changes, the funnel keeps working. |
-| Shared DMs | The app-level `instagram` webhook object has ONE callback URL, so the module's endpoint receives `messaging` events too and forwards them into the Inbox pipeline (class-guarded). The forwarding uses the Inbox driver's own `processWebhookPayload()` so behaviour is identical. |
+| Shared DMs | The app-level `instagram` webhook object has ONE callback URL, registered through the **shared `MetaWebhookRegistrar`** (used by both this module's and the Inbox's connect flow — identical outcome regardless of order). The module's endpoint receives `messaging` events too and forwards them into the Inbox pipeline (class-guarded). The forwarding uses the Inbox driver's own `processWebhookPayload()` so behaviour is identical. If this module is deleted, the registrar falls back to the Inbox-only callback/field set on the next connect. |
 
 ## Meta hard limits (all enforced in code + DB)
 

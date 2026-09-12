@@ -126,35 +126,6 @@ class InstagramGraphClient
         return (array) $res->json('data', []);
     }
 
-    /** App-level subscription for the `instagram` object — includes `comments` (unlike the Inbox module's registration). */
-    public function registerAppSubscription(string $appId, string $appSecret, string $verifyToken, string $callbackUrl): void
-    {
-        try {
-            $res = Http::post("https://graph.facebook.com/{$this->apiVersion()}/{$appId}/subscriptions", [
-                'access_token' => $appId.'|'.$appSecret,
-                'object' => 'instagram',
-                'callback_url' => $callbackUrl,
-                'verify_token' => $verifyToken,
-                // Full superset of the Inbox module's list: `comments` is new, the
-                // messaging fields are identical so Inbox behaviour is unchanged.
-                'fields' => 'comments,messages,messaging_postbacks,message_reactions',
-            ]);
-
-            if (! $res->successful()) {
-                Log::warning('instagram_module: app webhook registration failed', [
-                    'status' => $res->status(),
-                    'response' => $res->json(),
-                ]);
-
-                return;
-            }
-
-            Log::info('instagram_module: app webhook registered', ['callback_url' => $callbackUrl]);
-        } catch (\Throwable $e) {
-            Log::warning('instagram_module: app webhook registration exception', ['error' => $e->getMessage()]);
-        }
-    }
-
     /**
      * @param  array<string, mixed>  $body
      * @return array<string, mixed>
