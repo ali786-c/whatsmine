@@ -27,7 +27,7 @@ A **fully separate** module (`App\Modules\Instagram`) that automates the comment
 ## Setup
 
 1. **Meta App** — add the scopes `instagram_manage_comments`, `instagram_manage_messages`, `instagram_basic` to the Facebook Login for Business config (`config_id_social` in Admin → Integrations → Meta App).
-2. **Connect** — Client panel → **Instagram → Connect**: the button opens Facebook OAuth (`feature_type: instagram_management`). On redirect the module exchanges the code for a long-lived token, fetches `/me/accounts`, stores each IG professional account in `instagram_accounts` (page token encrypted) and registers the app webhook subscription (object `instagram`, fields `comments, messages, messaging_postbacks, message_reactions`).
+2. **Connect (single point)** — Client panel → **Inbox → Setup (Channels) → Connect Instagram**. That one connection powers BOTH features: the Inbox `channel_accounts` row (DMs) is created by the Inbox flow, which also mirrors the account into this module's `instagram_accounts` (comment automation), registers the unified webhook object through the shared registrar and subscribes the IG-user fields. The module's own Setup page is a **read-only manage view** that links back to Channels. The module's legacy `POST /setup/connect` remains as the OAuth redirect-back target.
 3. **Create an automation** — Instagram → Comment Automations → New: trigger (keywords / all / mentions + media filter) → private reply text with follow gate → delivery (link / file / text).
 4. **Deploy** — `php artisan migrate` (adds the 4 module tables only) and run a worker for the module queue:
    ```bash

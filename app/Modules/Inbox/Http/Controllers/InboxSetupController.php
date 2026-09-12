@@ -193,6 +193,13 @@ class InboxSetupController extends Controller
                 ]);
             }
 
+            // THE single connection point: connecting here also powers the
+            // Instagram comment-automation module (its instagram_accounts row,
+            // the unified webhook registration and the IG-user field
+            // subscription) — so one connect enables Inbox DMs AND comment
+            // automation, regardless of which panel the user never visits.
+            $this->syncInstagramModule($workspaceId, $igId, $pageId, $pageToken, $page);
+
             Log::info('Instagram embedded signup: account connected', [
                 'workspace_id'         => $workspaceId,
                 'facebook_page_id'     => $pageId,
@@ -643,8 +650,86 @@ class InboxSetupController extends Controller
         abort_unless((int) $channelAccount->workspace_id === (int) $workspaceId, 403);
         abort_unless(in_array($channelAccount->channel, ['instagram', 'messenger'], true), 403);
 
+        // Disconnect here also pauses the comment-automation module for that
+        // account (its automations stop firing on a disconnected account).
+        if ($channelAccount->channel === 'instagram') {
+            $igId = $channelAccount->meta_json['instagram_page_id']
+                ?? $channelAccount->meta_json['instagram_account_id']
+                ?? null;
+
+            if ($igId && class_exists(\App\Modules\Instagram\Models\InstagramAccount::class)) {
+                try {
+                    \App\Modules\Instagram\Models\InstagramAccount::where('workspace_id', $channelAccount->workspace_id)
+                        ->where('ig_user_id', $igId)
+                        ->update(['status' => 'disconnected']);
+                } catch (\Throwable $e) {
+                    Log::warning('Instagram embedded signup: module account disconnect sync failed', [
+                        'ig_id' => $igId,
+                        'error' => $e->getMessage(),
+                    ]);
+                }
+            }
+        }
+
         $channelAccount->delete();
 
         return back()->with('success', 'Account disconnected.');
+    }
+
+    /**
+     * Mirror an Inbox-channel Instagram connection into the comment-automation
+     * module so ONE connection powers both features. Best-effort and
+     * class-guarded: if the Instagram module is deleted this silently no-ops
+     * and the Inbox keeps working untouched.
+     */
+    private function syncInstagramModule(int $workspaceId, string $igId, string $pageId, string $pageToken, array $page): void
+    {
+        if (! class_exists(\App\Modules\Instagram\Models\InstagramAccount::class)) {
+            return;
+        }
+
+        try {
+            $igAccount = $page['instagram_business_account'] ?? [];
+
+            $account = \App\Modules\Instagram\Models\InstagramAccount::updateOrCreate(
+                ['workspace_id' => $workspaceId, 'ig_user_id' => $igId],
+                [
+                    'username' => $igAccount['username'] ?? null,
+                    'display_name' => $igAccount['name'] ?? ($page['name'] ?? $igId),
+                    'page_id' => $pageId,
+                    'page_token' => $pageToken,
+                    'status' => 'active',
+                    'meta_json' => [
+                        'connected_at' => now()->toIso8601String(),
+                        'facebook_page_name' => $page['name'] ?? null,
+                        'connected_via' => 'inbox_channels',
+                    ],
+                ],
+            );
+
+            // Unified webhook object (one callback + superset fields, both flows).
+            \App\Modules\Shared\Services\MetaWebhookRegistrar::registerInstagramObject();
+
+            // IG-user level field subscription for comment events.
+            try {
+                app(\App\Modules\Instagram\Services\InstagramGraphClient::class)->subscribeAccountFields($account);
+            } catch (\Throwable $e) {
+                Log::warning('Instagram embedded signup: module account field subscription failed', [
+                    'ig_id' => $igId,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+
+            Log::info('Instagram embedded signup: comment-automation module synced', [
+                'workspace_id' => $workspaceId,
+                'ig_user_id' => $igId,
+                'automation_account_id' => $account->id,
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning('Instagram embedded signup: comment-automation module sync failed (DMs unaffected)', [
+                'ig_id' => $igId,
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 }

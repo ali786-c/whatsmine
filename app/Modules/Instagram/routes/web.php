@@ -5,10 +5,13 @@ use App\Modules\Instagram\Http\Controllers\ConnectController;
 use App\Modules\Instagram\Http\Controllers\LogsController;
 use Illuminate\Support\Facades\Route;
 
+// Connection lives in ONE place: the Inbox Channels page (Inbox → Setup).
+// The module Setup page is a read-only manage view; the connect POST (the
+// OAuth redirect-back target) is kept working so an in-flight flow that
+// started on the Channels page resolves cleanly.
 Route::get('/setup', [ConnectController::class, 'index'])->name('setup');
-Route::get('/setup/status', [ConnectController::class, 'status'])->name('setup.status');
 Route::post('/setup/connect', [ConnectController::class, 'connect'])->name('connect');
-Route::delete('/setup/{instagramAccount}', [ConnectController::class, 'disconnect'])->name('disconnect');
+Route::get('/setup/status', [ConnectController::class, 'status'])->name('setup.status');
 
 Route::get('/automations', [AutomationController::class, 'index'])->name('automations.index');
 Route::get('/automations/create', [AutomationController::class, 'create'])->name('automations.create');

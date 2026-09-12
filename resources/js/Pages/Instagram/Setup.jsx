@@ -1,9 +1,8 @@
-import { Head, router, usePage } from '@inertiajs/react';
+import { Head, usePage } from '@inertiajs/react';
 import ClientLayout from '@/Layouts/ClientLayout';
 import Card from '@/Components/ui/Card';
 import Button from '@/Components/ui/Button';
-import { Instagram, Plus, ShieldCheck, AlertTriangle, Link2 } from 'lucide-react';
-import { useState, useCallback, useEffect } from 'react';
+import { Instagram, Settings2, ShieldCheck, Link2 } from 'lucide-react';
 
 const STATUS_STYLES = {
     active: 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300',
@@ -11,77 +10,18 @@ const STATUS_STYLES = {
     disconnected: 'bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400',
 };
 
-export default function InstagramSetup({ accounts = [], webhookUrl, metaAppId, metaConfigIdSocial }) {
+/**
+ * Comment-automation manage page. Connections live in ONE place — the Inbox
+ * Channels page (Inbox → Setup). Connecting there creates BOTH the Inbox
+ * channel row (DMs) and this module's account row (comment automation), so
+ * this page is read-only: it shows the mirrored accounts and links to the
+ * single connect point.
+ */
+export default function InstagramSetup({ accounts = [], automationsCount = 0 }) {
     const { props } = usePage();
     const flash = props.flash ?? {};
-    const [connecting, setConnecting] = useState(false);
-    const [oauthError, setOauthError] = useState(null);
-
-    // Meta redirects back to this page with ?code=… (or ?error_description=…).
-    // The state value is the OAuth CSRF guard: it must match the one we stored
-    // before redirecting to Facebook, otherwise the code could be injected.
-    useEffect(() => {
-        const params = new window.URLSearchParams(window.location.search);
-        const code = params.get('code');
-        const error = params.get('error_description') || params.get('error');
-        const state = params.get('state');
-
-        if (!code && !error) {
-            return;
-        }
-
-        window.history.replaceState({}, document.title, window.location.pathname);
-
-        const expectedState = window.sessionStorage.getItem('instagram_oauth_state');
-        window.sessionStorage.removeItem('instagram_oauth_state');
-
-        if (error) {
-            setOauthError(error);
-            return;
-        }
-
-        if (!expectedState || expectedState !== state) {
-            setOauthError('Invalid OAuth state — please start the connection again.');
-            return;
-        }
-
-        setConnecting(true);
-        router.post(route('client.instagram.connect'), { code }, {
-            onFinish: () => setConnecting(false),
-        });
-    }, []);
-
-    const launchConnect = useCallback(() => {
-        if (!metaAppId || !metaConfigIdSocial) {
-            alert('Meta App credentials or the social login config are not configured. Ask your administrator to set them in Admin → Integrations → Meta App.');
-            return;
-        }
-
-        const redirectUri = route('client.instagram.setup');
-        const state = typeof window.crypto?.randomUUID === 'function'
-            ? window.crypto.randomUUID()
-            : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-
-        window.sessionStorage.setItem('instagram_oauth_state', state);
-
-        const params = new window.URLSearchParams({
-            client_id: metaAppId,
-            redirect_uri: redirectUri,
-            response_type: 'code',
-            config_id: metaConfigIdSocial,
-            state,
-            override_default_response_type: 'true',
-            extras: JSON.stringify({ feature_type: 'instagram_management' }),
-        });
-
-        window.location.assign(`https://www.facebook.com/v20.0/dialog/oauth?${params.toString()}`);
-    }, [metaAppId, metaConfigIdSocial]);
-
-    const disconnect = (id) => {
-        if (confirm('Disconnect this Instagram account? Active automations will stop firing.')) {
-            router.delete(route('client.instagram.disconnect', id));
-        }
-    };
+    const channelsUrl = route('client.inbox.setup');
+    const active = accounts.filter((a) => a.status === 'active');
 
     return (
         <ClientLayout>
@@ -93,9 +33,9 @@ export default function InstagramSetup({ accounts = [], webhookUrl, metaAppId, m
                         {flash.success}
                     </div>
                 )}
-                {(flash.error || oauthError) && (
+                {flash.error && (
                     <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-300">
-                        {flash.error || oauthError}
+                        {flash.error}
                     </div>
                 )}
 
@@ -112,19 +52,33 @@ export default function InstagramSetup({ accounts = [], webhookUrl, metaAppId, m
                                 </p>
                             </div>
                         </div>
-                        <Button onClick={launchConnect} disabled={connecting}>
-                            <Plus className="h-4 w-4" /> Connect Instagram
-                        </Button>
+                        <a href={channelsUrl}>
+                            <Button>
+                                <Settings2 className="h-4 w-4" /> Connect via Channels
+                            </Button>
+                        </a>
+                    </div>
+                    <div className="mt-3 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700 dark:border-blue-800 dark:bg-blue-900/30 dark:text-blue-300">
+                        <strong>One connection powers everything.</strong> Instagram accounts are connected from the{' '}
+                        <a href={channelsUrl} className="underline font-medium">Inbox → Setup (Channels)</a> page.
+                        Connecting there enables Instagram DMs in the Inbox <em>and</em> comment automation together —
+                        this page manages the automation side.
                     </div>
                 </Card>
 
                 <Card padding={false}>
-                    <div className="border-b border-neutral-200 px-5 py-3 dark:border-neutral-800">
+                    <div className="flex items-center justify-between border-b border-neutral-200 px-5 py-3 dark:border-neutral-800">
                         <h3 className="text-sm font-semibold">Connected accounts</h3>
+                        <span className="text-xs text-neutral-500 dark:text-neutral-400">
+                            {active.length} active · {automationsCount} automation{automationsCount === 1 ? '' : 's'}
+                        </span>
                     </div>
                     {accounts.length === 0 ? (
                         <div className="px-5 py-10 text-center text-sm text-neutral-500 dark:text-neutral-400">
-                            No Instagram accounts connected yet.
+                            No Instagram accounts connected yet.{' '}
+                            <a href={channelsUrl} className="font-medium text-brand-600 underline dark:text-brand-400">
+                                Connect on the Channels page →
+                            </a>
                         </div>
                     ) : (
                         <div className="divide-y divide-neutral-200 dark:divide-neutral-800">
@@ -134,7 +88,7 @@ export default function InstagramSetup({ accounts = [], webhookUrl, metaAppId, m
                                         <div className="flex items-center gap-2">
                                             <span className="font-medium">@{account.username ?? account.ig_user_id}</span>
                                             <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLES[account.status] ?? STATUS_STYLES.disconnected}`}>
-                                                {account.status.replaceAll('_', ' ')}
+                                                {String(account.status).replaceAll('_', ' ')}
                                             </span>
                                         </div>
                                         <p className="text-xs text-neutral-500 dark:text-neutral-400">
@@ -148,12 +102,15 @@ export default function InstagramSetup({ accounts = [], webhookUrl, metaAppId, m
                                         >
                                             <Link2 className="h-3.5 w-3.5" /> Automations
                                         </a>
-                                        <Button variant="outline" size="sm" onClick={() => disconnect(account.id)}>
-                                            Disconnect
-                                        </Button>
                                     </div>
                                 </div>
                             ))}
+                        </div>
+                    )}
+                    {accounts.some((a) => a.status !== 'active') && (
+                        <div className="border-t border-neutral-200 px-5 py-3 text-xs text-neutral-500 dark:border-neutral-800 dark:text-neutral-400">
+                            Disconnected or expired accounts are managed on the{' '}
+                            <a href={channelsUrl} className="underline">Channels page</a> — reconnect there to reactivate.
                         </div>
                     )}
                 </Card>
@@ -175,22 +132,6 @@ export default function InstagramSetup({ accounts = [], webhookUrl, metaAppId, m
                         </div>
                     </div>
                 </Card>
-
-                {webhookUrl && (
-                    <Card>
-                        <div className="flex items-start gap-3">
-                            <AlertTriangle className="mt-0.5 h-5 w-5 text-amber-500" />
-                            <div className="text-sm text-neutral-600 dark:text-neutral-400">
-                                <p className="font-medium text-neutral-900 dark:text-neutral-100">Webhook endpoint</p>
-                                <p className="mt-1 font-mono text-xs break-all">{webhookUrl}</p>
-                                <p className="mt-1 text-xs">
-                                    Registered automatically on connect (object <code>instagram</code>, fields
-                                    {' '}<code>comments, messages, messaging_postbacks, message_reactions</code>).
-                                </p>
-                            </div>
-                        </div>
-                    </Card>
-                )}
             </div>
         </ClientLayout>
     );

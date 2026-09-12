@@ -107,11 +107,13 @@ Save. The Setup page (`Instagram → Connect`) should now show no configuration 
 
 ---
 
-## Part C — Client Panel Connect
+## Part C — Client Panel Connect (single point: Channels page)
 
-1. Sidebar → **Instagram → Connect**
-2. **Connect Instagram** → Facebook popup → **Continue as \<you\>** → **Allow** all permissions
-3. Redirect back → accounts are fetched via `/me/accounts` and saved. Success flash: `Connected N Instagram account(s).`
+1. Sidebar → **Inbox → Setup** (the Channels page) → **Connect Instagram**
+2. Facebook popup → **Continue as \<you\>** → **Allow** all permissions
+3. Redirect back → accounts are fetched and saved — **ONE connection powers both features**: Instagram DMs appear in the Inbox AND the account appears under **Instagram → Connect** (the automation manage page) ready for automations. Connecting from the Channels page registers the webhook subscription, subscribes the Page + IG-user fields, and mirrors the account into the comment-automation module automatically.
+
+> The old separate connect button on the Instagram page has been removed — that page is now a read-only manage view linking to Channels. Disconnecting on the Channels page also pauses that account's automations.
 
 Requirements if nothing is found:
 - IG account must be **Professional** (Instagram app → Settings → Account type → *Switch to Professional*)
