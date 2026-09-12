@@ -143,11 +143,17 @@ Bot delivery bhejta hai (link / file / text)</pre></div>
       <label class="chk"><input type="checkbox" data-k="s12"><span>Social config banayi + Config ID copy ki</span></label>
     </div>
 
-    <div class="sub"><h3><span class="n">1.3</span> OAuth Redirect URI</h3>
-      <ol class="plain"><li><b>Facebook Login for Business → Settings</b> → <b>Valid OAuth Redirect URIs</b> mein add karo (exact — copy button use karo):</li></ol>
-      <div class="cmd"><pre>https://wa.careerinpak.com/app/instagram/setup</pre><button class="copy">Copy</button></div>
-      <div class="note danger"><div class="ic">⚠️</div><div><b>App Domains</b> field akela kaafi NAHI hai — OAuth ke liye <b>Valid OAuth Redirect URIs</b> mein <b>exact URI</b> (including <code class="inline">/setup</code>) honi hi chahiye, warna "Can't Load URL" error aata hai. Upar wali App Domains mein <code class="inline">wa.careerinpak.com</code> bhi hona chahiye (already added).</div></div>
-      <label class="chk"><input type="checkbox" data-k="s13"><span>Redirect URI (with /setup) Valid OAuth Redirect URIs mein add kiya</span></label>
+    <div class="sub"><h3><span class="n">1.3</span> OAuth Redirect URIs (DONO add karo)</h3>
+      <ol class="plain"><li><b>Facebook Login for Business → Settings</b> → <b>Valid OAuth Redirect URIs</b> mein <b>yeh DONO lines</b> add karo (exact — copy button use karo):</li></ol>
+      <div class="cmd"><pre>https://wa.careerinpak.com/app/instagram/setup
+https://wa.careerinpak.com/app/inbox/setup</pre><button class="copy">Copy</button></div>
+      <table>
+        <tr><th>URI</th><th>Kaunsa button use karta hai</th></tr>
+        <tr><td><code class="inline">/app/instagram/setup</code></td><td><b>Instagram → Connect</b> (comment automation module)</td></tr>
+        <tr><td><code class="inline">/app/inbox/setup</code></td><td><b>Inbox → Setup → Connect Instagram</b> (Inbox DMs)</td></tr>
+      </table>
+      <div class="note danger"><div class="ic">⚠️</div><div><b>App Domains</b> field akela kaafi NAHI hai — OAuth ke liye <b>Valid OAuth Redirect URIs</b> mein <b>exact URI</b> honi hi chahiye. Missing ho to Meta ka error aata hai: "Can't Load URL" ya "URL blocked — redirect URI is not white-listed".</div></div>
+      <label class="chk"><input type="checkbox" data-k="s13"><span>DONO redirect URIs Valid OAuth Redirect URIs mein add kiya</span></label>
     </div>
 
     <div class="sub"><h3><span class="n">1.4</span> App Mode</h3>
@@ -293,7 +299,19 @@ curl "https://wa.careerinpak.com/webhooks/instagram/VERIFY_TOKEN?hub.mode=subscr
       <tr><td>Token error</td><td>Setup page se account <b>disconnect → reconnect</b></td></tr>
       <tr><td>Connect button pe Meta credentials error</td><td>Admin → Meta App: App ID/Secret bhare hain + <b>enabled toggle ON</b>?</td></tr>
       <tr><td>DM Inbox mein nahi dikh rahi</td><td>Messenger product + Connected Tools enable karo (Inbox DMs ke liye chahiye)</td></tr>
+      <tr><td>Meta popup: <b>"Can't Load URL"</b> (domain not in app's domains)</td><td>App Domains mein <code class="inline">wa.careerinpak.com</code> ho + Valid OAuth Redirect URIs mein <b>exact URI with /setup</b> ho (Step 1.3)</td></tr>
+      <tr><td>Meta popup: <b>"URL blocked"</b> (redirect URI not white-listed)</td><td>Jis button se connect kar rahe ho uski URI missing hai — Step 1.3 ki <b>dono</b> URIs add karo (instagram/setup + inbox/setup)</td></tr>
+      <tr><td>Inbox se connect karte waqt error</td><td><code class="inline">/app/inbox/setup</code> URI whitelist mein nahi — Step 1.3 dekho</td></tr>
     </table>
+
+    <div class="sub"><h3>ℹ️ Dono Connect Buttons — Farq</h3>
+      <table>
+        <tr><th>Button</th><th>Kya karta hai</th><th>Redirect URI</th></tr>
+        <tr><td><b>Instagram → Connect</b><br><span class="muted">(sidebar ka naya Instagram menu)</span></td><td>IG accounts ko <b>comment automation</b> se jorta hai</td><td><code class="inline">/app/instagram/setup</code></td></tr>
+        <tr><td><b>Inbox → Setup → Connect Instagram</b></td><td>IG <b>DMs Inbox mein</b> lata hai (human agent replies)</td><td><code class="inline">/app/inbox/setup</code></td></tr>
+      </table>
+      <div class="note ok"><div class="ic">✅</div><div><b>Dono use kar sakte ho — koi conflict nahi.</b> Webhook unified registrar se ek hi jagah register hota hai, jo flow bhi baad mein chale. Comment automation ke liye sirf pehla bhi kaafi hai.</div></div>
+    </div>
   </div>
 </div>
 

@@ -64,12 +64,20 @@ Facebook Login for Business → **Configurations** → **Create Configuration**:
 
 > ⚠️ This Config ID must be **different** from the WhatsApp Embedded Signup Config ID. Using the same one makes the Instagram login show WhatsApp permissions.
 
-### 3. OAuth redirect URI
-**Facebook Login for Business → Settings → Valid OAuth Redirect URIs** must contain exactly (the `App Domains` field alone is NOT enough for OAuth — this exact URI, including `/setup`, is required or Meta shows the "Can't Load URL" error):
+### 3. OAuth redirect URIs — BOTH
+**Facebook Login for Business → Settings → Valid OAuth Redirect URIs** must contain exactly these TWO lines (the `App Domains` field alone is NOT enough for OAuth — each exact URI is required or Meta shows the "Can't Load URL" / "URL blocked" error):
 
 ```
 https://wa.careerinpak.com/app/instagram/setup
+https://wa.careerinpak.com/app/inbox/setup
 ```
+
+| URI | Used by |
+|---|---|
+| `/app/instagram/setup` | **Instagram → Connect** (comment-automation module) |
+| `/app/inbox/setup` | **Inbox → Setup → Connect Instagram** (Inbox DMs) |
+
+> Both connect buttons can be used — they do not conflict. The webhook object is registered through the single shared registrar, so whichever flow runs produces the same subscription. Comment automation alone only needs the first URI.
 
 ### 4. Copy credentials
 Settings → Basic → copy **App ID** and **App Secret**.
@@ -200,6 +208,8 @@ If the DM never arrives:
 | Log entry with permission error | Missing `instagram_manage_comments/messages` in the login config (Part A step 2) |
 | Log shows `comment for unconnected/inactive IG account` | The webhook's IG user ID doesn't match a connected account — reconnect |
 | Job never processes | Worker not on `instagram` queue → check supervisor command |
+| Meta popup **"Can't Load URL"** (domain of this URL isn't included in the app's domains) | `wa.careerinpak.com` missing from App Domains, or the exact URI (with `/setup`) missing from Valid OAuth Redirect URIs (Part A step 3) |
+| Meta popup **"URL blocked"** (redirect URI is not white-listed) | The connect button you used has a different redirect URI than the whitelisted ones — add **both** URIs from Part A step 3 |
 
 Note: Meta allows **one private reply per comment** — to re-test, comment again (a fresh comment starts a fresh funnel).
 
