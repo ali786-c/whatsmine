@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Modules\Instagram\Models\CommentAutomation;
 use App\Modules\Instagram\Models\CommentAutomationLog;
 use App\Modules\Instagram\Models\InstagramAccount;
+use App\Modules\Instagram\Services\InstagramGraphClient;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -36,6 +38,38 @@ class AutomationController extends Controller
     public function create(Request $request): Response
     {
         return Inertia::render('Instagram/Automations/Edit', $this->formProps($request));
+    }
+
+    /**
+     * Recent posts/reels of one of the workspace's connected IG accounts —
+     * powers the per-post picker in the automation builder.
+     */
+    public function recentPosts(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'account_id' => ['required', 'integer'],
+        ]);
+
+        $account = InstagramAccount::where('workspace_id', $this->workspaceId($request))
+            ->where('id', (int) $validated['account_id'])
+            ->where('status', 'active')
+            ->firstOrFail();
+
+        try {
+            $media = app(InstagramGraphClient::class)->getRecentMedia($account, 12);
+        } catch (\Throwable $e) {
+            return response()->json(['message' => 'Could not fetch posts: '.$e->getMessage()], 502);
+        }
+
+        return response()->json([
+            'posts' => collect($media)->map(fn ($m) => [
+                'id' => (string) ($m['id'] ?? ''),
+                'caption' => mb_substr((string) ($m['caption'] ?? ''), 0, 90),
+                'type' => (string) ($m['media_product_type'] ?? ''),
+                'thumbnail' => $m['thumbnail_url'] ?? $m['media_url'] ?? null,
+                'permalink' => (string) ($m['permalink'] ?? ''),
+            ])->values(),
+        ]);
     }
 
     public function edit(Request $request, CommentAutomation $automation): Response
@@ -106,6 +140,8 @@ class AutomationController extends Controller
             'delivery.filename' => ['nullable', 'string', 'max:120'],
             'media_filter' => ['nullable', 'array'],
             'media_filter.*' => [Rule::in(['POST', 'REEL', 'STORY', 'AD'])],
+            'media_ids' => ['nullable', 'array', 'max:50'],
+            'media_ids.*' => ['string', 'max:64'],
             'is_active' => ['boolean'],
             'priority' => ['nullable', 'integer', 'min:1', 'max:1000'],
         ]);
@@ -119,7 +155,7 @@ class AutomationController extends Controller
             'automation' => $automation?->only([
                 'id', 'instagram_account_id', 'name', 'trigger_type', 'keywords', 'match_mode',
                 'reply_message', 'follow_gate', 'follow_prompt_message', 'reply_keyword',
-                'delivery', 'media_filter', 'is_active', 'priority',
+                'delivery', 'media_filter', 'media_ids', 'is_active', 'priority',
             ]),
             'accounts' => InstagramAccount::where('workspace_id', $workspaceId)
                 ->where('status', 'active')

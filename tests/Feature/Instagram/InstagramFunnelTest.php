@@ -215,6 +215,51 @@ class InstagramFunnelTest extends TestCase
         $this->assertDatabaseHas(CommentAutomationLog::class, ['comment_id' => 'comment-123', 'action' => 'no_match']);
     }
 
+    public function test_post_scoped_automation_ignores_comments_on_other_posts(): void
+    {
+        Http::fake(['graph.facebook.com/*' => Http::response(['message_id' => 'msg-1'], 200)]);
+
+        $this->automation(['media_ids' => ['media-1']]);
+
+        // Comment on a DIFFERENT post — must not fire.
+        app(CommentFunnelService::class)->handleComment('17841400000001', $this->commentValue(['media' => ['id' => 'media-999', 'media_product_type' => 'REEL']]));
+
+        $this->assertSame(0, FunnelParticipant::count());
+        $this->assertDatabaseHas(CommentAutomationLog::class, ['comment_id' => 'comment-123', 'action' => 'no_match']);
+    }
+
+    public function test_post_scoped_automation_beats_account_wide_rule(): void
+    {
+        Http::fake(['graph.facebook.com/*' => Http::response(['message_id' => 'msg-1'], 200)]);
+
+        // Account-wide rule with higher priority (lower number wins in the old order).
+        $this->automation(['reply_message' => 'GENERAL', 'priority' => 1]);
+        // Post-specific rule with lower priority — specificity must override.
+        $this->automation(['reply_message' => 'PERPOST', 'priority' => 100, 'media_ids' => ['media-1']]);
+
+        app(CommentFunnelService::class)->handleComment('17841400000001', $this->commentValue()); // comment on media-1
+
+        $sentText = (string) (Http::recorded()[0][0]['message']['text'] ?? '');
+        $this->assertStringContainsString('PERPOST', $sentText);
+        $this->assertStringNotContainsString('GENERAL', $sentText);
+    }
+
+    public function test_comment_without_media_id_matches_account_wide_but_not_post_scoped(): void
+    {
+        Http::fake(['graph.facebook.com/*' => Http::response(['message_id' => 'msg-1'], 200)]);
+
+        $this->automation(['reply_message' => 'PERPOST', 'media_ids' => ['media-1']]);
+
+        // Comment webhook value without a media id at all.
+        app(CommentFunnelService::class)->handleComment('17841400000001', [
+            'comment_id' => 'comment-123',
+            'from' => ['id' => 'igsid-customer', 'username' => 'curious_buyer'],
+            'text' => 'price please',
+        ]);
+
+        $this->assertSame(0, FunnelParticipant::count());
+    }
+
     public function test_dm_reply_forwarded_to_inbox_when_not_funnel(): void
     {
         // Not a funnel participant → the funnel declines, the job forwards to Inbox.

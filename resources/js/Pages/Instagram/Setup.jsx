@@ -18,11 +18,13 @@ export default function InstagramSetup({ accounts = [], webhookUrl, metaAppId, m
     const [oauthError, setOauthError] = useState(null);
 
     // Meta redirects back to this page with ?code=… (or ?error_description=…).
-    // Hand it to the backend once, then clean the URL — same pattern as Inbox Setup.
+    // The state value is the OAuth CSRF guard: it must match the one we stored
+    // before redirecting to Facebook, otherwise the code could be injected.
     useEffect(() => {
         const params = new window.URLSearchParams(window.location.search);
         const code = params.get('code');
         const error = params.get('error_description') || params.get('error');
+        const state = params.get('state');
 
         if (!code && !error) {
             return;
@@ -30,8 +32,16 @@ export default function InstagramSetup({ accounts = [], webhookUrl, metaAppId, m
 
         window.history.replaceState({}, document.title, window.location.pathname);
 
+        const expectedState = window.sessionStorage.getItem('instagram_oauth_state');
+        window.sessionStorage.removeItem('instagram_oauth_state');
+
         if (error) {
             setOauthError(error);
+            return;
+        }
+
+        if (!expectedState || expectedState !== state) {
+            setOauthError('Invalid OAuth state — please start the connection again.');
             return;
         }
 
@@ -51,6 +61,8 @@ export default function InstagramSetup({ accounts = [], webhookUrl, metaAppId, m
         const state = typeof window.crypto?.randomUUID === 'function'
             ? window.crypto.randomUUID()
             : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+        window.sessionStorage.setItem('instagram_oauth_state', state);
 
         const params = new window.URLSearchParams({
             client_id: metaAppId,

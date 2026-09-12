@@ -7,6 +7,7 @@ import Select from '@/Components/ui/Select';
 import Toggle from '@/Components/ui/Toggle';
 import { MessageCircle } from 'lucide-react';
 import { useState } from 'react';
+import axios from 'axios';
 
 const EMPTY = {
     instagram_account_id: '',
@@ -20,6 +21,7 @@ const EMPTY = {
     reply_keyword: 'DONE',
     delivery: { type: 'link', text: 'Here it is as promised:', url: '', filename: '' },
     media_filter: [],
+    media_ids: [],
     is_active: true,
     priority: 100,
 };
@@ -27,10 +29,45 @@ const EMPTY = {
 export default function InstagramAutomationEdit({ automation = null, accounts = [] }) {
     const { props } = usePage();
     const editing = Boolean(automation?.id);
-    const [form, setForm] = useState(() => (editing ? { ...EMPTY, ...automation } : EMPTY));
+    const [form, setForm] = useState(() => {
+        if (!editing) return EMPTY;
+        // Inertia serializes null JSON columns as null — normalize to the shapes
+        // the editor mutates (arrays for chips, object for delivery).
+        return {
+            ...EMPTY,
+            ...automation,
+            keywords: automation.keywords ?? [],
+            media_filter: automation.media_filter ?? [],
+            delivery: { ...EMPTY.delivery, ...(automation.delivery ?? {}) },
+        };
+    });
     const [keywordInput, setKeywordInput] = useState('');
     const [errors, setErrors] = useState({});
     const [saving, setSaving] = useState(false);
+    const [posts, setPosts] = useState([]);
+    const [loadingPosts, setLoadingPosts] = useState(false);
+    const [postsError, setPostsError] = useState(null);
+    const [showPostPicker, setShowPostPicker] = useState(false);
+
+    const loadPosts = () => {
+        if (!form.instagram_account_id) {
+            setPostsError('Select an Instagram account first.');
+            return;
+        }
+        setLoadingPosts(true);
+        setPostsError(null);
+        setShowPostPicker(true);
+        axios.get(route('client.instagram.automations.recent-posts'), { params: { account_id: form.instagram_account_id } })
+            .then((res) => setPosts(res.data.posts ?? []))
+            .catch((e) => setPostsError(e?.response?.data?.message ?? 'Could not load posts.'))
+            .finally(() => setLoadingPosts(false));
+    };
+
+    const togglePost = (id) => {
+        set('media_ids', form.media_ids.includes(id)
+            ? form.media_ids.filter((x) => x !== id)
+            : [...form.media_ids, id]);
+    };
 
     const set = (key, value) => setForm((f) => ({ ...f, [key]: value }));
     const setDelivery = (key, value) => setForm((f) => ({ ...f, delivery: { ...f.delivery, [key]: value } }));
@@ -167,6 +204,52 @@ export default function InstagramAutomationEdit({ automation = null, accounts = 
                                     </label>
                                 ))}
                             </div>
+                        </div>
+                        <div className="md:col-span-2">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                                <div>
+                                    <p className="text-sm font-medium">Limit to specific posts (optional)</p>
+                                    <p className="text-xs text-neutral-500 dark:text-neutral-400">
+                                        Empty = runs on ALL posts. Post-specific automations always override general ones.
+                                    </p>
+                                </div>
+                                <Button type="button" variant="secondary" size="sm" onClick={loadPosts} disabled={loadingPosts}>
+                                    {loadingPosts ? 'Loading…' : (showPostPicker ? 'Refresh posts' : 'Pick posts')}
+                                </Button>
+                            </div>
+                            {postsError && <p className="mt-2 text-xs text-red-500">{postsError}</p>}
+                            {!showPostPicker && form.media_ids.length > 0 && (
+                                <p className="mt-1 text-xs text-neutral-600 dark:text-neutral-400">{form.media_ids.length} post(s) selected — click “Refresh posts” to change.</p>
+                            )}
+                            {showPostPicker && (
+                                <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6">
+                                    {posts.map((p) => {
+                                        const selected = form.media_ids.includes(p.id);
+                                        return (
+                                            <button
+                                                key={p.id}
+                                                type="button"
+                                                onClick={() => togglePost(p.id)}
+                                                className={`relative overflow-hidden rounded-lg border-2 transition ${selected ? 'border-brand-500 ring-2 ring-brand-500/30' : 'border-transparent hover:border-neutral-300'}`}
+                                            >
+                                                {p.thumbnail ? (
+                                                    <img src={p.thumbnail} alt="" className="h-20 w-full object-cover" />
+                                                ) : (
+                                                    <div className="flex h-20 items-center justify-center bg-neutral-100 text-[10px] text-neutral-400 dark:bg-neutral-800">no image</div>
+                                                )}
+                                                <span className="absolute left-1 top-1 rounded bg-black/60 px-1 text-[10px] font-medium text-white">{p.type || 'POST'}</span>
+                                                {selected && (
+                                                    <span className="absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-brand-500 text-[10px] font-bold text-white">✓</span>
+                                                )}
+                                                <p className="truncate px-1 py-0.5 text-[10px] text-neutral-500 dark:text-neutral-400">{p.caption || p.id}</p>
+                                            </button>
+                                        );
+                                    })}
+                                    {posts.length === 0 && !loadingPosts && (
+                                        <p className="col-span-full py-2 text-xs text-neutral-500 dark:text-neutral-400">No posts returned — the account may have no posts yet.</p>
+                                    )}
+                                </div>
+                            )}
                         </div>
                     </div>
                 </Card>

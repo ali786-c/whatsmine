@@ -10,6 +10,8 @@ return new class extends Migration
     {
         Schema::create('instagram_accounts', function (Blueprint $table): void {
             $table->id();
+            // Match the core tables' workspace_id shape (no FK on purpose — the
+            // module must survive independently).
             $table->unsignedBigInteger('workspace_id')->index();
             $table->string('ig_user_id')->index(); // IG professional account id (webhook entry.id)
             $table->string('username')->nullable();

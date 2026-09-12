@@ -89,6 +89,43 @@ class InstagramGraphClient
         ]);
     }
 
+    /**
+     * Recent posts/reels of the account — powers the automation builder's
+     * post picker (per-post scoping via comment webhook media.id).
+     *
+     * @return array<int, array<string, mixed>>
+     *
+     * @throws InstagramGraphException
+     */
+    public function getRecentMedia(InstagramAccount $account, int $limit = 12): array
+    {
+        $url = "https://graph.facebook.com/{$this->apiVersion()}/{$account->ig_user_id}/media";
+
+        try {
+            $res = Http::withToken($account->page_token)
+                ->acceptJson()
+                ->timeout(30)
+                ->get($url, [
+                    'fields' => 'id,caption,media_product_type,media_url,thumbnail_url,permalink,timestamp',
+                    'limit' => min(25, max(1, $limit)),
+                ]);
+        } catch (\Throwable $e) {
+            throw new InstagramGraphException('Network error talking to Graph: '.$e->getMessage(), httpStatus: 0);
+        }
+
+        if (! $res->successful()) {
+            $error = (array) $res->json('error', []);
+
+            throw new InstagramGraphException(
+                message: (string) ($error['message'] ?? $res->body()),
+                graphErrorCode: isset($error['code']) ? (int) $error['code'] : null,
+                httpStatus: $res->status(),
+            );
+        }
+
+        return (array) $res->json('data', []);
+    }
+
     /** App-level subscription for the `instagram` object — includes `comments` (unlike the Inbox module's registration). */
     public function registerAppSubscription(string $appId, string $appSecret, string $verifyToken, string $callbackUrl): void
     {

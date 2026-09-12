@@ -12,6 +12,7 @@ Route::delete('/setup/{instagramAccount}', [ConnectController::class, 'disconnec
 
 Route::get('/automations', [AutomationController::class, 'index'])->name('automations.index');
 Route::get('/automations/create', [AutomationController::class, 'create'])->name('automations.create');
+Route::get('/automations/recent-posts', [AutomationController::class, 'recentPosts'])->name('automations.recent-posts');
 Route::get('/automations/{automation}/edit', [AutomationController::class, 'edit'])->name('automations.edit');
 Route::post('/automations', [AutomationController::class, 'store'])->name('automations.store');
 Route::put('/automations/{automation}', [AutomationController::class, 'update'])->name('automations.update');

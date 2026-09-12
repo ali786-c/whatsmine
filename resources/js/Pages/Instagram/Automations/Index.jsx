@@ -88,6 +88,10 @@ export default function InstagramAutomationsIndex({ automations = [], accountsCo
                                         </div>
                                         <p className="mt-0.5 text-xs text-neutral-500 dark:text-neutral-400">
                                             @{automation.account?.username ?? '—'} ·{' '}
+                                            {automation.media_ids?.length
+                                                ? `on ${automation.media_ids.length} specific post${automation.media_ids.length === 1 ? '' : 's'}`
+                                                : 'all posts'}
+                                            {' · '}
                                             {automation.trigger_type === 'keyword'
                                                 ? `${TRIGGER_LABELS.keyword}: ${(automation.keywords ?? []).join(', ')} (${automation.match_mode})`
                                                 : TRIGGER_LABELS[automation.trigger_type] ?? automation.trigger_type}

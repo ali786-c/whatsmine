@@ -12,7 +12,12 @@ use Illuminate\Support\Facades\RateLimiter;
 /**
  * Single gateway for sending the ONE private reply Meta allows per comment.
  * Guards: participant stage, 7-day window, per-account send rate limit.
- * Never throws into the queue worker — failures are logged and classified.
+ *
+ * Throw/no-throw contract: transient failures (throttling, 5xx, network) are
+ * RE-THROWN so the queue retries with backoff — the participant stays in
+ * "commented" and the send is resumed via a duplicate webhook delivery or the
+ * timeout job's stranded-send sweep. Permanent 4xx rejections are swallowed
+ * and returned as ok=false (retrying can never succeed).
  */
 class PrivateReplyService
 {
@@ -52,7 +57,11 @@ class PrivateReplyService
         if (! $this->acquireSendSlot($account)) {
             $log(CommentAutomationLog::ACTION_RATE_LIMITED, ['error' => 'per-account send rate limit reached']);
 
-            return ['ok' => false, 'message_id' => null, 'error' => 'rate_limited'];
+            // Throwing (code 4 = Graph throttling) makes the queue retry with
+            // backoff; the participant stays in "commented" and the crash-resume
+            // path re-attempts the send. Returning ok=false here would strand the
+            // funnel forever — no duplicate webhook arrives to resume it.
+            throw new InstagramGraphException('Per-account send rate limit reached', graphErrorCode: 4, httpStatus: 429);
         }
 
         try {
@@ -84,6 +93,14 @@ class PrivateReplyService
                 'retryable' => $e->shouldRetry(),
                 'error' => $e->getMessage(),
             ]);
+
+            // Transient failures (5xx, throttling) must propagate so the queue
+            // retries with backoff — the participant stays in "commented" and the
+            // one-reply budget is untouched. Permanent 4xx validation errors are
+            // swallowed here; they would fail identically on every retry.
+            if ($e->shouldRetry()) {
+                throw $e;
+            }
 
             return ['ok' => false, 'message_id' => null, 'error' => $e->getMessage()];
         }

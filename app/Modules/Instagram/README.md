@@ -20,7 +20,7 @@ A **fully separate** module (`App\Modules\Instagram`) that automates the comment
 ## Meta hard limits (all enforced in code + DB)
 
 1. **ONE private reply per comment** — `funnel_participants.comment_id` is a DB unique key *and* the participant stage guard blocks a second send. Everything (hook, follow ask, delivery when no gate) is embedded in that single message.
-2. **7-day private-reply window** — `expires_at = comment time + 7 days`, checked before every send; the scheduled `CheckFunnelTimeoutsJob` expires stale participants.
+2. **7-day private-reply window** — `expires_at = comment time + 7 days`, checked before every send; the scheduled `CheckFunnelTimeoutsJob` expires stale participants **and self-heals stranded sends** (participants whose queue retries ran out while Meta was down get one more attempt per sweep, oldest-expiring first).
 3. **Follow-ups only after the user replies, within 24h** — `dm_thread_opened_at` records when the participant's reply arrives; the state machine refuses sends outside the window and closes stale threads.
 4. The reply lands in the commenter's **Inbox** (if they follow the account) or **Request** folder (if not) — Instagram decides; no follower-status API is needed or used.
 

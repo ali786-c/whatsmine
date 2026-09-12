@@ -123,7 +123,7 @@ class InboxMirrorService
         // using the same page token. Fall back to a channel-less conversation.
         $channelAccountId = ChannelAccount::where('workspace_id', $workspaceId)
             ->where('channel', 'instagram')
-            ->where(function ($q) use ($igsid, $participant) {
+            ->where(function ($q) use ($participant) {
                 $q->whereJsonContains('meta_json->instagram_page_id', $participant->account->ig_user_id)
                     ->orWhereJsonContains('meta_json->instagram_account_id', $participant->account->ig_user_id);
             })
