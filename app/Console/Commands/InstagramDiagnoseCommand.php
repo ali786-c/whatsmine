@@ -100,7 +100,7 @@ class InstagramDiagnoseCommand extends Command
                 $moduleRouteExists = \Illuminate\Support\Facades\Route::has('webhooks.instagram.receive');
                 $expectedCallback = rtrim(url($moduleRouteExists ? '/webhooks/instagram' : '/webhooks/meta'), '/').'/';
                 $storedCallback = (string) ($subscription['callback_url'] ?? '');
-                $storedFields = (array) ($subscription['fields'] ?? []);
+                $storedFields = MetaWebhookRegistrar::normalizeFields($subscription['fields'] ?? []);
 
                 if (! str_starts_with($storedCallback, $expectedCallback)) {
                     $this->line("$bad Callback DRIFT: Meta points at \"$storedCallback\" but this app serves \"$expectedCallback{token}\".");

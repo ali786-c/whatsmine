@@ -42,7 +42,7 @@ class InstagramRegisterWebhookCommand extends Command
 
         $this->info('Instagram subscription confirmed at Meta:');
         $this->line('  callback_url: '.($subscription['callback_url'] ?? '(none)'));
-        $this->line('  fields:       '.implode(', ', (array) ($subscription['fields'] ?? [])));
+        $this->line('  fields:       '.implode(', ', MetaWebhookRegistrar::normalizeFields($subscription['fields'] ?? [])));
 
         $this->reSubscribePages();
 

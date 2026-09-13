@@ -154,6 +154,32 @@ class MetaWebhookRegistrar
     }
 
     /**
+     * Normalize the `fields` list from Meta's subscription responses.
+     * The app-level GET /{app_id}/subscriptions endpoint returns fields as a
+     * list of OBJECTS ({name, version}); tolerate plain strings too.
+     *
+     * @param  mixed  $raw
+     * @return array<int, string>
+     */
+    public static function normalizeFields(mixed $raw): array
+    {
+        $fields = [];
+
+        foreach ((array) $raw as $field) {
+            if (is_array($field)) {
+                $name = $field['name'] ?? null;
+                if (is_string($name) && $name !== '') {
+                    $fields[] = $name;
+                }
+            } elseif (is_string($field) && $field !== '') {
+                $fields[] = $field;
+            }
+        }
+
+        return $fields;
+    }
+
+    /**
      * Log the stored instagram subscription and WARN when it has drifted from
      * the expected callback/fields (drift = one feature silently disabled).
      */
@@ -175,7 +201,7 @@ class MetaWebhookRegistrar
             return;
         }
 
-        $storedFields = (array) ($subscription['fields'] ?? []);
+        $storedFields = self::normalizeFields($subscription['fields'] ?? []);
         sort($storedFields);
         sort($expectedFields);
 
