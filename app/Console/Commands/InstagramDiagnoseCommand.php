@@ -6,7 +6,6 @@ use App\Modules\Shared\Models\ChannelAccount;
 use App\Modules\Shared\Services\MetaWebhookRegistrar;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Redis;
 
 /**
@@ -264,21 +263,23 @@ class InstagramDiagnoseCommand extends Command
         }
 
         // ------------------------------------------------------------------
-        // 7. End-to-end dispatch test: can this app actually enqueue a DM job?
+        // 7. Job class self-test (dependency-free — PHPUnit is absent on prod)
         // ------------------------------------------------------------------
         $this->line('');
-        $this->line("--- Dispatch self-test ---");
+        $this->line('--- Job self-test ---');
 
         try {
-            Queue::fake();
-            \App\Modules\Instagram\Jobs\ProcessInstagramDmJob::dispatch('diagnose-test', [
-                'sender' => ['id' => 'diagnose-test-sender'],
-                'message' => ['mid' => 'diagnose-test-mid', 'text' => 'instagram:diagnose self-test'],
-            ])->onQueue($queue);
-            Queue::assertPushedOn($queue, \App\Modules\Instagram\Jobs\ProcessInstagramDmJob::class);
-            $this->line("$ok ProcessInstagramDmJob dispatches onto \"$queue\" as expected.");
+            $jobClass = \App\Modules\Instagram\Jobs\ProcessInstagramDmJob::class;
+            $ref = new \ReflectionClass($jobClass);
+
+            if (! $ref->implementsInterface(\Illuminate\Contracts\Queue\ShouldQueue::class)) {
+                throw new \RuntimeException($jobClass.' does not implement ShouldQueue');
+            }
+
+            $this->line("$ok $jobClass is loadable and queueable — it rides the \"$queue\" queue.");
+            $this->line('       Confirm a worker serves it:  ps aux | grep queue:work');
         } catch (\Throwable $e) {
-            $this->line("$bad Dispatch self-test failed: ".$e->getMessage());
+            $this->line("$bad Job self-test failed: ".$e->getMessage());
             $hasFailure = true;
         }
 
