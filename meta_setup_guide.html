@@ -92,8 +92,9 @@
 
 <!-- FLOW -->
 <div class="step">
-  <div class="step-head"><div class="step-num" style="background:linear-gradient(135deg,#06b6d4,#3b82f6)">ℹ️</div><h2>Yeh System Kaise Kaam Karta Hai</h2><span class="time">1 min</span></div>
+  <div class="step-head"><div class="step-num" style="background:linear-gradient(135deg,#06b6d4,#3b82f6)">ℹ️</div><h2>Yeh System Kaise Kaam Karta Hai</h2><span class="time">2 min</span></div>
   <div class="step-body">
+    <div class="sub"><h3>💬 Comment → DM Funnel (comment automation)</h3>
     <div class="diagram"><pre>Customer comments "price" on your reel
         │
         ▼
@@ -107,7 +108,16 @@ Bot EK private-reply DM bhejta hai
 Customer follow kare + "DONE" reply kare ──► 24h window OPEN
         │
         ▼
-Bot delivery bhejta hai (link / file / text)</pre></div>
+Bot delivery bhejta hai (link / file / text)</pre></div></div>
+    <div class="sub"><h3>📥 DM → Inbox Pipeline (Inbox feature — same webhook)</h3>
+    <div class="diagram"><pre>Customer DM bhejta hai
+        │
+        ▼
+Meta ──► /webhooks/instagram/{token} ──► "instagram" queue
+        │
+        ├── Funnel participant? ──► funnel handle + Inbox mirror
+        └── Normal DM? ──► Inbox conversation (contact + message)
+                              └── Agent reply Inbox se jati hai</pre></div></div>
     <div class="note ok"><div class="ic">✅</div><div><b>App ID / App Secret WhatsApp wale hi hain — SAME.</b> Sirf Config ID alag banani hai. Naya Meta app banane ki zaroorat NAHI.</div></div>
   </div>
 </div>
@@ -200,9 +210,11 @@ php artisan config:cache
 php artisan route:cache
 php artisan view:cache
 php artisan cache:clear
+php artisan queue:restart
 
 sudo systemctl restart php8.2-fpm 2>/dev/null || sudo systemctl restart php-fpm</pre><button class="copy">Copy</button></div>
-    <p class="muted">npm / composer / migrate nahi karna — sab already done hai, built assets repo mein commit hain.</p>
+    <div class="note danger"><div class="ic">🔥</div><div><b><code class="inline">queue:restart</code> har pull ke baad ZAROORI hai</b> — queue workers purana code memory mein rakhte hain; restart ke baghair naya code kabhi serve nahi hoga. (Workers supervisor se khud dobara start ho jate hain.)</div></div>
+    <p class="muted">npm / composer nahi karna — sab already done hai, built assets repo mein commit hain. Agar naye code ke saath <b>nayi migrations</b> aayen ho (release notes mein likha hoga) to sirf tab: <code class="inline">php artisan migrate --force</code></p>
     <label class="chk"><input type="checkbox" data-k="s31"><span>Pull + caches + php-fpm restart ho gaya</span></label>
   </div>
 </div>
@@ -218,6 +230,10 @@ sudo systemctl restart php8.2-fpm 2>/dev/null || sudo systemctl restart php-fpm<
       <p><code class="inline">command=</code> line aisi honi chahiye:</p>
       <div class="cmd"><pre>command=php /www/wwwroot/wa.careerinpak.com/artisan queue:work --queue=instagram,default --tries=3 --timeout=60 --sleep=3</pre><button class="copy">Copy</button></div>
       <div class="cmd"><pre>sudo supervisorctl reread && sudo supervisorctl update && sudo supervisorctl restart all</pre><button class="copy">Copy</button></div>
+      <p class="muted">Verify karo ke worker sach mein instagram queue pe chal raha hai:</p>
+      <div class="cmd"><pre>ps aux | grep queue:work
+sudo supervisorctl status</pre><button class="copy">Copy</button></div>
+      <p class="muted">Output mein <code class="inline">--queue=instagram</code> dikhna chahiye — sirf <code class="inline">default</code> dikh raha ho to conf abhi purani hai.</p>
       <div class="note danger"><div class="ic">🔥</div><div><b>Iske bina funnel kaam NAHI karega</b> — webhook aayega magar jobs queue mein pending rahenge.</div></div>
       <label class="chk"><input type="checkbox" data-k="s41"><span>Worker mein instagram queue add + restart</span></label>
     </div>
@@ -267,6 +283,7 @@ curl "https://wa.careerinpak.com/webhooks/instagram/VERIFY_TOKEN?hub.mode=subscr
       <tr><td><b>Enabled</b></td><td>✅ ON → Save</td></tr>
     </table>
     <div class="note ok"><div class="ic">💡</div><div><b>Per-post rule:</b> specific posts wali automation hamesha account-wide automation ko override karti hai apne posts pe.</div></div>
+    <div class="note warn"><div class="ic">⏱️</div><div><b>Meta ke rules (system khud enforce karta hai):</b> 1 comment = 1 DM · private reply sirf 7 din ke andar · follow-up sirf customer ke reply ke baad <b>24h tak</b> · keyword na match ho to max <b>1 nudge</b> (<code class="inline">INSTAGRAM_MAX_NUDGES</code> se control hota hai).</div></div>
     <label class="chk"><input type="checkbox" data-k="s61"><span>Automation banayi + enabled</span></label>
   </div>
 </div>
@@ -325,6 +342,56 @@ php artisan instagram:diagnose</pre><button class="copy">Copy</button></div>
   </div>
 </div>
 
+<!-- STEP 9 — LOGS & ENV -->
+<div class="step">
+  <div class="step-head"><div class="step-num" style="background:linear-gradient(135deg,#0d9488,#14b8a6)">9</div><h2>Logs &amp; Settings Reference (Deep Debugging)</h2><span class="time">reference</span></div>
+  <div class="step-body">
+
+    <div class="sub"><h3><span class="n">9.1</span> Dedicated Log Files — kahan kya likha jata hai</h3>
+      <p class="muted">Instagram module ka apna log folder hai — har concern ki alag file, daily rotate. Master file mein sab kuch aata hai:</p>
+      <div class="cmd"><pre>cd /www/wwwroot/wa.careerinpak.com/storage/logs/instagram
+ls -la
+tail -f instagram.log        # master — sab kuch
+tail -f webhook.log          # raw webhook receive, signature fails, dispatch
+tail -f dm.log               # inbound DMs, funnel forward, Inbox forward
+tail -f comment.log          # comments received / matched / ignored
+tail -f send.log             # private replies + nudges (Graph results)
+tail -f delivery.log         # lead deliveries (link/file/text)
+tail -f funnel.log           # stage transitions (participant lifecycle)
+tail -f mirror.log           # Inbox mirroring outcomes
+tail -f connect.log          # OAuth connect, webhook registration
+tail -f timeout.log          # 7d / 24h sweeps</pre><button class="copy">Copy</button></div>
+      <p class="muted">General app log: <code class="inline">tail -f storage/logs/laravel.log | grep -i instagram</code></p>
+      <label class="chk"><input type="checkbox" data-k="s91"><span>Log folder ki files dekh li</span></label>
+    </div>
+
+    <div class="sub"><h3><span class="n">9.2</span> .env Settings (INSTAGRAM_*)</h3>
+      <table>
+        <tr><th>Variable</th><th>Default</th><th>Kya karta hai</th></tr>
+        <tr><td><code class="inline">INSTAGRAM_ENABLED</code></td><td>true</td><td>Master switch — false = module dormant (no routes/webhooks/scheduler)</td></tr>
+        <tr><td><code class="inline">INSTAGRAM_MIRROR_TO_INBOX</code></td><td>true</td><td>Funnel DM threads Inbox mein mirror hongi ya nahi</td></tr>
+        <tr><td><code class="inline">INSTAGRAM_QUEUE</code></td><td>instagram</td><td>Module jobs ka queue — <b>is naam ka worker hona ZAROORI hai</b> (Step 4.1)</td></tr>
+        <tr><td><code class="inline">INSTAGRAM_SENDS_PER_MINUTE</code></td><td>30</td><td>Per-account rate limit (self-protection)</td></tr>
+        <tr><td><code class="inline">INSTAGRAM_MAX_NUDGES</code></td><td>1</td><td>Keyword na match hone par kitne polite reminders</td></tr>
+        <tr><td><code class="inline">INSTAGRAM_GRAPH_VERSION</code></td><td>v20.0</td><td>Graph API version</td></tr>
+      </table>
+      <p class="muted">Badalne ke baad: <code class="inline">php artisan config:cache && php artisan queue:restart</code></p>
+      <label class="chk"><input type="checkbox" data-k="s92"><span>Env settings samajh li / adjust ki</span></label>
+    </div>
+
+    <div class="sub"><h3><span class="n">9.3</span> Ops Cheat-Sheet — roz kaam ke commands</h3>
+      <div class="cmd"><pre>php artisan instagram:diagnose            # full pipeline health check
+cd /www/wwwroot/wa.careerinpak.com && git pull   # update code
+php artisan queue:restart                 # har pull ke baad
+sudo supervisorctl status                 # workers zinda hain?
+tail -f storage/logs/instagram/instagram.log    # live activity
+docker compose -f docker-compose.yml -f docker-compose.queues.yml up -d   # docker workers</pre><button class="copy">Copy</button></div>
+      <label class="chk"><input type="checkbox" data-k="s93"><span>Cheat-sheet bookmark kar liya</span></label>
+    </div>
+
+  </div>
+</div>
+
 <!-- TROUBLESHOOT -->
 <div class="step">
   <div class="step-head"><div class="step-num" style="background:linear-gradient(135deg,#64748b,#94a3b8)">🛠️</div><h2>Kuch Na Ho To — Troubleshooting</h2><span class="time"></span></div>
@@ -358,7 +425,7 @@ php artisan instagram:diagnose</pre><button class="copy">Copy</button></div>
 </div>
 
 <p style="text-align:center;color:var(--muted);font-size:.8rem;margin-top:30px">
-  Instagram Comment Automation · wa.careerinpak.com · Guide version 1.1 · Sep 2026
+  Instagram Comment Automation · wa.careerinpak.com · Guide version 1.2 · Sep 2026
 </p>
 
 </div>
