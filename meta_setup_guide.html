@@ -179,7 +179,7 @@ https://wa.careerinpak.com/app/inbox/setup</pre><button class="copy">Copy</butto
       <tr><th>Field</th><th>Kya dalna hai</th></tr>
       <tr><td><b>App ID</b></td><td>Already hoga (WhatsApp ka) — <b>mat chhedo</b> ✋</td></tr>
       <tr><td><b>App Secret</b></td><td>Already hoga — <b>mat chhedo</b> ✋</td></tr>
-      <tr><td><b>Webhook Verify Token</b></td><td>Already hoga — <b>mat chhedo</b> ✋</td></tr>
+      <tr><td><b>Webhook Verify Token</b></td><td>Khali ho to khud banao: <code class="inline">openssl rand -hex 16</code> → paste → Save. <b>WhatsApp safe hai</b> — uska token code khud banata hai (app_id+secret ka hash), is field se taluq nahi</td></tr>
       <tr><td><b>Config ID (Instagram/Messenger)</b></td><td>🆕 <b>YEH NAYA DALNA</b> — Step 1.2 wala Config ID</td></tr>
       <tr><td><b>Enabled toggle</b></td><td>ON hona chahiye (meta_app row)</td></tr>
     </table>
@@ -286,6 +286,45 @@ curl "https://wa.careerinpak.com/webhooks/instagram/VERIFY_TOKEN?hub.mode=subscr
   </div>
 </div>
 
+<!-- STEP 8 — DM REPAIR -->
+<div class="step">
+  <div class="step-head"><div class="step-num" style="background:linear-gradient(135deg,#dc2626,#f97316)">8</div><h2>DMs Inbox Mein Nahi Aa Rahi? — Diagnose + Repair</h2><span class="time">~5 min</span></div>
+  <div class="step-body">
+    <p class="muted">Instagram connected hai lekin customer DMs Inbox mein show nahi ho rahi? Yeh 4-step repair flow chalao. Yeh sab <b>WhatsApp ko bilkul touch nahi karta</b>.</p>
+
+    <div class="sub"><h3><span class="n">8.1</span> Diagnosis Chalao</h3>
+      <div class="cmd"><pre>cd /www/wwwroot/wa.careerinpak.com && git pull
+php artisan instagram:diagnose</pre><button class="copy">Copy</button></div>
+      <p class="muted">Har line [ OK ] / [ !! ] / [FAIL] batati hai — <b>pehla FAIL</b> hi wo jagah hai jahan DM atak rahi hai. Subscription, page token, channel account, queue backlog, funnel participants — sab ek saath check hota hai.</p>
+      <label class="chk"><input type="checkbox" data-k="s81"><span>instagram:diagnose chala ke output parha</span></label>
+    </div>
+
+    <div class="sub"><h3><span class="n">8.2</span> FAIL: verify_token / NO subscription</h3>
+      <p>Verify token <b>Meta se nahi milta</b> — tera apna secret hai. VPS pe banao:</p>
+      <div class="cmd"><pre>openssl rand -hex 16</pre><button class="copy">Copy</button></div>
+      <p>Admin → Integrations → Meta App → <b>Webhook Verify Token</b> mein paste → Save. Phir webhook register karo (<b>reconnect ki zaroorat NAHI</b>):</p>
+      <div class="cmd"><pre>php artisan instagram:register-webhook && php artisan instagram:diagnose</pre><button class="copy">Copy</button></div>
+      <div class="note ok"><div class="ic">✅</div><div><b>WhatsApp 100% safe:</b> WhatsApp ka verify token code khud banata hai (app_id+app_secret ka SHA-256 hash) — is field se koi taluq nahi. Register command sirf <code class="inline">instagram</code> webhook object ko touch karta hai; WhatsApp object (<code class="inline">whatsapp_business_account</code>) alag cheez hai.</div></div>
+      <label class="chk"><input type="checkbox" data-k="s82"><span>verify_token bhara + register-webhook OK</span></label>
+    </div>
+
+    <div class="sub"><h3><span class="n">8.3</span> FAIL: page token expired / (#200) pages_messaging</h3>
+      <ol class="plain">
+        <li>developers.facebook.com → app → <b>Facebook Login for Business → Configurations</b> → Social config kholo</li>
+        <li>Permissions mein <code class="inline">pages_messaging</code> add karo (initial config mein nahi hoti thi) → <b>Save</b></li>
+        <li>Client panel → <b>Inbox → Setup → Connect Instagram</b> → dobara connect. Naya token <code class="inline">pages_messaging</code> ke saath aayega — <b>automations delete nahi hote</b>, sirf token refresh hota hai</li>
+      </ol>
+      <label class="chk"><input type="checkbox" data-k="s83"><span>pages_messaging add + dobara connect</span></label>
+    </div>
+
+    <div class="sub"><h3><span class="n">8.4</span> Aakhri Test</h3>
+      <div class="cmd"><pre>curl "https://wa.careerinpak.com/webhooks/instagram/APNA_TOKEN?hub.mode=subscribe&hub.verify_token=APNA_TOKEN&hub.challenge=hello"</pre><button class="copy">Copy</button></div>
+      <p class="muted">Response <code class="inline">hello</code> hona chahiye (APNA_TOKEN = admin panel wala). Phir <b>doosre IG account se DM bhejo</b> — 30 sec mein Inbox mein aa jani chahiye. Na aaye to <code class="inline">instagram:diagnose</code> dobara chalao aur pehli FAIL line dekho.</p>
+      <label class="chk"><input type="checkbox" data-k="s84"><span>Test DM Inbox mein aa gayi 🎉</span></label>
+    </div>
+  </div>
+</div>
+
 <!-- TROUBLESHOOT -->
 <div class="step">
   <div class="step-head"><div class="step-num" style="background:linear-gradient(135deg,#64748b,#94a3b8)">🛠️</div><h2>Kuch Na Ho To — Troubleshooting</h2><span class="time"></span></div>
@@ -298,7 +337,10 @@ curl "https://wa.careerinpak.com/webhooks/instagram/VERIFY_TOKEN?hub.mode=subscr
       <tr><td>Permission error in logs</td><td>Step 1.2 ki 5 permissions config mein missing hain</td></tr>
       <tr><td>Token error</td><td>Setup page se account <b>disconnect → reconnect</b></td></tr>
       <tr><td>Connect button pe Meta credentials error</td><td>Admin → Meta App: App ID/Secret bhare hain + <b>enabled toggle ON</b>?</td></tr>
-      <tr><td>DM Inbox mein nahi dikh rahi</td><td>Messenger product + Connected Tools enable karo (Inbox DMs ke liye chahiye)</td></tr>
+      <tr><td>DM Inbox mein nahi dikh rahi</td><td><b>Step 8 chalao</b> (repair flow) — diagnose + register-webhook. Saath hi Messenger product + Connected Tools enable hona chahiye (Inbox DMs ke liye)</td></tr>
+      <tr><td>diagnose: <b>NO instagram webhook subscription</b></td><td>verify_token khali hai — Step 8.2: token banao, admin panel mein daalo, <code class="inline">instagram:register-webhook</code> chalao</td></tr>
+      <tr><td>register: <b>(#200) pages_messaging permission is needed</b></td><td>Social config mein <code class="inline">pages_messaging</code> add karo, phir account dobara connect — Step 8.3</td></tr>
+      <tr><td>diagnose: <b>Could not read page subscribed_apps (token expired)</b></td><td>Channels → Connect Instagram dobara — naya token aayega, automations safe rehte hain</td></tr>
       <tr><td>Meta popup: <b>"Can't Load URL"</b> (domain not in app's domains)</td><td>App Domains mein <code class="inline">wa.careerinpak.com</code> ho + Valid OAuth Redirect URIs mein <b>exact URI with /setup</b> ho (Step 1.3)</td></tr>
       <tr><td>Meta popup: <b>"URL blocked"</b> (redirect URI not white-listed)</td><td>Jis button se connect kar rahe ho uski URI missing hai — Step 1.3 ki <b>dono</b> URIs add karo (instagram/setup + inbox/setup)</td></tr>
       <tr><td>Inbox se connect karte waqt error</td><td><code class="inline">/app/inbox/setup</code> URI whitelist mein nahi — Step 1.3 dekho</td></tr>
@@ -316,7 +358,7 @@ curl "https://wa.careerinpak.com/webhooks/instagram/VERIFY_TOKEN?hub.mode=subscr
 </div>
 
 <p style="text-align:center;color:var(--muted);font-size:.8rem;margin-top:30px">
-  Instagram Comment Automation · wa.careerinpak.com · Guide version 1.0 · Sep 2026
+  Instagram Comment Automation · wa.careerinpak.com · Guide version 1.1 · Sep 2026
 </p>
 
 </div>
