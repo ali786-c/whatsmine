@@ -209,10 +209,20 @@ class CommentFunnelService
             return false; // echoes / reads / deliveries are not replies
         }
 
-        $participant = FunnelParticipant::where('commenter_igsid', $senderId)
-            ->where('stage', FunnelParticipant::STAGE_AWAITING_FOLLOW)
-            ->orderByDesc('created_at')
-            ->first();
+        // entry.id is the Instagram account the DM was sent TO — scope the lookup
+        // to it. Instagram-scoped IDs are per-account, so matching on the IGSID
+        // alone could hijack the DM of one account for another account's funnel
+        // (e.g. the same person comments/DMs two connected accounts and the newest
+        // awaiting_follow participant silently swallows the message).
+        $accountId = InstagramAccount::where('ig_user_id', $entryId)->value('id');
+
+        $participant = $accountId === null
+            ? null
+            : FunnelParticipant::where('commenter_igsid', $senderId)
+                ->where('instagram_account_id', $accountId)
+                ->where('stage', FunnelParticipant::STAGE_AWAITING_FOLLOW)
+                ->orderByDesc('created_at')
+                ->first();
 
         if (! $participant) {
             InstagramLog::dm('info', 'DM reply is not a funnel thread — forwarded to Inbox pipeline', ['entry_id' => $entryId, 'sender_id' => $senderId]);

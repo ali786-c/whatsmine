@@ -50,6 +50,15 @@ services:
     deploy:
       replicas: 2
 
+  # Instagram comment-automation module jobs (private replies, DM forwarding
+  # into the Inbox, funnel timeouts). Without this worker, inbound Instagram
+  # DMs and comments sit in Redis forever and never reach the Inbox.
+  queue-instagram:
+    <<: *queue-defaults
+    command: php artisan queue:work redis --queue=instagram --sleep=2 --tries=3 --max-time=3600
+    deploy:
+      replicas: 1
+
   queue-leads:
     <<: *queue-defaults
     command: php artisan queue:work redis --queue=leads --sleep=5 --tries=2 --max-time=1800

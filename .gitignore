@@ -9,6 +9,9 @@
 .env
 .env.backup
 .env.production
+.env.testing
+database/testing.sqlite
+database/testing.sqlite-journal
 .phpactor.json
 .phpunit.result.cache
 Homestead.json

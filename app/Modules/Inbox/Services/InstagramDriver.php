@@ -158,12 +158,25 @@ class InstagramDriver implements ChannelDriverInterface
             foreach ($events as $event) {
                 try {
                     if (! isset($event['message'])) {
-                        Log::info('Instagram webhook: non-message event skipped', [
-                            'entry_id' => $entryId,
-                            'keys' => array_keys($event),
-                        ]);
+                        // Structured postbacks (Get Started button, persistent menu
+                        // taps) arrive without a `message` object. Normalize them
+                        // into the message shape so they land in the thread as a
+                        // customer message — previously they were skipped entirely
+                        // and never reached the Inbox.
+                        $normalized = isset($event['postback'])
+                            ? $this->normalizePostbackToMessage($event)
+                            : null;
 
-                        continue;
+                        if ($normalized === null) {
+                            Log::info('Instagram webhook: non-message event skipped', [
+                                'entry_id' => $entryId,
+                                'keys' => array_keys($event),
+                            ]);
+
+                            continue;
+                        }
+
+                        $event = $normalized;
                     }
 
                     $isEcho = (bool) ($event['message']['is_echo'] ?? false);
@@ -197,6 +210,36 @@ class InstagramDriver implements ChannelDriverInterface
         Log::info('Instagram webhook: done', ['processed_count' => count($processed)]);
 
         return $processed;
+    }
+
+    /**
+     * Normalize a postback event into the message shape the rest of the pipeline
+     * understands. Postbacks (Get Started, persistent menu taps) carry no
+     * `message` object; their `title` becomes the message body. Returns null
+     * when the event carries neither a title nor a payload worth recording.
+     *
+     * @param  array<string, mixed>  $event
+     * @return array<string, mixed>|null
+     */
+    private function normalizePostbackToMessage(array $event): ?array
+    {
+        $title = trim((string) ($event['postback']['title'] ?? ''));
+        $payloadRef = (string) ($event['postback']['payload'] ?? '');
+
+        if ($title === '' && $payloadRef === '') {
+            return null;
+        }
+
+        $event['message'] = array_filter([
+            'mid' => $event['postback']['mid'] ?? null,
+            'text' => $title !== '' ? $title : 'Postback: '.$payloadRef,
+            'postback' => array_filter([
+                'title' => $title ?: null,
+                'payload' => $payloadRef ?: null,
+            ]),
+        ]);
+
+        return $event;
     }
 
     public function verifyCreds(): bool

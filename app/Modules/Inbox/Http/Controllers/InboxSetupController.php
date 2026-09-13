@@ -603,6 +603,16 @@ class InboxSetupController extends Controller
                 'status'   => $check->status(),
                 'response' => $check->json(),
             ]);
+
+            // A page without the `messages` field never delivers inbound IG DMs —
+            // make that state impossible to miss in the logs.
+            $fields = collect((array) $check->json('data.0.subscribed_fields', []));
+            if ($check->successful() && $fields->isNotEmpty() && ! $fields->contains('messages')) {
+                Log::warning('Instagram embedded signup: page subscription is MISSING the messages field — inbound Instagram DMs will never arrive', [
+                    'page_id'            => $pageId,
+                    'subscribed_fields'  => $fields->values()->all(),
+                ]);
+            }
         } catch (\Throwable $e) {
             Log::warning('Instagram embedded signup: page subscription exception', [
                 'page_id' => $pageId,

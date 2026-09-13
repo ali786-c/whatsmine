@@ -53,8 +53,11 @@ class ProcessInstagramDmJob implements ShouldQueue
 
     private function forwardToInbox(): void
     {
+        // Class guard: the module must run standalone when the Inbox module is
+        // absent (shared-hosting builds strip it). In full builds this never
+        // triggers — any forwarding failure is caught and logged below instead.
         if (! class_exists(InstagramDriver::class)) {
-            InstagramLog::dm('info', 'Inbox driver unavailable — DM event logged only', [
+            InstagramLog::dm('warning', 'Inbox driver unavailable — DM event logged only', [
                 'entry_id' => $this->entryId,
             ]);
 

@@ -94,18 +94,107 @@ class MetaWebhookRegistrar
                 'fields' => $fields,
             ]);
 
-            // Read back what Meta actually stored so drift is visible in logs.
-            $check = Http::get("https://graph.facebook.com/v20.0/{$appId}/subscriptions", [
-                'access_token' => $appId.'|'.$appSecret,
-            ]);
-            Log::info('meta_webhook_registrar: app subscriptions snapshot', [
-                'status' => $check->status(),
-                'response' => $check->json(),
-            ]);
+            // Read back what Meta actually stored so drift is visible in logs
+            // AND fixed the next time any connect flow runs.
+            self::auditInstagramObject();
         } catch (\Throwable $e) {
             Log::warning('meta_webhook_registrar: instagram object registration exception', [
                 'callback_url' => $callbackUrl,
                 'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    /**
+     * Verify the app-level `instagram` subscription matches what this registrar
+     * enforces. Returns the subscription Meta actually has (or null when the
+     * object is not subscribed at all — a common silent killer of ALL inbound
+     * DMs/comments). Call after connecting an account or from diagnostics.
+     *
+     * @return array<string, mixed>|null
+     */
+    public static function verifyInstagramObject(): ?array
+    {
+        $meta = CredentialResolver::system()->meta();
+        $appId = $meta?->appId();
+        $appSecret = $meta?->appSecret();
+
+        if (! $appId || ! $appSecret) {
+            return null;
+        }
+
+        try {
+            $check = Http::get("https://graph.facebook.com/v20.0/{$appId}/subscriptions", [
+                'access_token' => $appId.'|'.$appSecret,
+            ]);
+
+            if (! $check->successful()) {
+                Log::warning('meta_webhook_registrar: subscriptions read failed', [
+                    'status' => $check->status(),
+                    'response' => $check->json(),
+                ]);
+
+                return null;
+            }
+
+            foreach ((array) $check->json('data', []) as $subscription) {
+                if (($subscription['object'] ?? '') === 'instagram') {
+                    return (array) $subscription;
+                }
+            }
+
+            return null; // object not subscribed at all
+        } catch (\Throwable $e) {
+            Log::warning('meta_webhook_registrar: subscriptions read exception', [
+                'error' => $e->getMessage(),
+            ]);
+
+            return null;
+        }
+    }
+
+    /**
+     * Log the stored instagram subscription and WARN when it has drifted from
+     * the expected callback/fields (drift = one feature silently disabled).
+     */
+    public static function auditInstagramObject(): void
+    {
+        $moduleRouteExists = Route::has('webhooks.instagram.receive');
+        $expectedCallback = rtrim(url($moduleRouteExists ? '/webhooks/instagram' : '/webhooks/meta'), '/').'/';
+        $expectedFields = $moduleRouteExists
+            ? explode(',', self::INSTAGRAM_FIELDS)
+            : explode(',', self::INBOX_ONLY_FIELDS);
+
+        $subscription = self::verifyInstagramObject();
+
+        if ($subscription === null) {
+            Log::warning('meta_webhook_registrar: NO instagram subscription exists on the app — DMs and comments will never arrive', [
+                'expected_callback_prefix' => $expectedCallback,
+            ]);
+
+            return;
+        }
+
+        $storedFields = (array) ($subscription['fields'] ?? []);
+        sort($storedFields);
+        sort($expectedFields);
+
+        $callbackDrifted = ! str_starts_with((string) ($subscription['callback_url'] ?? ''), $expectedCallback);
+        $fieldsDrifted = $storedFields !== $expectedFields;
+
+        Log::info('meta_webhook_registrar: app subscriptions snapshot', [
+            'callback_url' => $subscription['callback_url'] ?? null,
+            'fields' => $storedFields,
+            'callback_matches' => ! $callbackDrifted,
+            'fields_match' => ! $fieldsDrifted,
+        ]);
+
+        if ($callbackDrifted || $fieldsDrifted) {
+            Log::warning('meta_webhook_registrar: instagram subscription DRIFTED — inbound Instagram events are impaired', [
+                'stored_callback' => $subscription['callback_url'] ?? null,
+                'stored_fields' => $storedFields,
+                'expected_callback_prefix' => $expectedCallback,
+                'expected_fields' => $expectedFields,
             ]);
         }
     }
