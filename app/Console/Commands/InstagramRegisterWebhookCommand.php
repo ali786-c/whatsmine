@@ -91,8 +91,16 @@ class InstagramRegisterWebhookCommand extends Command
                     ]);
 
                 if (! $res->successful()) {
-                    $this->line("  [FAIL] $label page $pageId: ".($res->json('error.message') ?? $res->body()));
-                    $this->line('         Token expired? Reconnect the Instagram account from Channels → Connect Instagram.');
+                    $msg = (string) ($res->json('error.message') ?? $res->body());
+                    $this->line("  [FAIL] $label page $pageId: ".$msg);
+
+                    if (str_contains($msg, 'pages_messaging')) {
+                        $this->line('         Root cause: the stored page token has NO `pages_messaging` permission (error #200).');
+                        $this->line('         Fix: add `pages_messaging` to the Social config in Facebook Login for Business → Configurations,');
+                        $this->line('              then reconnect the account (Channels → Connect Instagram) and re-run this command.');
+                    } else {
+                        $this->line('         Token expired? Reconnect the Instagram account from Channels → Connect Instagram.');
+                    }
 
                     continue;
                 }

@@ -22,6 +22,8 @@ use Illuminate\Support\Facades\Redis;
  */
 class InstagramDiagnoseCommand extends Command
 {
+    private ?string $lastGraphError = null;
+
     protected $signature = 'instagram:diagnose
                             {--workspace= : Workspace id to check (default: all workspaces)}';
 
@@ -159,13 +161,23 @@ class InstagramDiagnoseCommand extends Command
             $pageToken = (string) ($account->credentials['access_token'] ?? '');
             if ($pageToken !== '' && $appId !== null) {
                 $tokenByPageId[$igId] = $pageToken;
+
+                // Token-level diagnosis FIRST — it explains every page-level
+                // failure below (missing scopes / expiry).
+                if ($appSecret !== null) {
+                    $hasFailure = $this->checkStoredPageToken($pageToken, $appId, $appSecret) || $hasFailure;
+                }
+
                 $pageId = (string) ($account->meta_json['facebook_page_id'] ?? '');
 
                 if ($pageId !== '') {
                     $subscribed = $this->pageSubscribedFields($pageId, $pageToken);
 
                     if ($subscribed === null) {
-                        $this->line("$warn Could not read page $pageId subscribed_apps (token may be expired) — check connect logs.");
+                        $reason = $this->lastGraphError !== null
+                            ? ' — Graph says: '.$this->lastGraphError
+                            : ' (token may be expired) — check connect logs';
+                        $this->line("$warn Could not read page $pageId subscribed_apps$reason.");
                     } elseif (! in_array('messages', $subscribed, true)) {
                         $this->line("$bad Facebook page $pageId is NOT subscribed to `messages` — Meta never delivers this account's DMs.");
                         $this->line('       Fix: reconnect the account so subscribePageToInstagram() runs again.');
@@ -314,12 +326,16 @@ class InstagramDiagnoseCommand extends Command
      */
     private function pageSubscribedFields(string $pageId, string $pageToken): ?array
     {
+        $this->lastGraphError = null;
+
         try {
             $res = \Illuminate\Support\Facades\Http::withToken($pageToken)
                 ->timeout(15)
                 ->get("https://graph.facebook.com/v20.0/{$pageId}/subscribed_apps");
 
             if (! $res->successful()) {
+                $this->lastGraphError = (string) ($res->json('error.message') ?? ('HTTP '.$res->status()));
+
                 return null;
             }
 
@@ -329,5 +345,80 @@ class InstagramDiagnoseCommand extends Command
         } catch (\Throwable) {
             return null;
         }
+    }
+
+    /**
+     * Inspect the stored page token LIVE via /debug_token: validity, expiry
+     * and — critically — whether `pages_messaging` is granted. Meta requires
+     * that permission before a page can subscribe to `messages`, and its
+     * absence is the #1 cause of "connected, but no DMs ever arrive"
+     * (Graph error #200 on /subscribed_apps).
+     */
+    private function checkStoredPageToken(string $pageToken, string $appId, string $appSecret): bool
+    {
+        $ok = '[ OK ]';
+        $warn = '[ !! ]';
+        $bad = '[FAIL]';
+
+        try {
+            $res = \Illuminate\Support\Facades\Http::timeout(15)
+                ->get('https://graph.facebook.com/v20.0/debug_token', [
+                    'input_token' => $pageToken,
+                    'access_token' => $appId.'|'.$appSecret,
+                ]);
+        } catch (\Throwable) {
+            $this->line("$warn Could not inspect the stored page token (/debug_token unreachable).");
+
+            return false;
+        }
+
+        if (! $res->successful()) {
+            $this->line("$warn Could not inspect the stored page token (/debug_token: HTTP ".$res->status().').');
+
+            return false;
+        }
+
+        $data = $res->json('data');
+
+        if (! is_array($data)) {
+            $this->line("$warn /debug_token returned an unexpected shape — cannot inspect token scopes.");
+
+            return false;
+        }
+
+        $failed = false;
+        $scopes = array_values(array_map('strval', (array) ($data['scopes'] ?? [])));
+        $expiresAt = (int) ($data['expires_at'] ?? 0);
+        $expiryText = $expiresAt === 0 ? 'never expires' : 'expires '.date('Y-m-d H:i', $expiresAt);
+
+        if (($data['is_valid'] ?? false) !== true) {
+            $this->line("$bad Stored page token is INVALID at Meta (is_valid=false) — every page-level call fails with it.");
+            $this->line('       Fix: reconnect the account — Channels → Connect Instagram.');
+            $failed = true;
+        } elseif ($expiresAt !== 0 && $expiresAt < time()) {
+            $this->line("$bad Stored page token EXPIRED ($expiryText) — every page-level call fails with it.");
+            $this->line('       Fix: reconnect the account — Channels → Connect Instagram.');
+            $failed = true;
+        } else {
+            $this->line("$ok Stored page token is valid ($expiryText).");
+        }
+
+        if (in_array('pages_messaging', $scopes, true)) {
+            $this->line("$ok Token scope: pages_messaging granted.");
+        } else {
+            $this->line("$bad Token scope MISSING: pages_messaging — Meta refuses to subscribe the page to `messages` (error #200).");
+            $this->line('       Fix: 1) developers.facebook.com → your app → Facebook Login for Business → Configurations →');
+            $this->line('             Social config → add `pages_messaging` → Save.');
+            $this->line('          2) Reconnect the account: Channels → Connect Instagram (the new token picks it up automatically).');
+            $failed = true;
+        }
+
+        foreach (['instagram_manage_messages', 'pages_manage_metadata'] as $needed) {
+            if (! in_array($needed, $scopes, true)) {
+                $this->line("$warn Token scope also missing: $needed — sending DMs / page subscribe will fail even after `pages_messaging` is added.");
+            }
+        }
+
+        return $failed;
     }
 }
