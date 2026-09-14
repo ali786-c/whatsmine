@@ -176,7 +176,15 @@ class ContactService
 
         // Store the external URL directly (lightweight — no download needed for display)
         if ($contact->avatar !== $url) {
-            $contact->update(['avatar' => $url]);
+            try {
+                $contact->update(['avatar' => $url]);
+            } catch (\Throwable) {
+                // An avatar must never be able to break the message pipeline it is
+                // attached to (a truncation here once aborted inbound Instagram DMs
+                // with SQLSTATE[22001]). Fall back to downloading and storing the
+                // image locally; if even that fails, silently skip — cosmetic only.
+                $this->downloadAndStoreAvatar($contact, $url);
+            }
         }
     }
 
