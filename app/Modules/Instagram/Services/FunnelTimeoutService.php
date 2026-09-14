@@ -44,6 +44,18 @@ class FunnelTimeoutService
             ->get();
 
         foreach ($stuck as $participant) {
+            if ($participant->automation_id !== null && ! $participant->automation) {
+                // The rule was deleted mid-flight — nothing was (or can be)
+                // delivered. Close the participant instead of falsely marking
+                // the lead as delivered.
+                $participant->forceFill(['stage' => FunnelParticipant::STAGE_CLOSED, 'closed_at' => now()])->save();
+                InstagramLog::timeout('info', 'closed participant stuck in dm_sent — automation deleted', [
+                    'participant_id' => $participant->id,
+                ]);
+
+                continue;
+            }
+
             $gated = $participant->automation?->follow_gate ?? false;
             $participant->forceFill($gated
                 ? ['stage' => FunnelParticipant::STAGE_AWAITING_FOLLOW]

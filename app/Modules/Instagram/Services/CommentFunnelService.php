@@ -235,9 +235,12 @@ class CommentFunnelService
 
         if (! $automation) {
             // The rule that created this funnel was deleted mid-flight — close the
-            // participant instead of looping on a null delivery forever.
+            // participant instead of looping on a null delivery forever. The user's
+            // message must still reach a human: mirror it onto the Inbox thread
+            // instead of silently swallowing it.
             $participant->forceFill(['stage' => FunnelParticipant::STAGE_CLOSED, 'closed_at' => now()])->save();
             $this->log($account, null, $participant->comment_id, CommentAutomationLog::ACTION_SKIPPED, $event, $participant, 'automation deleted while participant awaiting follow');
+            $this->mirror->mirrorInbound($participant, $text, $mid ? (string) $mid : null, $event);
 
             return true;
         }
@@ -249,19 +252,29 @@ class CommentFunnelService
             $participant->forceFill(['dm_thread_opened_at' => now()])->save();
             InstagramLog::dm('info', '24h follow-up window OPENED by participant reply', ['participant_id' => $participant->id, 'comment_id' => $participant->comment_id, 'username' => $participant->username]);
         } elseif (! $participant->followUpWindowOpen()) {
+            // The funnel is over — but Meta opens a FRESH 24h window for every user
+            // message, so this reply is from a live customer. Swallowing it strands
+            // them forever: close the funnel AND mirror the message onto the Inbox
+            // thread so a human agent can answer (Meta permits agent sends for the
+            // next 24h from this user message).
             $participant->forceFill(['stage' => FunnelParticipant::STAGE_CLOSED, 'closed_at' => now()])->save();
             $this->log($account, $automation, $participant->comment_id, CommentAutomationLog::ACTION_CLOSED, $event, $participant, '24h follow-up window elapsed');
-            InstagramLog::dm('warning', 'participant closed — 24h follow-up window elapsed', ['participant_id' => $participant->id, 'comment_id' => $participant->comment_id]);
+            InstagramLog::dm('warning', 'participant closed — 24h follow-up window elapsed (reply mirrored to Inbox for agent handoff)', ['participant_id' => $participant->id, 'comment_id' => $participant->comment_id]);
+            $this->mirror->mirrorInbound($participant, $text, $mid ? (string) $mid : null, $event);
 
             return true;
         }
 
         $this->mirror->mirrorInbound($participant, $text, $mid ? (string) $mid : null, $event);
 
-        $keyword = trim((string) ($automation?->reply_keyword ?? ''));
-        $keywordMatched = $keyword !== '' && KeywordMatcher::matches([$keyword], 'contains', $text);
+        // Gated automations without an explicit keyword tell the user "reply DONE"
+        // in the private reply — the matcher must expect exactly that default.
+        // Treating an empty keyword as match-anything made ANY reply ("hello",
+        // "thanks") trigger the delivery, contradicting the instructions sent.
+        $keyword = trim((string) ($automation?->reply_keyword ?? '')) ?: 'DONE';
+        $keywordMatched = KeywordMatcher::matches([$keyword], 'contains', $text);
 
-        if ($keyword === '' || $keywordMatched) {
+        if ($keywordMatched) {
             $delivery = (array) ($automation?->delivery ?? []);
             InstagramLog::dm('info', 'reply received — triggering delivery', ['participant_id' => $participant->id, 'text' => mb_substr($text, 0, 120), 'keyword_matched' => $keywordMatched, 'delivery_type' => $delivery['type'] ?? 'text']);
             $this->deliveries->deliver($participant, $delivery);
@@ -350,7 +363,9 @@ class CommentFunnelService
         $text = (string) $automation->reply_message;
 
         if ($automation->follow_gate) {
-            $keyword = trim((string) ($automation->reply_keyword ?? 'DONE'));
+            // Same default the reply matcher uses — an empty stored keyword must
+            // not render as "reply with  and I'll send it over!".
+            $keyword = trim((string) ($automation->reply_keyword ?? '')) ?: 'DONE';
             $ask = trim((string) ($automation->follow_prompt_message ?? ''))
                 ?: "Make sure you're following us, then reply with {$keyword} and I'll send it over!";
 
