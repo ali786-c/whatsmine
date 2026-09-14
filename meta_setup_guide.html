@@ -478,8 +478,39 @@ sudo supervisorctl status</pre><button class="copy">Copy</button></div>
   </div>
 </div>
 
+<!-- CHANGELOG -->
+<div class="step">
+  <div class="step-head"><div class="step-num" style="background:linear-gradient(135deg,#7c3aed,#a855f7)">📋</div><h2>Changelog — Issues Jo Mile Aur Kaise Fix Huwe</h2><span class="time">Sep 13–14, 2026</span></div>
+  <div class="step-body">
+    <p class="muted">Jab pehli dafa Instagram connect hua tha, DMs Inbox mein nahi aa rahi thi. Deep investigation mein 9 alag issues mile — ye unka poora record hai, order mein jaise unhe pakda gaya:</p>
+    <table>
+      <tr><th>#</th><th>Symptom</th><th>Asal Wajah (Root Cause)</th><th>Fix</th></tr>
+      <tr><td>1</td><td>DMs bilkul nahi aati — <code class="inline">diagnose: NO instagram webhook subscription</code></td><td><code class="inline">verify_token</code> admin panel mein khali tha — Meta ke paas subscription <b>bani hi nahi</b>, events bhejta hi nahi tha</td><td><code class="inline">openssl rand -hex 16</code> → Admin → Meta App → Webhook Verify Token → <code class="inline">instagram:register-webhook</code> (Step 8.2)</td></tr>
+      <tr><td>2</td><td>Page subscribe fail: <code class="inline">(#200) pages_messaging permission is needed</code></td><td>Social config mein sirf 5 permissions thi — <code class="inline">pages_messaging</code> + <code class="inline">pages_manage_metadata</code> missing; token unke baghair bana</td><td>Config mein dono permissions add (ab 7 hain) → account <b>reconnect</b> (Step 8.3)</td></tr>
+      <tr><td>3</td><td>DM sirf manual <code class="inline">queue:work</code> ke baad aati hai</td><td>Supervisor worker ke <code class="inline">--queue=</code> list mein <code class="inline">instagram</code> tha hi nahi — jobs queue mein pari rehti hain</td><td>Existing worker command ke shuru mein <code class="inline">instagram,</code> add (order = priority) — Step 10</td></tr>
+      <tr><td>4</td><td>Job DONE lekin Inbox khali — log mein <code class="inline">SQLSTATE[22001]: Data too long for column 'avatar'</code></td><td>Instagram avatar URL ~700 chars ka hai, <code class="inline">contacts.avatar</code> varchar(512) — SQL error ne poora message transaction uda diya (chhupa hua killer 🐛)</td><td>Column <b>TEXT</b> (migration) + <code class="inline">syncAvatarFromUrl</code> ab non-fatal (local-download fallback) — commit <code class="inline">df938c9</code></td></tr>
+      <tr><td>5</td><td>Do connected accounts: ek ka DM doosre ke funnel mein kho jata</td><td><code class="inline">handleDmReply</code> participant ko sirf commenter IGSID se dhoondta tha — account scoping nahi thi</td><td>Lookup ab webhook ke entry.id se scoped hai — <code class="inline">CommentFunnelService</code></td></tr>
+      <tr><td>6</td><td>Get Started / button taps Inbox mein kabhi nahi aate</td><td>Inbox driver <code class="inline">message</code> key ke baghair event skip kar deta tha (postbacks drop)</td><td>Postbacks ab message shape mein normalize ho kar thread mein aate hain — <code class="inline">InstagramDriver</code></td></tr>
+      <tr><td>7</td><td>Webhook registration chupchap toot sakta tha (drift ka koi signal nahi)</td><td>Register hone ke baad Meta pe callback/fields verify nahi hoti thi</td><td>Registrar ab live verify + drift audit karta hai — clear warnings logs mein</td></tr>
+      <tr><td>8</td><td><code class="inline">instagram:register-webhook</code> crash: <code class="inline">Array to string conversion</code></td><td>Meta fields ko objects ki shakal mein bhejta hai, plain strings nahi</td><td><code class="inline">MetaWebhookRegistrar::normalizeFields()</code> dono shapes handle karta hai</td></tr>
+      <tr><td>9</td><td>Tinker multi-line paste: <code class="inline">Parse error</code></td><td>Shell <code class="inline">$</code> escaping multi-line paste mein toot jati hai</td><td>Single-line commands use karo; token-scope check ab <code class="inline">instagram:diagnose</code> ke andar hai (tinker ki zaroorat hi nahi)</td></tr>
+    </table>
+
+    <div class="sub"><h3>🧰 Is Session Mein Banaye Gaye Naye Tools</h3>
+      <table>
+        <tr><th>Command</th><th>Kya karta hai</th></tr>
+        <tr><td><code class="inline">php artisan instagram:diagnose</code></td><td>Full pipeline health check — Meta subscription, token scopes, page subscription, queue backlog, funnel state — aur <b>pehli tooti hui jagah + exact fix</b> batata hai</td></tr>
+        <tr><td><code class="inline">php artisan instagram:register-webhook</code></td><td>Bina reconnect ke repair — app-level subscription + sab pages re-subscribe (idempotent, jitni baar chalao safe)</td></tr>
+      </table>
+      <p class="muted">Tests: <code class="inline">tests/Feature/Instagram/InstagramInboundDmTest.php</code> — 8 end-to-end tests (server pe: <code class="inline">php artisan test --filter=InstagramInboundDmTest</code>) · Docker: <code class="inline">instagram</code> queue worker ab <code class="inline">docker-compose.queues.yml</code> mein bhi hai.</p>
+    </div>
+
+    <div class="note ok"><div class="ic">✅</div><div><b>Final state (Sep 14):</b> Callback registered at Meta · 4 fields subscribed · token scopes complete · page subscribed to messages · worker permanent (instagram pehle) · avatar bug fixed — <b>end-to-end DM Inbox mein aa rahi hai.</b></div></div>
+  </div>
+</div>
+
 <p style="text-align:center;color:var(--muted);font-size:.8rem;margin-top:30px">
-  Instagram Comment Automation · wa.careerinpak.com · Guide version 1.4 · Sep 2026
+  Instagram Comment Automation · wa.careerinpak.com · Guide version 1.5 · Sep 2026
 </p>
 
 </div>
