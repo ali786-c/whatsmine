@@ -275,6 +275,58 @@ class InstagramDiagnoseCommand extends Command
         }
 
         // ------------------------------------------------------------------
+        // 6.5 Comment-automation readiness — the DM flow above does NOT prove
+        //     these: automation accounts, active rules and the scheduler cron.
+        // ------------------------------------------------------------------
+        if ($moduleInstalled) {
+            $this->line('');
+            $this->line('--- Comment automation readiness ---');
+
+            $accountsTotal = \App\Modules\Instagram\Models\InstagramAccount::count();
+            $accountsActive = \App\Modules\Instagram\Models\InstagramAccount::where('status', 'active')->count();
+
+            if ($accountsActive === 0) {
+                $this->line("$bad No active comment-automation accounts — connect via Instagram → Setup (the Inbox connection alone does not create one).");
+                $hasFailure = true;
+            } else {
+                $this->line("$ok Comment-automation accounts: $accountsActive active / $accountsTotal total.");
+            }
+
+            $automations = \App\Modules\Instagram\Models\CommentAutomation::where('is_active', true)->count();
+
+            if ($accountsActive > 0 && $automations === 0) {
+                $this->line("$warn No active comment automations — comments will be received but NEVER replied to. Create one: Instagram → Automations → New.");
+            } elseif ($automations > 0) {
+                $this->line("$ok Active comment automations: $automations.");
+            }
+
+            // The timeout sweep (7-day/24h windows, stuck private-reply retries)
+            // runs through the scheduler. Without the schedule:run cron the funnel
+            // slowly rots: stranded sends never retry and windows never expire.
+            try {
+                $heartbeat = \Illuminate\Support\Facades\Cache::get(\App\Http\Controllers\Admin\CronSetupController::HEARTBEAT_KEY);
+            } catch (\Throwable) {
+                $heartbeat = null;
+            }
+
+            if ($heartbeat === null) {
+                $this->line("$bad Scheduler has NEVER run — the `* * * * * php artisan schedule:run` cron is missing on this server.");
+                $this->line('       Without it: 7-day/24h windows never expire, stuck private replies never retry, and scheduled');
+                $this->line('       broadcasts/social posts also silently die. Add the cron (Admin → Cron Setup guide).');
+                $hasFailure = true;
+            } else {
+                $ageMin = (int) now()->diffInMinutes(\Illuminate\Support\Carbon::parse($heartbeat));
+
+                if ($ageMin > 10) {
+                    $this->line("$warn Scheduler last ran $ageMin minute(s) ago — the schedule:run cron is missing or intermittent.");
+                    $this->line('       Funnel windows/stranded-send healing depend on it — add the cron (Admin → Cron Setup).');
+                } else {
+                    $this->line("$ok Scheduler running (last heartbeat: $ageMin min ago).");
+                }
+            }
+        }
+
+        // ------------------------------------------------------------------
         // 7. Job class self-test (dependency-free — PHPUnit is absent on prod)
         // ------------------------------------------------------------------
         $this->line('');
