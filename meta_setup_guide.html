@@ -395,6 +395,55 @@ docker compose -f docker-compose.yml -f docker-compose.queues.yml up -d   # dock
   </div>
 </div>
 
+<!-- STEP 10: QUEUE WORKER PERMANENT -->
+<div class="step">
+  <div class="step-head"><div class="step-num" style="background:linear-gradient(135deg,#059669,#10b981)">10</div><h2>DMs Sirf Manual queue:work Pe Aati Hain? — Worker Permanent Karo</h2><span class="time">~10 min</span></div>
+  <div class="step-body">
+
+    <div class="sub"><h3><span class="n">10.1</span> Masla Samjho</h3>
+      <p><code class="inline">php artisan queue:work --stop-when-empty</code> sirf <b>ek dafa</b> queue ki jobs utha kar band ho jata hai — is liye DM tabhi dikhti hai jab tu khud command chalaye. Permanent fix: <b>Supervisor</b> ek daemon chalata hai jo hamesha zinda rehta hai, crash pe khud restart hota hai, aur server reboot ke baad bhi khud start ho jata hai.</p>
+      <div class="note danger"><div class="ic">⚠️</div><div>Har deploy (<code class="inline">git pull</code>) ke baad <code class="inline">php artisan queue:restart</code> bhi chalana — workers purana code <b>memory</b> mein rakhte hain.</div></div>
+    </div>
+
+    <div class="sub"><h3><span class="n">10.2</span> Supervisor Config Banao</h3>
+      <p>Server pe config file kholo:</p>
+      <div class="cmd"><pre>nano /etc/supervisor/conf.d/whatsmine-worker.conf</pre><button class="copy">Copy</button></div>
+      <p>Aur ye paste karo:</p>
+      <div class="cmd"><pre>[program:whatsmine-worker]
+process_name=%(program_name)s_%(process_num)02d
+command=php /www/wwwroot/wa.careerinpak.com/artisan queue:work --queue=instagram,default --sleep=3 --tries=3 --timeout=120 --max-time=3600
+autostart=true
+autorestart=true
+user=www
+numprocs=2
+redirect_stderr=true
+stdout_logfile=/www/wwwroot/wa.careerinpak.com/storage/logs/worker.log
+stopwaitsecs=3600</pre><button class="copy">Copy</button></div>
+      <p class="muted"><code class="inline">--queue=instagram,default</code> — Instagram <b>pehle</b> serve hoti hai (DMs fast aati hain), default uske baad. <code class="inline">numprocs=2</code> = do parallel workers.</p>
+      <div class="note warn"><div class="ic">ℹ️</div><div><b>aaPanel/BaoTa</b> users: App Store → <b>Supervisor</b> plugin install karo → Add daemon → wahi command + numprocs=2 daalo — config file manually banane ki zaroorat nahi.</div></div>
+    </div>
+
+    <div class="sub"><h3><span class="n">10.3</span> Start + Enable (Reboot-proof)</h3>
+      <div class="cmd"><pre>sudo supervisorctl reread
+sudo supervisorctl update
+sudo supervisorctl start all
+sudo supervisorctl status</pre><button class="copy">Copy</button></div>
+      <p><code class="inline">whatsmine-worker:00</code> aur <code class="inline">whatsmine-worker:01</code> <b>RUNNING</b> dikhne chahiye. <code class="inline">autostart=true</code> ki wajah se server reboot ke baad bhi khud chalenge.</p>
+    </div>
+
+    <div class="sub"><h3><span class="n">10.4</span> Verify — Ab Manual Command Ki Zaroorat Nahi</h3>
+      <ol class="plain">
+        <li>Doosre IG account se DM bhejo</li>
+        <li>~30 sec wait — <b>bina kuch chalaye</b> Inbox mein aa jani chahiye</li>
+        <li>Confirm: <code class="inline">php artisan instagram:diagnose</code> → <code class="inline">pending jobs: 0</code> + sab OK</li>
+      </ol>
+      <label class="chk"><input type="checkbox" data-k="s101"><span>Supervisor config banayi + workers start kiye</span></label>
+      <label class="chk"><input type="checkbox" data-k="s104"><span>Test DM bina manual command ke Inbox mein aayi</span></label>
+    </div>
+
+  </div>
+</div>
+
 <!-- TROUBLESHOOT -->
 <div class="step">
   <div class="step-head"><div class="step-num" style="background:linear-gradient(135deg,#64748b,#94a3b8)">🛠️</div><h2>Kuch Na Ho To — Troubleshooting</h2><span class="time"></span></div>
@@ -403,7 +452,8 @@ docker compose -f docker-compose.yml -f docker-compose.queues.yml up -d   # dock
     <table>
       <tr><th>Symptom</th><th>Fix</th></tr>
       <tr><td>Funnel Logs khali + DM nahi gayi</td><td>Webhook registration — koi bhi account <b>dobara connect</b> karo (registrar khud register karega). Step 4.3 wala curl bhi chalao.</td></tr>
-      <tr><td>Job pending pada hai</td><td>Supervisor command mein <code class="inline">instagram</code> queue nahi hai (Step 4.1)</td></tr>
+      <tr><td>DM sirf manual <code class="inline">queue:work</code> ke baad aati hai</td><td>Permanent worker missing — <b>Step 10</b> (Supervisor config + <code class="inline">instagram</code> queue)</td></tr>
+      <tr><td>Job pending pada hai</td><td>Supervisor command mein <code class="inline">instagram</code> queue nahi hai (Step 4.1 / Step 10)</td></tr>
       <tr><td>Permission error in logs</td><td>Step 1.2 ki 7 permissions config mein missing hain</td></tr>
       <tr><td>Token error</td><td>Setup page se account <b>disconnect → reconnect</b></td></tr>
       <tr><td>Connect button pe Meta credentials error</td><td>Admin → Meta App: App ID/Secret bhare hain + <b>enabled toggle ON</b>?</td></tr>
@@ -428,7 +478,7 @@ docker compose -f docker-compose.yml -f docker-compose.queues.yml up -d   # dock
 </div>
 
 <p style="text-align:center;color:var(--muted);font-size:.8rem;margin-top:30px">
-  Instagram Comment Automation · wa.careerinpak.com · Guide version 1.3 · Sep 2026
+  Instagram Comment Automation · wa.careerinpak.com · Guide version 1.4 · Sep 2026
 </p>
 
 </div>
