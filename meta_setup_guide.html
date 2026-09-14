@@ -421,6 +421,7 @@ stdout_logfile=/www/wwwroot/wa.careerinpak.com/storage/logs/worker.log
 stopwaitsecs=3600</pre><button class="copy">Copy</button></div>
       <p class="muted"><code class="inline">--queue=instagram,default</code> — Instagram <b>pehle</b> serve hoti hai (DMs fast aati hain), default uske baad. <code class="inline">numprocs=2</code> = do parallel workers.</p>
       <div class="note warn"><div class="ic">ℹ️</div><div><b>aaPanel/BaoTa</b> users: App Store → <b>Supervisor</b> plugin install karo → Add daemon → wahi command + numprocs=2 daalo — config file manually banane ki zaroorat nahi.</div></div>
+      <div class="note ok"><div class="ic">✅</div><div><b>Pehle se worker chal raha hai?</b> (jaise <code class="inline">--queue=whatsapp,broadcast,automation,social,leads,ai,default</code>) — nayi config mat banao. Bas usi command ke <code class="inline">--queue=</code> ke <b>shuru</b> mein <code class="inline">instagram,</code> laga do (order = priority: Instagram pehle serve hoti hai) aur restart karo.</div></div>
     </div>
 
     <div class="sub"><h3><span class="n">10.3</span> Start + Enable (Reboot-proof)</h3>
