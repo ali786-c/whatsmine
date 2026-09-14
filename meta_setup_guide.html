@@ -139,7 +139,7 @@ Meta ──► /webhooks/instagram/{token} ──► "instagram" queue
       <ol class="plain">
         <li>Left menu → <b>Facebook Login for Business → Configurations → Create Configuration</b></li>
         <li>Name: <code class="inline">Instagram Automation</code></li>
-        <li>Yeh <b>5 permissions</b> add karo:</li>
+        <li>Yeh <b>7 permissions</b> add karo:</li>
       </ol>
       <div class="chips">
         <span class="chip">pages_show_list</span>
@@ -147,7 +147,10 @@ Meta ──► /webhooks/instagram/{token} ──► "instagram" queue
         <span class="chip">instagram_basic</span>
         <span class="chip">instagram_manage_comments</span>
         <span class="chip">instagram_manage_messages</span>
+        <span class="chip">pages_messaging</span>
+        <span class="chip">pages_manage_metadata</span>
       </div>
+      <div class="note warn"><div class="ic">ℹ️</div><div>Aakhri 2 permissions (<code class="inline">pages_messaging</code> + <code class="inline">pages_manage_metadata</code>) <b>bilkul zaroori</b> hain — inke baghair page subscribe nahi hota aur DMs kabhi nahi aati (Graph error #200). v1.3 mein add hui.</div></div>
       <ol class="plain" start="4"><li><b>Save</b> → jo <b>Config ID</b> bane usse copy kar lo 📋</li></ol>
       <div class="note danger"><div class="ic">⚠️</div><div>Yeh Config ID <b>WhatsApp wali config se BILKUL alag</b> honi chahiye. Same di to Instagram login par WhatsApp permissions aayengi aur kaam nahi karega.</div></div>
       <label class="chk"><input type="checkbox" data-k="s12"><span>Social config banayi + Config ID copy ki</span></label>
@@ -328,10 +331,10 @@ php artisan instagram:diagnose</pre><button class="copy">Copy</button></div>
     <div class="sub"><h3><span class="n">8.3</span> FAIL: page token expired / (#200) pages_messaging</h3>
       <ol class="plain">
         <li>developers.facebook.com → app → <b>Facebook Login for Business → Configurations</b> → Social config kholo</li>
-        <li>Permissions mein <code class="inline">pages_messaging</code> add karo (initial config mein nahi hoti thi) → <b>Save</b></li>
-        <li>Client panel → <b>Inbox → Setup → Connect Instagram</b> → dobara connect. Naya token <code class="inline">pages_messaging</code> ke saath aayega — <b>automations delete nahi hote</b>, sirf token refresh hota hai</li>
+        <li>Permissions mein <b>2 permissions</b> add karo: <code class="inline">pages_messaging</code> + <code class="inline">pages_manage_metadata</code> (initial config mein nahi hoti thi) → <b>Save</b></li>
+        <li>Client panel → <b>Inbox → Setup → Connect Instagram</b> → dobara connect. Naya token dono permissions ke saath aayega — <b>automations delete nahi hote</b>, sirf token refresh hota hai</li>
       </ol>
-      <label class="chk"><input type="checkbox" data-k="s83"><span>pages_messaging add + dobara connect</span></label>
+      <label class="chk"><input type="checkbox" data-k="s83"><span>pages_messaging + pages_manage_metadata add + dobara connect</span></label>
     </div>
 
     <div class="sub"><h3><span class="n">8.4</span> Aakhri Test</h3>
@@ -401,12 +404,12 @@ docker compose -f docker-compose.yml -f docker-compose.queues.yml up -d   # dock
       <tr><th>Symptom</th><th>Fix</th></tr>
       <tr><td>Funnel Logs khali + DM nahi gayi</td><td>Webhook registration — koi bhi account <b>dobara connect</b> karo (registrar khud register karega). Step 4.3 wala curl bhi chalao.</td></tr>
       <tr><td>Job pending pada hai</td><td>Supervisor command mein <code class="inline">instagram</code> queue nahi hai (Step 4.1)</td></tr>
-      <tr><td>Permission error in logs</td><td>Step 1.2 ki 5 permissions config mein missing hain</td></tr>
+      <tr><td>Permission error in logs</td><td>Step 1.2 ki 7 permissions config mein missing hain</td></tr>
       <tr><td>Token error</td><td>Setup page se account <b>disconnect → reconnect</b></td></tr>
       <tr><td>Connect button pe Meta credentials error</td><td>Admin → Meta App: App ID/Secret bhare hain + <b>enabled toggle ON</b>?</td></tr>
       <tr><td>DM Inbox mein nahi dikh rahi</td><td><b>Step 8 chalao</b> (repair flow) — diagnose + register-webhook. Saath hi Messenger product + Connected Tools enable hona chahiye (Inbox DMs ke liye)</td></tr>
       <tr><td>diagnose: <b>NO instagram webhook subscription</b></td><td>verify_token khali hai — Step 8.2: token banao, admin panel mein daalo, <code class="inline">instagram:register-webhook</code> chalao</td></tr>
-      <tr><td>register: <b>(#200) pages_messaging permission is needed</b></td><td>Social config mein <code class="inline">pages_messaging</code> add karo, phir account dobara connect — Step 8.3</td></tr>
+      <tr><td>register: <b>(#200) pages_messaging / pages_manage_metadata permission is needed</b></td><td>Social config mein <code class="inline">pages_messaging</code> + <code class="inline">pages_manage_metadata</code> add karo, phir account dobara connect — Step 8.3</td></tr>
       <tr><td>diagnose: <b>Could not read page subscribed_apps (token expired)</b></td><td>Channels → Connect Instagram dobara — naya token aayega, automations safe rehte hain</td></tr>
       <tr><td>Meta popup: <b>"Can't Load URL"</b> (domain not in app's domains)</td><td>App Domains mein <code class="inline">wa.careerinpak.com</code> ho + Valid OAuth Redirect URIs mein <b>exact URI with /setup</b> ho (Step 1.3)</td></tr>
       <tr><td>Meta popup: <b>"URL blocked"</b> (redirect URI not white-listed)</td><td>Jis button se connect kar rahe ho uski URI missing hai — Step 1.3 ki <b>dono</b> URIs add karo (instagram/setup + inbox/setup)</td></tr>
@@ -425,7 +428,7 @@ docker compose -f docker-compose.yml -f docker-compose.queues.yml up -d   # dock
 </div>
 
 <p style="text-align:center;color:var(--muted);font-size:.8rem;margin-top:30px">
-  Instagram Comment Automation · wa.careerinpak.com · Guide version 1.2 · Sep 2026
+  Instagram Comment Automation · wa.careerinpak.com · Guide version 1.3 · Sep 2026
 </p>
 
 </div>
