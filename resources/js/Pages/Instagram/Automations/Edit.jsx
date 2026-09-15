@@ -1,11 +1,12 @@
-import { Head, router, usePage } from '@inertiajs/react';
+import { Head, router } from '@inertiajs/react';
 import ClientLayout from '@/Layouts/ClientLayout';
 import Card from '@/Components/ui/Card';
 import Button from '@/Components/ui/Button';
 import Input from '@/Components/ui/Input';
 import Select from '@/Components/ui/Select';
 import Toggle from '@/Components/ui/Toggle';
-import { MessageCircle } from 'lucide-react';
+import Checkbox from '@/Components/ui/Checkbox';
+import { MessageCircle, ChevronLeft, ChevronRight, Settings2, AlertCircle } from 'lucide-react';
 import { useState } from 'react';
 import axios from 'axios';
 
@@ -26,11 +27,61 @@ const EMPTY = {
     priority: 100,
 };
 
+const STEPS = [
+    { title: 'When it runs', short: 'Trigger' },
+    { title: 'What you send', short: 'Message' },
+    { title: 'How they get it', short: 'Delivery' },
+];
+
+const TRIGGER_CHOICES = [
+    { value: 'all_comments', label: 'Every comment', hint: 'Anyone who comments gets the DM — best for giveaways and drops.' },
+    { value: 'keyword', label: 'Comments with keywords', hint: 'Only comments containing one of your words, e.g. "price" or "link".' },
+    { value: 'mention_only', label: 'Comments mentioning a friend', hint: 'Only when the commenter tags someone (@friend) — grows your reach.' },
+];
+
+const DELIVERY_CHOICES = [
+    { value: 'link', label: 'A link', hint: 'Send them a URL — product page, Google Drive, anything public.' },
+    { value: 'file', label: 'A file', hint: 'Send a downloadable file from a public URL (PDF, ZIP…).' },
+    { value: 'text', label: 'Just text', hint: 'Send a plain message — coupon code, instructions, anything.' },
+];
+
+function StepControls({ step, maxStep, errors, saving, onBack, onNext }) {
+    const errorTexts = Object.values(errors ?? {});
+    return (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+            {errorTexts.length > 0 ? (
+                <p className="flex items-center gap-1.5 text-sm text-red-500">
+                    <AlertCircle className="h-4 w-4" /> {errorTexts[0]}
+                </p>
+            ) : (
+                <p className="text-sm text-neutral-500 dark:text-neutral-400">
+                    Step {step + 1} of {STEPS.length} — {STEPS[step].title}
+                </p>
+            )}
+            <div className="flex items-center gap-2">
+                {step > 0 && (
+                    <Button type="button" variant="outline" onClick={onBack}>
+                        <ChevronLeft className="h-4 w-4" /> Back
+                    </Button>
+                )}
+                {step < STEPS.length - 1 ? (
+                    <Button type="button" onClick={onNext} disabled={!maxStep}>
+                        Next <ChevronRight className="h-4 w-4" />
+                    </Button>
+                ) : (
+                    <Button type="submit" disabled={!maxStep || saving}>{saving ? 'Saving…' : 'Save automation'}</Button>
+                )}
+            </div>
+        </div>
+    );
+}
+
 export default function InstagramAutomationEdit({ automation = null, accounts = [] }) {
-    const { props } = usePage();
     const editing = Boolean(automation?.id);
     const [form, setForm] = useState(() => {
-        if (!editing) return EMPTY;
+        // `automation` is either an existing record (editing), a template preset
+        // from ?template= (no id — still a create), or null (blank create).
+        if (!automation) return EMPTY;
         // Inertia serializes null JSON columns as null — normalize to the shapes
         // the editor mutates (arrays for chips, object for delivery).
         return {
@@ -44,10 +95,52 @@ export default function InstagramAutomationEdit({ automation = null, accounts = 
     const [keywordInput, setKeywordInput] = useState('');
     const [errors, setErrors] = useState({});
     const [saving, setSaving] = useState(false);
+    const [step, setStep] = useState(0);
+    const [maxStep, setMaxStep] = useState(0);
+    const [showAdvanced, setShowAdvanced] = useState(
+        editing && ((automation.media_ids?.length ?? 0) > 0 || (automation.media_filter?.length ?? 0) > 0 || automation.match_mode !== 'contains'),
+    );
     const [posts, setPosts] = useState([]);
     const [loadingPosts, setLoadingPosts] = useState(false);
     const [postsError, setPostsError] = useState(null);
     const [showPostPicker, setShowPostPicker] = useState(false);
+
+    const set = (key, value) => setForm((f) => ({ ...f, [key]: value }));
+    const setDelivery = (key, value) => setForm((f) => ({ ...f, delivery: { ...f.delivery, [key]: value } }));
+
+    // ---- per-step validation (mirrors backend rules) ----
+    const stepValid = (s, f) => {
+        if (s === 0) {
+            if (!f.instagram_account_id) return 'Choose which Instagram account to run on.';
+            if (!f.name.trim()) return 'Give this automation a name.';
+            if (f.trigger_type === 'keyword' && f.keywords.length === 0) return 'Add at least one keyword.';
+            return null;
+        }
+        if (s === 1) {
+            if (!f.reply_message.trim()) return 'Write the DM message.';
+            if ((f.reply_message ?? '').length > 1000) return 'The DM message is too long (max 1000 characters).';
+            if (f.follow_gate) {
+                if ((f.follow_prompt_message ?? '').length > 500) return 'The follow prompt is too long (max 500 characters).';
+                if ((f.reply_keyword ?? '').trim().length > 64) return 'The keyword is too long (max 64 characters).';
+            }
+            return null;
+        }
+        if (s === 2) {
+            if ((f.delivery.url ?? '').length > 2048) return 'The URL is too long (max 2048 characters).';
+            if ((f.delivery.text ?? '').length > 900) return 'The delivery text is too long (max 900 characters).';
+            if ((f.delivery.filename ?? '').length > 120) return 'The file name is too long (max 120 characters).';
+            return null;
+        }
+        return null;
+    };
+
+    const currentError = stepValid(step, form);
+
+    const goto = (next) => {
+        if (currentError) return;
+        setStep(next);
+        setMaxStep((m) => Math.max(m, next));
+    };
 
     const loadPosts = () => {
         if (!form.instagram_account_id) {
@@ -68,9 +161,6 @@ export default function InstagramAutomationEdit({ automation = null, accounts = 
             ? form.media_ids.filter((x) => x !== id)
             : [...form.media_ids, id]);
     };
-
-    const set = (key, value) => setForm((f) => ({ ...f, [key]: value }));
-    const setDelivery = (key, value) => setForm((f) => ({ ...f, delivery: { ...f.delivery, [key]: value } }));
 
     const addKeyword = () => {
         const k = keywordInput.trim();
@@ -108,52 +198,84 @@ export default function InstagramAutomationEdit({ automation = null, accounts = 
         });
     };
 
+    const triggerLabel = form.trigger_type === 'keyword' && form.keywords.length > 0
+        ? `"${form.keywords.join('", "')}" comments`
+        : TRIGGER_CHOICES.find((t) => t.value === form.trigger_type)?.label?.toLowerCase() ?? 'the trigger';
+
+    const deliveryLabel = form.follow_gate
+        ? `After they reply "${(form.reply_keyword || 'DONE').trim()}" they get ${DELIVERY_CHOICES.find((d) => d.value === form.delivery.type)?.label.toLowerCase() ?? 'the delivery'}`
+        : `${DELIVERY_CHOICES.find((d) => d.value === form.delivery.type)?.label ?? 'Delivery'} goes out inside the first DM`;
+
     return (
         <ClientLayout>
             <Head title={editing ? 'Edit automation' : 'New automation'} />
 
             <form onSubmit={submit} className="space-y-5">
-                <div className="flex items-center justify-between">
-                    <h1 className="text-lg font-semibold">{editing ? 'Edit automation' : 'New automation'}</h1>
-                    <div className="flex items-center gap-2">
+                {/* sticky header with the 3-step progress */}
+                <div className="sticky top-0 z-10 -mx-5 border-b border-neutral-200 bg-white/90 px-5 py-3 backdrop-blur dark:border-neutral-800 dark:bg-neutral-950/90">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                        <h1 className="text-lg font-semibold">{editing ? 'Edit automation' : 'New automation'}</h1>
                         <Button type="button" variant="outline" onClick={() => window.history.back()}>Cancel</Button>
-                        <Button type="submit" disabled={saving}>{saving ? 'Saving…' : 'Save automation'}</Button>
+                    </div>
+                    <div className="mt-3 flex items-center gap-2">
+                        {STEPS.map((s, i) => (
+                            <div key={s.short} className="flex flex-1 flex-col gap-1">
+                                <div className={`h-1.5 rounded-full transition-colors ${i <= step ? 'bg-brand-500' : 'bg-neutral-200 dark:bg-neutral-800'}`} />
+                                <span className={`text-xs font-medium ${i === step ? 'text-brand-600 dark:text-brand-400' : 'text-neutral-400'}`}>
+                                    {i + 1} · {s.short}
+                                </span>
+                            </div>
+                        ))}
                     </div>
                 </div>
 
-                <Card>
-                    <p className="mb-4 text-sm font-semibold">1 · Trigger</p>
-                    <div className="grid gap-4 md:grid-cols-2">
-                        <div>
-                            <label className="mb-1.5 block text-sm font-medium">Instagram account</label>
-                            <Select
-                                value={form.instagram_account_id}
-                                onChange={(e) => set('instagram_account_id', e.target.value)}
-                                options={accounts.map((a) => ({ value: a.id, label: `@${a.username ?? a.ig_user_id}` }))}
-                                placeholder="Select account…"
-                            />
-                            {errors.instagram_account_id && <p className="mt-1 text-xs text-red-500">{errors.instagram_account_id}</p>}
-                        </div>
-                        <div>
-                            <label className="mb-1.5 block text-sm font-medium">Name</label>
-                            <Input value={form.name} onChange={(e) => set('name', e.target.value)} placeholder="Reel drop — send link" />
-                            {errors.name && <p className="mt-1 text-xs text-red-500">{errors.name}</p>}
-                        </div>
-                        <div>
-                            <label className="mb-1.5 block text-sm font-medium">Trigger on</label>
-                            <Select
-                                value={form.trigger_type}
-                                onChange={(e) => set('trigger_type', e.target.value)}
-                                options={[
-                                    { value: 'keyword', label: 'Comments containing keywords' },
-                                    { value: 'all_comments', label: 'All comments' },
-                                    { value: 'mention_only', label: 'Mentions only' },
-                                ]}
-                            />
-                        </div>
-                        {form.trigger_type === 'keyword' && (
+                {/* STEP 1 — trigger */}
+                {step === 0 && (
+                    <Card>
+                        <p className="mb-1 text-sm font-semibold">When should this run?</p>
+                        <p className="mb-4 text-xs text-neutral-500 dark:text-neutral-400">
+                            Pick the account and decide which comments trigger the DM.
+                        </p>
+                        <div className="grid gap-4 md:grid-cols-2">
                             <div>
-                                <label className="mb-1.5 block text-sm font-medium">Keywords</label>
+                                <label className="mb-1.5 block text-sm font-medium">Instagram account</label>
+                                <Select
+                                    value={form.instagram_account_id}
+                                    onChange={(e) => set('instagram_account_id', e.target.value)}
+                                    options={accounts.map((a) => ({ value: a.id, label: `@${a.username ?? a.ig_user_id}` }))}
+                                    placeholder="Select account…"
+                                />
+                                {errors.instagram_account_id && <p className="mt-1 text-xs text-red-500">{errors.instagram_account_id}</p>}
+                            </div>
+                            <div>
+                                <label className="mb-1.5 block text-sm font-medium">Name (just for you)</label>
+                                <Input value={form.name} onChange={(e) => set('name', e.target.value)} placeholder="Reel drop — send link" />
+                                {errors.name && <p className="mt-1 text-xs text-red-500">{errors.name}</p>}
+                            </div>
+                        </div>
+
+                        <p className="mb-2 mt-5 text-sm font-medium">Which comments?</p>
+                        <div className="grid gap-3 md:grid-cols-3">
+                            {TRIGGER_CHOICES.map((choice) => (
+                                <button
+                                    key={choice.value}
+                                    type="button"
+                                    onClick={() => set('trigger_type', choice.value)}
+                                    className={`rounded-xl border-2 p-4 text-left transition ${
+                                        form.trigger_type === choice.value
+                                            ? 'border-brand-500 bg-brand-50 ring-2 ring-brand-500/30 dark:bg-brand-950/40'
+                                            : 'border-neutral-200 hover:border-neutral-300 dark:border-neutral-800 dark:hover:border-neutral-700'
+                                    }`}
+                                >
+                                    <p className="text-sm font-semibold">{choice.label}</p>
+                                    <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">{choice.hint}</p>
+                                </button>
+                            ))}
+                        </div>
+
+                        {form.trigger_type === 'keyword' && (
+                            <div className="mt-4">
+                                <label className="mb-1.5 block text-sm font-medium">Your keywords</label>
                                 <div className="flex gap-2">
                                     <Input
                                         value={keywordInput}
@@ -177,170 +299,241 @@ export default function InstagramAutomationEdit({ automation = null, accounts = 
                                 </div>
                             </div>
                         )}
-                        <div>
-                            <label className="mb-1.5 block text-sm font-medium">Match mode</label>
-                            <Select
-                                value={form.match_mode}
-                                onChange={(e) => set('match_mode', e.target.value)}
-                                options={[
-                                    { value: 'contains', label: 'Contains keyword' },
-                                    { value: 'exact', label: 'Exact match' },
-                                    { value: 'starts_with', label: 'Starts with' },
-                                    { value: 'regex', label: 'Regex (advanced)' },
-                                ]}
-                            />
+
+                        <div className="mt-5 flex flex-wrap items-center gap-2 border-t border-neutral-100 pt-4 dark:border-neutral-800">
+                            <button
+                                type="button"
+                                onClick={() => setShowAdvanced((v) => !v)}
+                                className="inline-flex items-center gap-1.5 text-sm font-medium text-neutral-500 hover:text-neutral-800 dark:text-neutral-400 dark:hover:text-neutral-200"
+                            >
+                                <Settings2 className="h-4 w-4" /> Advanced options
+                                {showAdvanced ? ' ▴' : ' ▾'}
+                            </button>
+                            {form.match_mode !== 'contains' && <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-xs dark:bg-neutral-800">match: {form.match_mode.replaceAll('_', ' ')}</span>}
+                            {form.media_filter.length > 0 && <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-xs dark:bg-neutral-800">{form.media_filter.join(', ').toLowerCase()} only</span>}
+                            {form.media_ids.length > 0 && <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-xs dark:bg-neutral-800">{form.media_ids.length} post(s)</span>}
                         </div>
-                        <div>
-                            <label className="mb-1.5 block text-sm font-medium">Only on media type (optional)</label>
-                            <div className="flex gap-3 text-sm">
-                                {['POST', 'REEL', 'STORY', 'AD'].map((t) => (
-                                    <label key={t} className="flex items-center gap-1.5">
-                                        <input
-                                            type="checkbox"
-                                            checked={form.media_filter.includes(t)}
-                                            onChange={(e) => set('media_filter', e.target.checked ? [...form.media_filter, t] : form.media_filter.filter((x) => x !== t))}
+
+                        {showAdvanced && (
+                            <div className="mt-4 space-y-4 rounded-lg bg-neutral-50 p-4 dark:bg-neutral-800/60">
+                                <div className="grid gap-4 md:grid-cols-2">
+                                    <div>
+                                        <label className="mb-1.5 block text-sm font-medium">How to match keywords</label>
+                                        <Select
+                                            value={form.match_mode}
+                                            onChange={(e) => set('match_mode', e.target.value)}
+                                            options={[
+                                                { value: 'contains', label: 'Contains keyword' },
+                                                { value: 'exact', label: 'Exact match' },
+                                                { value: 'starts_with', label: 'Starts with' },
+                                                { value: 'regex', label: 'Regex (advanced)' },
+                                            ]}
                                         />
-                                        {t.toLowerCase()}
-                                    </label>
-                                ))}
-                            </div>
-                        </div>
-                        <div className="md:col-span-2">
-                            <div className="flex flex-wrap items-center justify-between gap-2">
-                                <div>
-                                    <p className="text-sm font-medium">Limit to specific posts (optional)</p>
-                                    <p className="text-xs text-neutral-500 dark:text-neutral-400">
-                                        Empty = runs on ALL posts. Post-specific automations always override general ones.
-                                    </p>
+                                    </div>
+                                    <div>
+                                        <label className="mb-1.5 block text-sm font-medium">Only on media type (optional)</label>
+                                        <div className="flex gap-3 text-sm">
+                                            {['POST', 'REEL', 'STORY', 'AD'].map((t) => (
+                                                <label key={t} className="flex items-center gap-1.5">
+                                                    <Checkbox
+                                                        checked={form.media_filter.includes(t)}
+                                                        onChange={(e) => set('media_filter', e.target.checked ? [...form.media_filter, t] : form.media_filter.filter((x) => x !== t))}
+                                                    />
+                                                    {t.toLowerCase()}
+                                                </label>
+                                            ))}
+                                        </div>
+                                    </div>
                                 </div>
-                                <Button type="button" variant="secondary" size="sm" onClick={loadPosts} disabled={loadingPosts}>
-                                    {loadingPosts ? 'Loading…' : (showPostPicker ? 'Refresh posts' : 'Pick posts')}
-                                </Button>
-                            </div>
-                            {postsError && <p className="mt-2 text-xs text-red-500">{postsError}</p>}
-                            {!showPostPicker && form.media_ids.length > 0 && (
-                                <p className="mt-1 text-xs text-neutral-600 dark:text-neutral-400">{form.media_ids.length} post(s) selected — click “Refresh posts” to change.</p>
-                            )}
-                            {showPostPicker && (
-                                <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6">
-                                    {posts.map((p) => {
-                                        const selected = form.media_ids.includes(p.id);
-                                        return (
-                                            <button
-                                                key={p.id}
-                                                type="button"
-                                                onClick={() => togglePost(p.id)}
-                                                className={`relative overflow-hidden rounded-lg border-2 transition ${selected ? 'border-brand-500 ring-2 ring-brand-500/30' : 'border-transparent hover:border-neutral-300'}`}
-                                            >
-                                                {p.thumbnail ? (
-                                                    <img src={p.thumbnail} alt="" className="h-20 w-full object-cover" />
-                                                ) : (
-                                                    <div className="flex h-20 items-center justify-center bg-neutral-100 text-[10px] text-neutral-400 dark:bg-neutral-800">no image</div>
-                                                )}
-                                                <span className="absolute left-1 top-1 rounded bg-black/60 px-1 text-[10px] font-medium text-white">{p.type || 'POST'}</span>
-                                                {selected && (
-                                                    <span className="absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-brand-500 text-[10px] font-bold text-white">✓</span>
-                                                )}
-                                                <p className="truncate px-1 py-0.5 text-[10px] text-neutral-500 dark:text-neutral-400">{p.caption || p.id}</p>
-                                            </button>
-                                        );
-                                    })}
-                                    {posts.length === 0 && !loadingPosts && (
-                                        <p className="col-span-full py-2 text-xs text-neutral-500 dark:text-neutral-400">No posts returned — the account may have no posts yet.</p>
+                                <div>
+                                    <div className="flex flex-wrap items-center justify-between gap-2">
+                                        <div>
+                                            <p className="text-sm font-medium">Limit to specific posts (optional)</p>
+                                            <p className="text-xs text-neutral-500 dark:text-neutral-400">
+                                                Empty = runs on ALL posts. Post-specific automations always override general ones.
+                                            </p>
+                                        </div>
+                                        <Button type="button" variant="secondary" size="sm" onClick={loadPosts} disabled={loadingPosts}>
+                                            {loadingPosts ? 'Loading…' : (showPostPicker ? 'Refresh posts' : 'Pick posts')}
+                                        </Button>
+                                    </div>
+                                    {postsError && <p className="mt-2 text-xs text-red-500">{postsError}</p>}
+                                    {!showPostPicker && form.media_ids.length > 0 && (
+                                        <p className="mt-1 text-xs text-neutral-600 dark:text-neutral-400">{form.media_ids.length} post(s) selected — click “Refresh posts” to change.</p>
+                                    )}
+                                    {showPostPicker && (
+                                        <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6">
+                                            {posts.map((p) => {
+                                                const selected = form.media_ids.includes(p.id);
+                                                return (
+                                                    <button
+                                                        key={p.id}
+                                                        type="button"
+                                                        onClick={() => togglePost(p.id)}
+                                                        className={`relative overflow-hidden rounded-lg border-2 transition ${selected ? 'border-brand-500 ring-2 ring-brand-500/30' : 'border-transparent hover:border-neutral-300'}`}
+                                                    >
+                                                        {p.thumbnail ? (
+                                                            <img src={p.thumbnail} alt="" className="h-20 w-full object-cover" />
+                                                        ) : (
+                                                            <div className="flex h-20 items-center justify-center bg-neutral-100 text-[10px] text-neutral-400 dark:bg-neutral-800">no image</div>
+                                                        )}
+                                                        <span className="absolute left-1 top-1 rounded bg-black/60 px-1 text-[10px] font-medium text-white">{p.type || 'POST'}</span>
+                                                        {selected && (
+                                                            <span className="absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-brand-500 text-[10px] font-bold text-white">✓</span>
+                                                        )}
+                                                        <p className="truncate px-1 py-0.5 text-[10px] text-neutral-500 dark:text-neutral-400">{p.caption || p.id}</p>
+                                                    </button>
+                                                );
+                                            })}
+                                            {posts.length === 0 && !loadingPosts && (
+                                                <p className="col-span-full py-2 text-xs text-neutral-500 dark:text-neutral-400">No posts returned — the account may have no posts yet.</p>
+                                            )}
+                                        </div>
                                     )}
                                 </div>
-                            )}
-                        </div>
-                    </div>
-                </Card>
-
-                <Card>
-                    <p className="mb-4 text-sm font-semibold">2 · Private reply DM</p>
-                    <label className="mb-1.5 block text-sm font-medium">Message</label>
-                    <textarea
-                        value={form.reply_message}
-                        onChange={(e) => set('reply_message', e.target.value)}
-                        rows={3}
-                        maxLength={1000}
-                        className="w-full rounded-soft border border-soft border-neutral-200 bg-white px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-900"
-                        placeholder="Thanks for your comment!"
-                    />
-                    <p className="mt-1 text-xs text-neutral-500">Tokens: {'{username}'} — Meta allows only ONE private reply per comment, so everything below is included in this single message.</p>
-                    {errors.reply_message && <p className="mt-1 text-xs text-red-500">{errors.reply_message}</p>}
-
-                    <div className="mt-4 flex items-center justify-between rounded-lg border border-neutral-200 px-4 py-3 dark:border-neutral-800">
-                        <div>
-                            <p className="text-sm font-medium">Follow gate</p>
-                            <p className="text-xs text-neutral-500 dark:text-neutral-400">
-                                Ask them to follow you and reply with a keyword — the delivery is only sent after their reply opens a 24-hour window.
-                            </p>
-                        </div>
-                        <Toggle checked={form.follow_gate} onChange={(v) => set('follow_gate', v)} />
-                    </div>
-
-                    {form.follow_gate && (
-                        <div className="mt-3 grid gap-4 md:grid-cols-2">
-                            <div>
-                                <label className="mb-1.5 block text-sm font-medium">Follow prompt (added to the DM)</label>
-                                <Input
-                                    value={form.follow_prompt_message}
-                                    onChange={(e) => set('follow_prompt_message', e.target.value)}
-                                    placeholder={`Make sure you're following us, then reply with ${form.reply_keyword || 'DONE'}…`}
-                                />
-                            </div>
-                            <div>
-                                <label className="mb-1.5 block text-sm font-medium">Keyword they must reply</label>
-                                <Input value={form.reply_keyword} onChange={(e) => set('reply_keyword', e.target.value)} placeholder="DONE" />
-                            </div>
-                        </div>
-                    )}
-                </Card>
-
-                <Card>
-                    <p className="mb-4 text-sm font-semibold">3 · Delivery {form.follow_gate && '(sent after their reply)'}</p>
-                    <div className="grid gap-4 md:grid-cols-2">
-                        <div>
-                            <label className="mb-1.5 block text-sm font-medium">Type</label>
-                            <Select
-                                value={form.delivery.type}
-                                onChange={(e) => setDelivery('type', e.target.value)}
-                                options={[
-                                    { value: 'link', label: 'Link' },
-                                    { value: 'text', label: 'Text' },
-                                    { value: 'file', label: 'File (public URL)' },
-                                ]}
-                            />
-                        </div>
-                        {(form.delivery.type === 'link' || form.delivery.type === 'file') && (
-                            <div>
-                                <label className="mb-1.5 block text-sm font-medium">URL</label>
-                                <Input value={form.delivery.url} onChange={(e) => setDelivery('url', e.target.value)} placeholder="https://…" />
-                                {errors['delivery.url'] && <p className="mt-1 text-xs text-red-500">{errors['delivery.url']}</p>}
                             </div>
                         )}
-                        {form.delivery.type !== 'text' && (
-                            <div className="md:col-span-2">
-                                <label className="mb-1.5 block text-sm font-medium">Accompanying text (optional)</label>
-                                <Input value={form.delivery.text} onChange={(e) => setDelivery('text', e.target.value)} />
-                            </div>
-                        )}
-                        {form.delivery.type === 'text' && (
-                            <div className="md:col-span-2">
-                                <label className="mb-1.5 block text-sm font-medium">Text</label>
-                                <Input value={form.delivery.text} onChange={(e) => setDelivery('text', e.target.value)} />
-                            </div>
-                        )}
-                    </div>
 
-                    <div className="mt-5 rounded-lg bg-neutral-50 p-4 dark:bg-neutral-800/60">
-                        <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-neutral-500">
-                            <MessageCircle className="h-3.5 w-3.5" /> DM preview
+                        <div className="mt-5">
+                            <StepControls step={step} maxStep={maxStep && !currentError} errors={errors} saving={saving} onBack={() => {}} onNext={() => goto(1)} />
+                        </div>
+                    </Card>
+                )}
+
+                {/* STEP 2 — the DM */}
+                {step === 1 && (
+                    <Card>
+                        <p className="mb-1 text-sm font-semibold">What should the DM say?</p>
+                        <p className="mb-4 text-xs text-neutral-500 dark:text-neutral-400">
+                            Meta allows only ONE private reply per comment — everything goes in this single message.
                         </p>
-                        <div className="max-w-md whitespace-pre-wrap rounded-2xl rounded-bl-sm bg-white px-4 py-2.5 text-sm shadow dark:bg-neutral-900">
-                            {preview || <span className="text-neutral-400">Start typing to see the DM…</span>}
+                        <label className="mb-1.5 block text-sm font-medium">Message</label>
+                        <textarea
+                            value={form.reply_message}
+                            onChange={(e) => set('reply_message', e.target.value)}
+                            rows={3}
+                            maxLength={1000}
+                            className={`w-full rounded-soft border bg-white px-3 py-2 text-sm dark:bg-neutral-900 ${currentError === 'Write the DM message.' ? 'border-red-400' : 'border-neutral-200 dark:border-neutral-700'}`}
+                            placeholder="Thanks for your comment!"
+                        />
+                        <p className="mt-1 text-xs text-neutral-500">Tokens: {'{username}'} — use the commenter&apos;s name in the message.</p>
+                        {errors.reply_message && <p className="mt-1 text-xs text-red-500">{errors.reply_message}</p>}
+
+                        <div className="mt-4 flex items-center justify-between rounded-lg border border-neutral-200 px-4 py-3 dark:border-neutral-800">
+                            <div>
+                                <p className="text-sm font-medium">Ask them to follow you first</p>
+                                <p className="text-xs text-neutral-500 dark:text-neutral-400">
+                                    The DM asks them to follow you and reply with a word like “DONE”. Once they reply, their
+                                    link/file is sent automatically. If this is off, everything is sent in the first DM.
+                                </p>
+                            </div>
+                            <Toggle checked={form.follow_gate} onChange={(v) => set('follow_gate', v)} />
                         </div>
-                    </div>
-                </Card>
+
+                        {form.follow_gate && (
+                            <div className="mt-3 grid gap-4 md:grid-cols-2">
+                                <div>
+                                    <label className="mb-1.5 block text-sm font-medium">Follow ask (added to the DM)</label>
+                                    <Input
+                                        value={form.follow_prompt_message}
+                                        onChange={(e) => set('follow_prompt_message', e.target.value)}
+                                        placeholder={`Make sure you're following us, then reply with ${form.reply_keyword || 'DONE'}…`}
+                                    />
+                                    <p className="mt-1 text-xs text-neutral-500">Leave empty to use the default wording.</p>
+                                </div>
+                                <div>
+                                    <label className="mb-1.5 block text-sm font-medium">The word they must reply</label>
+                                    <Input value={form.reply_keyword} onChange={(e) => set('reply_keyword', e.target.value)} placeholder="DONE" />
+                                    <p className="mt-1 text-xs text-neutral-500">Keep it short and uppercase — e.g. DONE, YES, GO.</p>
+                                </div>
+                            </div>
+                        )}
+
+                        <div className="mt-5 rounded-lg bg-neutral-50 p-4 dark:bg-neutral-800/60">
+                            <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                                <MessageCircle className="h-3.5 w-3.5" /> DM preview
+                            </p>
+                            <div className="max-w-md whitespace-pre-wrap rounded-2xl rounded-bl-sm bg-white px-4 py-2.5 text-sm shadow dark:bg-neutral-900">
+                                {preview || <span className="text-neutral-400">Start typing to see the DM…</span>}
+                            </div>
+                        </div>
+
+                        <div className="mt-5">
+                            <StepControls step={step} maxStep={maxStep && !currentError} errors={errors} saving={saving} onBack={() => setStep(0)} onNext={() => goto(2)} />
+                        </div>
+                    </Card>
+                )}
+
+                {/* STEP 3 — delivery */}
+                {step === 2 && (
+                    <Card>
+                        <p className="mb-1 text-sm font-semibold">What do they receive?</p>
+                        <p className="mb-4 text-xs text-neutral-500 dark:text-neutral-400">
+                            {form.follow_gate
+                                ? `After they reply "${(form.reply_keyword || 'DONE').trim()}", we send this.`
+                                : 'This is included in the first DM.'}
+                        </p>
+                        <div className="grid gap-3 md:grid-cols-3">
+                            {DELIVERY_CHOICES.map((choice) => (
+                                <button
+                                    key={choice.value}
+                                    type="button"
+                                    onClick={() => setDelivery('type', choice.value)}
+                                    className={`rounded-xl border-2 p-4 text-left transition ${
+                                        form.delivery.type === choice.value
+                                            ? 'border-brand-500 bg-brand-50 ring-2 ring-brand-500/30 dark:bg-brand-950/40'
+                                            : 'border-neutral-200 hover:border-neutral-300 dark:border-neutral-800 dark:hover:border-neutral-700'
+                                    }`}
+                                >
+                                    <p className="text-sm font-semibold">{choice.label}</p>
+                                    <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">{choice.hint}</p>
+                                </button>
+                            ))}
+                        </div>
+
+                        <div className="mt-4 grid gap-4 md:grid-cols-2">
+                            {(form.delivery.type === 'link' || form.delivery.type === 'file') && (
+                                <div className="md:col-span-2">
+                                    <label className="mb-1.5 block text-sm font-medium">
+                                        {form.delivery.type === 'file' ? 'File URL (public download link)' : 'Link to send'}
+                                    </label>
+                                    <Input value={form.delivery.url} onChange={(e) => setDelivery('url', e.target.value)} placeholder="https://…" />
+                                    {errors['delivery.url'] && <p className="mt-1 text-xs text-red-500">{errors['delivery.url']}</p>}
+                                </div>
+                            )}
+                            {form.delivery.type === 'file' && (
+                                <div>
+                                    <label className="mb-1.5 block text-sm font-medium">File name (optional)</label>
+                                    <Input value={form.delivery.filename} onChange={(e) => setDelivery('filename', e.target.value)} placeholder="guide.pdf" />
+                                </div>
+                            )}
+                            <div className="md:col-span-2">
+                                <label className="mb-1.5 block text-sm font-medium">
+                                    {form.delivery.type === 'text' ? 'The message' : 'A line to introduce it (optional)'}
+                                </label>
+                                <Input value={form.delivery.text} onChange={(e) => setDelivery('text', e.target.value)} placeholder={form.delivery.type === 'text' ? 'Your coupon code is WELCOME10' : 'Here it is as promised:'} />
+                                {errors['delivery.text'] && <p className="mt-1 text-xs text-red-500">{errors['delivery.text']}</p>}
+                            </div>
+                        </div>
+
+                        <div className="mt-5 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+                            <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                                <MessageCircle className="h-3.5 w-3.5" /> Final DM preview
+                            </p>
+                            <div className="max-w-md whitespace-pre-wrap rounded-2xl rounded-bl-sm bg-white px-4 py-2.5 text-sm shadow dark:bg-neutral-900">
+                                {preview || <span className="text-neutral-400">Start typing to see the DM…</span>}
+                            </div>
+                        </div>
+
+                        <div className="mt-5 rounded-lg bg-neutral-50 p-4 text-sm text-neutral-600 dark:bg-neutral-800/60 dark:text-neutral-400">
+                            <p><span className="font-medium text-neutral-900 dark:text-neutral-100">Ready to save.</span> When {triggerLabel} arrive, the bot DMs the commenter. {deliveryLabel}.</p>
+                        </div>
+
+                        <div className="mt-5">
+                            <StepControls step={step} maxStep={maxStep && !currentError} errors={errors} saving={saving} onBack={() => setStep(1)} onNext={() => {}} />
+                        </div>
+                    </Card>
+                )}
             </form>
         </ClientLayout>
     );

@@ -37,7 +37,48 @@ class AutomationController extends Controller
 
     public function create(Request $request): Response
     {
-        return Inertia::render('Instagram/Automations/Edit', $this->formProps($request));
+        $form = $this->formProps($request);
+
+        // Quick-start templates: expand ?template=link|file into prefilled values.
+        // Everything here is within the same validation rules store() applies,
+        // so the user can save immediately or tweak freely.
+        $templates = [
+            'link' => [
+                'name' => 'Link drop',
+                'trigger_type' => 'keyword',
+                'keywords' => ['link', 'info', 'price'],
+                'reply_message' => 'Hey {username}! 👋 Thanks for commenting — here it is:',
+                'follow_gate' => false,
+                'delivery' => [
+                    'type' => 'link',
+                    'text' => 'Here it is as promised:',
+                    'url' => '',
+                    'filename' => '',
+                ],
+            ],
+            'file' => [
+                'name' => 'Follow-gated file',
+                'trigger_type' => 'all_comments',
+                'keywords' => [],
+                'reply_message' => 'Hey {username}! 👋 Thanks for commenting!',
+                'follow_gate' => true,
+                'follow_prompt_message' => '',
+                'reply_keyword' => 'DONE',
+                'delivery' => [
+                    'type' => 'file',
+                    'text' => 'Here is your file — enjoy!',
+                    'url' => '',
+                    'filename' => '',
+                ],
+            ],
+        ];
+
+        $templateKey = (string) $request->query('template', '');
+        if (isset($templates[$templateKey])) {
+            $form['automation'] = array_merge($form['automation'] ?? [], $templates[$templateKey]);
+        }
+
+        return Inertia::render('Instagram/Automations/Edit', $form);
     }
 
     /**
