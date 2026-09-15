@@ -40,6 +40,51 @@ class MetaWebhookRegistrar
     public const INBOX_ONLY_FIELDS = 'messages,messaging_postbacks,message_reactions';
 
     /**
+     * Field set for the INSTAGRAM app (Business Login for Instagram). The
+     * Instagram-login webhook docs list messaging_reactions/messaging_seen
+     * naming there — we subscribe only the fields the pipeline actually
+     * consumes to avoid a rejected registration over an unknown field.
+     */
+    public const INSTAGRAM_APP_FIELDS = 'comments,messages,messaging_postbacks';
+
+    /**
+     * Read back the INSTAGRAM app's instagram subscription (or null when the
+     * object is not subscribed / credentials missing). Used by diagnostics.
+     *
+     * @return array<string, mixed>|null
+     */
+    public static function verifyInstagramAppObject(): ?array
+    {
+        $meta = CredentialResolver::system()->meta();
+        $igAppId = $meta?->igAppId();
+        $igAppSecret = $meta?->igAppSecret();
+
+        if (! $igAppId || ! $igAppSecret) {
+            return null;
+        }
+
+        try {
+            $check = Http::get("https://graph.facebook.com/v20.0/{$igAppId}/subscriptions", [
+                'access_token' => $igAppId.'|'.$igAppSecret,
+            ]);
+
+            if (! $check->successful()) {
+                return null;
+            }
+
+            foreach ((array) $check->json('data', []) as $subscription) {
+                if (($subscription['object'] ?? '') === 'instagram') {
+                    return (array) $subscription;
+                }
+            }
+
+            return null;
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    /**
      * Register (idempotently) the app-level `instagram` webhook object using the
      * App Access Token ({app_id}|{app_secret}). Safe to call from any connect flow.
      */
@@ -132,7 +177,7 @@ class MetaWebhookRegistrar
         $callbackUrl = $moduleRouteExists
             ? url('/webhooks/instagram/'.$verifyToken)
             : url('/webhooks/meta/'.$verifyToken);
-        $fields = $moduleRouteExists ? self::INSTAGRAM_FIELDS : self::INBOX_ONLY_FIELDS;
+        $fields = self::INSTAGRAM_APP_FIELDS;
 
         try {
             $res = Http::post("https://graph.facebook.com/v20.0/{$igAppId}/subscriptions", [

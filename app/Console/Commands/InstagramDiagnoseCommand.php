@@ -126,6 +126,30 @@ class InstagramDiagnoseCommand extends Command
                     }
                 }
             }
+
+            // Instagram-Login connections receive their events from the
+            // INSTAGRAM app's subscription — check it too when configured.
+            $igAppId = CredentialResolver::system()->meta()?->igAppId();
+            if ($igAppId) {
+                $igSubscription = MetaWebhookRegistrar::verifyInstagramAppObject();
+
+                if ($igSubscription === null) {
+                    $this->line("$warn Instagram app ($igAppId) has NO instagram webhook subscription — Instagram-Login connects will NOT receive DMs/comments.");
+                    $this->line('       Fix: reconnect the account once (any connect flow registers it), or php artisan instagram:register-webhook.');
+                    $hasFailure = true;
+                } else {
+                    $igFields = MetaWebhookRegistrar::normalizeFields($igSubscription['fields'] ?? []);
+
+                    foreach (explode(',', MetaWebhookRegistrar::INSTAGRAM_APP_FIELDS) as $field) {
+                        if (in_array($field, $igFields, true)) {
+                            $this->line("$ok Instagram app field subscribed: $field");
+                        } else {
+                            $this->line("$bad Instagram app field MISSING: $field");
+                            $hasFailure = true;
+                        }
+                    }
+                }
+            }
         }
 
         // ------------------------------------------------------------------
