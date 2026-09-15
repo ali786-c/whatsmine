@@ -105,10 +105,17 @@ Bot EK private-reply DM bhejta hai
 (hook + follow ask + keyword — sab ek message mein)
         │
         ▼
-Customer follow kare + "DONE" reply kare ──► 24h window OPEN
+Customer "DONE" reply kare ──► 24h window OPEN + CONSENT
         │
         ▼
-Bot delivery bhejta hai (link / file / text)</pre></div></div>
+Bot FOLLOW STATUS VERIFY karta hai
+(Graph User Profile API: is_user_follow_business)
+        │
+        ├── true ──► DELIVERY (link / file / text) 🎯
+        ├── false ──► "Not following yet!" ask repeat (bounded)
+        │             budget khatam ──► Inbox agent handoff
+        └─┄ unknown ┄► FAIL-OPEN ──► phir bhi delivery
+                                      (lead kabhi block nahi)</pre></div></div>
     <div class="sub"><h3>📥 DM → Inbox Pipeline (Inbox feature — same webhook)</h3>
     <div class="diagram"><pre>Customer DM bhejta hai
         │
@@ -287,6 +294,18 @@ curl "https://wa.careerinpak.com/webhooks/instagram/VERIFY_TOKEN?hub.mode=subscr
     </table>
     <div class="note ok"><div class="ic">💡</div><div><b>Per-post rule:</b> specific posts wali automation hamesha account-wide automation ko override karti hai apne posts pe.</div></div>
     <div class="note warn"><div class="ic">⏱️</div><div><b>Meta ke rules (system khud enforce karta hai):</b> 1 comment = 1 DM · private reply sirf 7 din ke andar · follow-up sirf customer ke reply ke baad <b>24h tak</b> · keyword na match ho to bounded follow-up loop (<code class="inline">INSTAGRAM_MAX_NUDGES</code>, default <b>2</b>) — aur budget khatam hote hi conversation Inbox ke agent ko hand over ho jati hai. Follow status <b>Graph API se really verify hota hai</b> (User Profile API ka <code class="inline">is_user_follow_business</code> — ye field DM reply ke baad hi available hota hai): verified follower ko hi delivery milti hai, jhoot bolne wale ko follow ask dobara milta hai; agar check inconclusive ho (consent/network error) to funnel <b>fail-open</b> hota hai — lead block nahi hoti. <code class="inline">INSTAGRAM_FOLLOW_CHECK=false</code> se old trust-mode par wapas ja sakte ho.</div></div>
+    <div class="sub"><h3><span class="n">6.1</span> Follow-Gate Loop — Real Follow Verification (User Profile API)</h3>
+    <p>Gated automation user ke "yes"/keyword par <b>andha trust nahi</b> karti — DM reply milte hi Graph <b>User Profile API</b> se asli follow status check hota hai (<code class="inline">is_user_follow_business</code>). Meta ye field <b>sirf tab</b> deta hai jab user ne account ko DM kiya ho (consent) — aur funnel check exactly reply ke baad hi karta hai, to limitation khud satisfy ho jati hai.</p>
+    <table>
+      <tr><th>User ki reply</th><th>API verification</th><th>Bot kya karta hai</th></tr>
+      <tr><td>Keyword (<code class="inline">DONE</code>)</td><td>✅ follows = true</td><td><b>Delivery</b> — link / file / text 🎯</td></tr>
+      <tr><td><code class="inline">yes / haan / ho gaya</code></td><td>✅ follows = true</td><td>Keyword reminder — "Amazing! Just reply DONE..."</td></tr>
+      <tr><td>Kuch aur</td><td>✅ follows = true</td><td>Polite keyword nudge (budget se bounded)</td></tr>
+      <tr><td>Kuch bhi — chahe <code class="inline">DONE</code> hi kyun na ho</td><td>❌ follows = <b>false</b></td><td>"It seems you are not following us yet!" — ask <b>dobara</b> (bounded); budget khatam → funnel close → Inbox agent handoff</td></tr>
+      <tr><td>Kuch bhi</td><td>❓ unknown (consent error / network fail / field missing)</td><td><b>Fail-open</b> — normal behaviour, delivery kabhi block nahi hoti (lead safe)</td></tr>
+    </table>
+    <div class="note warn"><div class="ic">🛡️</div><div><b>Design rules:</b> (1) Loop hamesha bounded hai — <code class="inline">INSTAGRAM_MAX_NUDGES</code> (default 2) se; koi user bot ko infinite loop mein nahi phansa sakta. (2) Inconclusive check kabhi lead nahi rokega — sirf <b>verified false</b> hi delivery rokta hai. (3) Har check ka result audit log + <code class="inline">dm.log</code> mein (<code class="inline">follow-status resolved</code> / <code class="inline">failing open</code>).</div></div>
+    </div>
     <label class="chk"><input type="checkbox" data-k="s61"><span>Automation banayi + enabled</span></label>
   </div>
 </div>
@@ -298,7 +317,8 @@ curl "https://wa.careerinpak.com/webhooks/instagram/VERIFY_TOKEN?hub.mode=subscr
     <ol class="plain">
       <li><b>Doosre phone/account</b> se reel pe comment karo: <code class="inline">price</code></li>
       <li>5–10 sec mein commenter ko <b>DM</b> jayegi (Request folder ya Inbox mein)</li>
-      <li>Woh <b>follow</b> kare + <code class="inline">DONE</code> reply kare → <b>delivery foran</b> jayegi</li>
+      <li><b>Test 1 (jhoot):</b> follow KIYE BAGHAIR <code class="inline">DONE</code> reply karo → bot API se pakad lega: "It seems you are not following us yet!"</li>
+      <li><b>Test 2 (asli):</b> follow karke <code class="inline">DONE</code> reply karo → <b>delivery foran</b> 🎯</li>
       <li>Sab kuch <b>Instagram → Funnel Logs</b> mein dikhega</li>
     </ol>
     <div class="note warn"><div class="ic">ℹ️</div><div><b>Ek comment = 1 DM</b> (Meta rule). Test repeat karna ho to naya comment karo.</div></div>
@@ -374,8 +394,9 @@ tail -f timeout.log          # 7d / 24h sweeps</pre><button class="copy">Copy</b
         <tr><td><code class="inline">INSTAGRAM_ENABLED</code></td><td>true</td><td>Master switch — false = module dormant (no routes/webhooks/scheduler)</td></tr>
         <tr><td><code class="inline">INSTAGRAM_MIRROR_TO_INBOX</code></td><td>true</td><td>Funnel DM threads Inbox mein mirror hongi ya nahi</td></tr>
         <tr><td><code class="inline">INSTAGRAM_QUEUE</code></td><td>instagram</td><td>Module jobs ka queue — <b>is naam ka worker hona ZAROORI hai</b> (Step 4.1)</td></tr>
+        <tr><td><code class="inline">INSTAGRAM_FOLLOW_CHECK</code></td><td>true</td><td><b>Real follow verification</b> — User Profile API se <code class="inline">is_user_follow_business</code> check (DM reply ke baad). false = purana trust-mode (sirf user ke jawab par bharosa)</td></tr>
         <tr><td><code class="inline">INSTAGRAM_SENDS_PER_MINUTE</code></td><td>30</td><td>Per-account rate limit (self-protection)</td></tr>
-        <tr><td><code class="inline">INSTAGRAM_MAX_NUDGES</code></td><td>1</td><td>Keyword na match hone par kitne polite reminders</td></tr>
+        <tr><td><code class="inline">INSTAGRAM_MAX_NUDGES</code></td><td>2</td><td>Follow-up budget — keyword na match ho to reminders + gate loop ke repeats isi budget se bounded hain</td></tr>
         <tr><td><code class="inline">INSTAGRAM_GRAPH_VERSION</code></td><td>v20.0</td><td>Graph API version</td></tr>
       </table>
       <p class="muted">Badalne ke baad: <code class="inline">php artisan config:cache && php artisan queue:restart</code></p>
@@ -494,6 +515,8 @@ sudo supervisorctl status</pre><button class="copy">Copy</button></div>
       <tr><td>7</td><td>Webhook registration chupchap toot sakta tha (drift ka koi signal nahi)</td><td>Register hone ke baad Meta pe callback/fields verify nahi hoti thi</td><td>Registrar ab live verify + drift audit karta hai — clear warnings logs mein</td></tr>
       <tr><td>8</td><td><code class="inline">instagram:register-webhook</code> crash: <code class="inline">Array to string conversion</code></td><td>Meta fields ko objects ki shakal mein bhejta hai, plain strings nahi</td><td><code class="inline">MetaWebhookRegistrar::normalizeFields()</code> dono shapes handle karta hai</td></tr>
       <tr><td>9</td><td>Tinker multi-line paste: <code class="inline">Parse error</code></td><td>Shell <code class="inline">$</code> escaping multi-line paste mein toot jati hai</td><td>Single-line commands use karo; token-scope check ab <code class="inline">instagram:diagnose</code> ke andar hai (tinker ki zaroorat hi nahi)</td></tr>
+      <tr><td>10</td><td>Gated funnel mein "no" reply par user ka message gayab hota tha</td><td>Funnel close hone ke baad aane wali replies swallow ho jati thin — live customer strand</td><td>Conversational gate loop: NO → follow ask repeat · YES → keyword reminder · budget khatam → Inbox agent handoff</td></tr>
+      <tr><td>11</td><td>User bina follow kiye "DONE" bole to bhi delivery mil jati thi (jhoot pakda nahi jata)</td><td>Follow sirf user ke jawab par trust hota tha — Graph API se verify nahi hota tha</td><td><b>User Profile API</b> se <code class="inline">is_user_follow_business</code> verification (DM reply = consent event). Verified follower ko hi delivery · verified non-follower ko ask repeat · inconclusive check <b>fail-open</b> — Step 6.1</td></tr>
     </table>
 
     <div class="sub"><h3>🧰 Is Session Mein Banaye Gaye Naye Tools</h3>
@@ -510,7 +533,7 @@ sudo supervisorctl status</pre><button class="copy">Copy</button></div>
 </div>
 
 <p style="text-align:center;color:var(--muted);font-size:.8rem;margin-top:30px">
-  Instagram Comment Automation · wa.careerinpak.com · Guide version 1.5 · Sep 2026
+  Instagram Comment Automation · wa.careerinpak.com · Guide version 1.6 · Sep 2026
 </p>
 
 </div>
