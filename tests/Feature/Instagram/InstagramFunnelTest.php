@@ -157,6 +157,7 @@ class InstagramFunnelTest extends TestCase
             'graph.facebook.com/*/17841400000001/messages' => Http::sequence()
                 ->push(['message_id' => 'msg-1'], 200)   // private reply
                 ->push(['message_id' => 'msg-2'], 200),  // lead delivery after reply
+            'graph.facebook.com/*/igsid-customer*' => Http::response(['is_user_follow_business' => true], 200),
         ]);
 
         $this->automation([
@@ -318,6 +319,7 @@ class InstagramFunnelTest extends TestCase
                 ->push(['message_id' => 'msg-1'], 200)   // private reply (follow ask)
                 ->push(['message_id' => 'msg-2'], 200)   // NO → re-ask (follow-up 1)
                 ->push(['message_id' => 'msg-3'], 200),  // NO → re-ask (follow-up 2)
+            'graph.facebook.com/*/igsid-customer*' => Http::response(['is_user_follow_business' => true], 200),
         ]);
 
         $this->automation([
@@ -409,5 +411,98 @@ class InstagramFunnelTest extends TestCase
         ]);
 
         $this->assertFalse($handled);
+    }
+
+    public function test_verified_follow_liar_never_receives_the_delivery(): void
+    {
+        Http::fake([
+            'graph.facebook.com/*/17841400000001/messages' => Http::sequence()
+                ->push(['message_id' => 'msg-1'], 200)   // private reply (follow ask)
+                ->push(['message_id' => 'msg-2'], 200),  // re-ask — NOT the delivery
+            'graph.facebook.com/*/igsid-customer*' => Http::response(['is_user_follow_business' => false], 200),
+        ]);
+
+        $this->automation([
+            'follow_gate' => true,
+            'reply_keyword' => 'DONE',
+            'delivery' => ['type' => 'text', 'text' => 'Here is your file!'],
+        ]);
+
+        $funnel = app(CommentFunnelService::class);
+        $funnel->handleComment('17841400000001', $this->commentValue());
+
+        // They claim they followed with the exact keyword — but the API says otherwise.
+        $this->assertTrue($funnel->handleDmReply('17841400000001', [
+            'sender' => ['id' => 'igsid-customer'],
+            'recipient' => ['id' => '17841400000001'],
+            'message' => ['mid' => 'dm-lie', 'text' => 'DONE'],
+        ]));
+
+        $participant = FunnelParticipant::where('comment_id', 'comment-123')->firstOrFail();
+        $this->assertSame(FunnelParticipant::STAGE_AWAITING_FOLLOW, $participant->stage);
+        $this->assertNull($participant->delivered_at);
+        $this->assertSame(1, $participant->nudge_count);
+        Http::assertSentCount(2); // private reply + re-ask only — no delivery text
+    }
+
+    public function test_unverified_follow_check_fails_open_and_delivers(): void
+    {
+        Http::fake([
+            'graph.facebook.com/*/17841400000001/messages' => Http::sequence()
+                ->push(['message_id' => 'msg-1'], 200)   // private reply
+                ->push(['message_id' => 'msg-2'], 200),  // delivery
+            'graph.facebook.com/*/igsid-customer*' => Http::response(['error' => ['message' => 'User consent is required to access user profile.', 'code' => 10]], 403),
+        ]);
+
+        $this->automation([
+            'follow_gate' => true,
+            'reply_keyword' => 'DONE',
+            'delivery' => ['type' => 'text', 'text' => 'Here is your file!'],
+        ]);
+
+        $funnel = app(CommentFunnelService::class);
+        $funnel->handleComment('17841400000001', $this->commentValue());
+
+        // Unknown follow status must NOT block a real lead (fail-open).
+        $this->assertTrue($funnel->handleDmReply('17841400000001', [
+            'sender' => ['id' => 'igsid-customer'],
+            'recipient' => ['id' => '17841400000001'],
+            'message' => ['mid' => 'dm-done', 'text' => 'DONE'],
+        ]));
+
+        $participant = FunnelParticipant::where('comment_id', 'comment-123')->firstOrFail();
+        $this->assertSame(FunnelParticipant::STAGE_DELIVERED, $participant->stage);
+        $this->assertNotNull($participant->delivered_at);
+    }
+
+    public function test_follow_check_can_be_disabled_via_config(): void
+    {
+        config(['instagram.follow_check' => false]);
+
+        Http::fake([
+            'graph.facebook.com/*/17841400000001/messages' => Http::sequence()
+                ->push(['message_id' => 'msg-1'], 200)   // private reply
+                ->push(['message_id' => 'msg-2'], 200),  // delivery
+        ]);
+
+        $this->automation([
+            'follow_gate' => true,
+            'reply_keyword' => 'DONE',
+            'delivery' => ['type' => 'text', 'text' => 'Here is your file!'],
+        ]);
+
+        $funnel = app(CommentFunnelService::class);
+        $funnel->handleComment('17841400000001', $this->commentValue());
+
+        // Trust mode: the user's DONE delivers without any profile lookup.
+        $this->assertTrue($funnel->handleDmReply('17841400000001', [
+            'sender' => ['id' => 'igsid-customer'],
+            'recipient' => ['id' => '17841400000001'],
+            'message' => ['mid' => 'dm-done', 'text' => 'DONE'],
+        ]));
+
+        $participant = FunnelParticipant::where('comment_id', 'comment-123')->firstOrFail();
+        $this->assertSame(FunnelParticipant::STAGE_DELIVERED, $participant->stage);
+        Http::assertSentCount(2); // no profile GET happened at all
     }
 }

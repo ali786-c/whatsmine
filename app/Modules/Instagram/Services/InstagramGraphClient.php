@@ -165,6 +165,50 @@ class InstagramGraphClient
     }
 
     /**
+     * True when the IGSID follows this IG account — via the Graph User Profile
+     * API field is_user_follow_business. Meta exposes that field only after the
+     * user has messaged the account (DM consent); on ANY inconclusive outcome
+     * (no consent yet, network error, permission, missing field) it returns
+     * null so callers can fail open instead of punishing a real lead.
+     *
+     * @return bool|null true = follows · false = verified NOT following · null = unknown
+     */
+    public function doesUserFollow(InstagramAccount $account, string $igsid): ?bool
+    {
+        $url = "https://graph.facebook.com/{$this->apiVersion()}/{$igsid}";
+
+        try {
+            $res = Http::withToken($account->page_token)
+                ->acceptJson()
+                ->timeout(15)
+                ->get($url, ['fields' => 'is_user_follow_business']);
+        } catch (\Throwable $e) {
+            InstagramLog::dm('warning', 'follow-status lookup failed (network) — failing open', ['igsid' => $igsid, 'error' => $e->getMessage()]);
+
+            return null;
+        }
+
+        if (! $res->successful()) {
+            InstagramLog::dm('warning', 'follow-status lookup rejected — failing open', ['igsid' => $igsid, 'status' => $res->status(), 'error' => (string) $res->json('error.message', $res->body())]);
+
+            return null;
+        }
+
+        $follows = $res->json('is_user_follow_business');
+
+        if (! is_bool($follows)) {
+            // Field absent (consent edge / older shape) reads as unknown, not false.
+            InstagramLog::dm('warning', 'follow-status field absent — failing open', ['igsid' => $igsid, 'payload_keys' => array_keys((array) $res->json())]);
+
+            return null;
+        }
+
+        InstagramLog::dm('info', 'follow-status resolved', ['igsid' => $igsid, 'follows' => $follows]);
+
+        return $follows;
+    }
+
+    /**
      * @param  array<string, mixed>  $body
      * @return array<string, mixed>
      *

@@ -269,10 +269,12 @@ class CommentFunnelService
 
         $this->mirror->mirrorInbound($participant, $text, $mid ? (string) $mid : null, $event);
 
-        // Conversational follow-gate loop (Meta-safe):
-        //   keyword → delivery · "no" → repeat the follow ask · "yes" → confirm + remind keyword.
-        // Every non-keyword branch still consumes the bounded nudge budget, so the
-        // loop can never be driven forever by endless non-keyword replies.
+        // Conversational follow-gate loop (Meta-safe), now with REAL follow
+        // verification via the Graph User Profile API (is_user_follow_business):
+        //   verified + keyword → delivery · verified + "yes" → keyword reminder
+        //   verified + other   → bounded nudge · verified NOT following → re-ask
+        // Every non-delivery branch draws from the bounded nudge budget, so the
+        // loop can never be driven forever; inconclusive checks FAIL OPEN.
         // Gated automations without an explicit keyword tell the user "reply DONE"
         // in the private reply — the matcher must expect exactly that default.
         // Treating an empty keyword as match-anything made ANY reply ("hello",
@@ -281,43 +283,58 @@ class CommentFunnelService
         $saidNo = KeywordMatcher::matches(['no', 'nope', 'nahi', 'nahin', 'nai', 'not yet', 'abhi nahi'], 'exact', $text);
         $saidYes = ! $saidNo && KeywordMatcher::matches(['yes', 'yess', 'haan', 'han', 'ho gaya', 'done'], 'exact', $text);
 
-        if ($saidNo) {
+
+        $keywordMatched = KeywordMatcher::matches([$keyword], 'contains', $text);
+
+        // Real follow verification (User Profile API, is_user_follow_business).
+        // Meta exposes this field only AFTER the user messaged the account — the
+        // DM reply that reaches this point IS that consent event. Any
+        // inconclusive outcome (no consent yet, Graph/network error, missing
+        // field) reads as null and the funnel FAILS OPEN: an unknown never
+        // blocks a real lead.
+        $followCheckEnabled = (bool) config('instagram.follow_check', true);
+        $follows = $followCheckEnabled
+            ? $this->client->doesUserFollow($account, $senderId)
+            : null;
+        $verifiedFollower = $follows !== false;
+
+        if ($verifiedFollower && $keywordMatched) {
+            $delivery = (array) ($automation?->delivery ?? []);
+            InstagramLog::dm('info', 'reply received — triggering delivery', ['participant_id' => $participant->id, 'text' => mb_substr($text, 0, 120), 'keyword_matched' => $keywordMatched, 'follow_verified' => $follows, 'delivery_type' => $delivery['type'] ?? 'text']);
+            $this->deliveries->deliver($participant, $delivery);
+
+            return true;
+        }
+
+        if ($verifiedFollower && $saidYes) {
+            // Follow VERIFIED via the API; they just skipped the keyword.
+            $nudge = 'Amazing! 🎉 Just reply '.$keyword.' to confirm and I\'ll send it over right away!';
+            InstagramLog::dm('info', 'gate: user said YES — follow verified, reminding the keyword', ['participant_id' => $participant->id, 'received_text' => mb_substr($text, 0, 120)]);
+            $this->sendFollowUp($account, $participant, $automation, $senderId, $nudge, $event);
+
+            return true;
+        }
+
+        if ($follows === false) {
+            // The API VERIFIED they do not follow — they cannot pass the gate by
+            // saying "yes" or "DONE". Repeat the ask (bounded by the same nudge
+            // budget) so the loop can never be driven forever.
             $maxNudges = max(0, (int) config('instagram.max_nudges', 2));
             if ($participant->nudge_count < $maxNudges) {
                 $participant->increment('nudge_count');
-                $nudge = 'No problem! Once you follow us, just reply '.$keyword.' and I\'ll send it right over! 😊';
-                InstagramLog::dm('info', 'gate: user said NO — repeating the follow ask', ['participant_id' => $participant->id, 'nudge_count' => $participant->nudge_count]);
+                $nudge = 'It seems you are not following us yet! Follow our account, then reply '.$keyword.' and I\'ll send it right over! 😊';
+                InstagramLog::dm('info', 'gate: follow NOT verified by API — repeating the ask', ['participant_id' => $participant->id, 'nudge_count' => $participant->nudge_count]);
                 $this->sendFollowUp($account, $participant, $automation, $senderId, $nudge, $event);
 
                 return true;
             }
 
             // Budget exhausted — hand the stalled conversation to a human. The
-            // Inbox thread already holds the full history (mirrored above), so an
-            // agent can pick it up; Meta keeps a fresh 24h send window open.
+            // Inbox thread already holds the full history (mirrored above), so
+            // an agent can pick it up; Meta keeps a fresh 24h send window open.
             $participant->forceFill(['stage' => FunnelParticipant::STAGE_CLOSED, 'closed_at' => now()])->save();
-            $this->log($account, $automation, $participant->comment_id, CommentAutomationLog::ACTION_SKIPPED, $event, $participant, 'gate loop budget exhausted (user said NO)');
-            InstagramLog::dm('info', 'gate: nudge budget exhausted after NO — closed for agent handoff', ['participant_id' => $participant->id]);
-
-            return true;
-        }
-
-        $keywordMatched = KeywordMatcher::matches([$keyword], 'contains', $text);
-
-        if ($keywordMatched) {
-            $delivery = (array) ($automation?->delivery ?? []);
-            InstagramLog::dm('info', 'reply received — triggering delivery', ['participant_id' => $participant->id, 'text' => mb_substr($text, 0, 120), 'keyword_matched' => $keywordMatched, 'delivery_type' => $delivery['type'] ?? 'text']);
-            $this->deliveries->deliver($participant, $delivery);
-
-            return true;
-        }
-
-        if ($saidYes) {
-            // They claim they followed but skipped the keyword: confirm the
-            // follow (the API cannot verify it) and remind the exact keyword.
-            $nudge = 'Amazing! 🎉 Just reply '.$keyword.' to confirm and I\'ll send it over right away!';
-            InstagramLog::dm('info', 'gate: user said YES — reminding the keyword', ['participant_id' => $participant->id, 'received_text' => mb_substr($text, 0, 120)]);
-            $this->sendFollowUp($account, $participant, $automation, $senderId, $nudge, $event);
+            $this->log($account, $automation, $participant->comment_id, CommentAutomationLog::ACTION_SKIPPED, $event, $participant, 'gate loop budget exhausted (follow not verified)');
+            InstagramLog::dm('info', 'gate: nudge budget exhausted without a verified follow — closed for agent handoff', ['participant_id' => $participant->id]);
 
             return true;
         }
