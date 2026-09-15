@@ -85,7 +85,7 @@
 
 <div class="progress-bar"><div class="wrap progress-inner">
   <div class="progress-track"><div class="progress-fill" id="pfill"></div></div>
-  <div class="progress-label" id="plabel">0 / 24 done</div>
+  <div class="progress-label" id="plabel">0 / 28 done</div>
 </div></div>
 
 <div class="wrap">
@@ -502,32 +502,86 @@ sudo supervisorctl status</pre><button class="copy">Copy</button></div>
 
 <!-- INSTAGRAM LOGIN MIGRATION -->
 <div class="step">
-  <div class="step-head"><div class="step-num" style="background:linear-gradient(135deg,#E1306C,#833AB4)">📸</div><h2>Instagram Login Migration — Ab Facebook Page Ki Zaroorat Nahi</h2><span class="time">Sep 15, 2026</span></div>
+  <div class="step-head"><div class="step-num" style="background:linear-gradient(135deg,#E1306C,#833AB4)">📸</div><h2>Instagram Login Migration — Meta Dashboard Setup (Detailed)</h2><span class="time">Sep 15, 2026</span></div>
   <div class="step-body">
-    <p class="muted">Ab Instagram <b>apni Instagram credentials</b> se connect hota hai (Business Login for Instagram). Facebook Page link karna <b>optional</b> ho gaya — naye accounts sirf Instagram se connect honge, aur WhatsApp ka Facebook-Login path bilkul untouched rahega (same Meta app, dono flows coexist karte hain).</p>
+    <p class="muted">Ab Instagram <b>apni Instagram credentials</b> se connect hota hai (Business Login for Instagram). Facebook Page link karna <b>optional</b> ho gaya — naye accounts sirf Instagram se connect honge, aur WhatsApp ka Facebook-Login path bilkul untouched rahega (same Meta app, dono flows coexist karte hain). Neeche poora Meta Dashboard setup step-by-step hai.</p>
 
-    <h3 style="margin-top:14px">Admin side — ek dafa setup (5 min)</h3>
-    <ol>
-      <li><b>Meta App Dashboard</b> → apna app kholo → <b>Instagram</b> product → <b>API setup with Instagram login</b> → <b>Business login settings</b> mein jao.</li>
-      <li>Wahan se <b>Instagram app ID</b> + <b>Instagram app secret</b> copy karo.</li>
-      <li>Usi section mein <b>OAuth redirect URIs</b> ke tor par add karo: <code class="inline">https://wa.careerinpak.com/instagram/setup</code> (exact URL, trailing slash nahi).</li>
-      <li>Admin panel kholo → <b>Admin → Integrations → Meta App</b> → naye <b>Instagram App ID</b> + <b>Instagram App Secret</b> fields mein paste karo → Save. (Purane app_id/app_secret/config_id waise hi rehne do — WhatsApp unhi pe chal raha hai.)</li>
-      <li><b>Data Access Reset nahi chahiye:</b> App Review/Advanced Access sirf tab chahiye jab doosron ke accounts connect karne hon; apne accounts ke liye Standard Access kaafi hai.</li>
-    </ol>
+    <div class="sub"><h3><span class="n">IG.1</span> Instagram Product Add Karo (agar pehle se nahi hai)</h3>
+      <ol>
+        <li><b>developers.facebook.com</b> kholo → apna app (wohi jispe WhatsApp chal raha hai) → App Dashboard mein jao.</li>
+        <li>Left sidebar mein <b>Add Product</b> (ya “Products” header ke paas +) dhundo.</li>
+        <li><b>Instagram</b> card pe <b>Set up</b> click karo.</li>
+        <li>Instagram product ke andar <b>“API setup with Instagram login”</b> option select karo (yehi naya setup hai — “API setup with Facebook login” nahi).</li>
+      </ol>
+      <label class="chk"><input type="checkbox" data-k="ig1"><span>Instagram product add kiya + API setup with Instagram login select kiya</span></label>
+    </div>
 
-    <h3 style="margin-top:14px">Client side — connect (2 min)</h3>
-    <ol>
-      <li><b>Inbox → Setup (Channels)</b> ya <b>Instagram → Setup</b> kholo — agar admin ne IG credentials dale hain to purple <b>“Connect with Instagram”</b> button dikhega.</li>
-      <li>Button click → Instagram apna login window kholega → apne <b>Instagram credentials</b> se log in karo (jo professional/business/creator account hai) → permissions allow karo.</li>
-      <li>Redirect wapas aayega aur connection khud store ho jayega — Inbox DMs + comment automation <b>ek hi connection</b> se dono chalu.</li>
-      <li>Facebook wala purana flow ab bhi available hai (drawer mein neeche) — purane accounts waise ke waise chalte rahenge.</li>
-    </ol>
+    <div class="sub"><h3><span class="n">IG.2</span> Business Login Settings — App ID + Secret Copy Karo</h3>
+      <ol>
+        <li>Left sidebar: <b>Instagram → API setup with Instagram login</b> kholo.</li>
+        <li>Wahan 3–4 numbered sections honge — <b>“3. Set up Instagram business login”</b> tak scroll karo → <b>Business login settings</b> click karo.</li>
+        <li>Is page pe top pe hi <b>Instagram app ID</b> (number, e.g. <code class="inline">1234567890</code>) dikhega — copy karo.</li>
+        <li><b>Instagram app secret</b> ke paas <b>Show</b> click karo (apna FB password mangega) — copy karo.</li>
+        <li>⚠️ Ye <b>alag</b> hain WhatsApp wale App ID/Secret se — confuse mat hona. Purane wale WhatsApp ke liye waise hi rahenge.</li>
+      </ol>
+      <label class="chk"><input type="checkbox" data-k="ig2"><span>Instagram app ID + app secret copy kar liye</span></label>
+    </div>
 
-    <div class="note warn"><div class="ic">🔄</div><div><b>60-day tokens (naya system):</b> Facebook Page token kabhi expire nahi hota tha, Instagram-Login token <b>60 din</b> ka hota hai. System daily raat 2:30 baje refresh job chalata hai jo expiry se pehle naya 60-day token le aata hai — tab tak sab automatic. Sirf <b>cron + worker</b> zinda rakhna (jo pehle se hain). Agar kahin token phir bhi expire ho jaye to diagnose command khud bata degi: <code class="inline">php artisan instagram:diagnose</code> mein naya “Instagram Login readiness” section hai.</div></div>
+    <div class="sub"><h3><span class="n">IG.3</span> OAuth Redirect URI Add Karo (SAME Business login settings page pe)</h3>
+      <p>Usi Business login settings page pe neeche <b>Valid OAuth Redirect URIs</b> section hai → <b>Add URI</b> → ye EXACT line paste karo (trailing slash nahi):</p>
+      <div class="cmd"><pre>https://wa.careerinpak.com/app/instagram/setup
+https://wa.careerinpak.com/app/inbox/setup</pre></div>
+      <table>
+        <tr><th>URI</th><th>Kaunsa button use karta hai</th></tr>
+        <tr><td><code class="inline">/app/instagram/setup</code></td><td><b>Instagram → Setup</b> page ka “Connect with Instagram”</td></tr>
+        <tr><td><code class="inline">/app/inbox/setup</code></td><td><b>Inbox → Setup (Channels)</b> drawer ka “Connect with Instagram”</td></tr>
+      </table>
+      <div class="note warn"><div class="ic">⚠️</div><div><b>App Domains kaafi nahi hai</b> — OAuth ke liye exact URI is list mein honi hi chahiye, warna Instagram login window pe <i>“URL blocked — redirect URI is not white-listed”</i> error aayega. Dono URIs add karo.</div></div>
+      <label class="chk"><input type="checkbox" data-k="ig3"><span>DONO redirect URIs Business login settings mein add kiye</span></label>
+    </div>
 
-    <div class="note ok"><div class="ic">✅</div><div><b>Webhooks bilkul waise hi automatic hain:</b> connect hote hi system khud Meta ko callback + fields register karta hai (pehle jaisa) — dashboard mein manually kuch nahi karna. Comments, DMs, postbacks sab pehle ke jaise hi aayenge; naye flow mein sirf host <code class="inline">graph.instagram.com</code> hai aur koi Facebook Page nahi.</div></div>
+    <div class="sub"><h3><span class="n">IG.4</span> Data Access — Advanced Access (sirf tab jab doosron ke accounts)</h3>
+      <ol>
+        <li><b>Apne khud ke accounts</b> connect karne ke liye <b>Standard Access kaafi hai</b> — App Review ki zaroorat NAHI. Aage barho IG.5 pe.</li>
+        <li><b>SaaS clients ke accounts</b> connect karne hain to: App Dashboard → <b>App Review → Permissions and Features</b> → <code class="inline">instagram_business_basic</code>, <code class="inline">instagram_business_manage_messages</code>, <code class="inline">instagram_business_manage_comments</code> ke liye <b>Advanced Access</b> request karo (App Review + Business Verification lagegi).</li>
+        <li>App <b>Live mode</b> mein hona chahiye (Settings → Basic → toggle) jab real connects karne hon — Privacy Policy URL + Data Deletion callback mangega.</li>
+      </ol>
+      <label class="chk"><input type="checkbox" data-k="ig4"><span>Access level decide kiya (own accounts = Standard, SaaS = Advanced + review)</span></label>
+    </div>
 
-    <p class="muted" style="margin-top:10px"><b>Verify:</b> <code class="inline">php artisan instagram:diagnose</code> chalao — “Instagram Login readiness” section mein IG credentials + accounts + token runway sab green dikhne chahiye.</p>
+    <div class="sub"><h3><span class="n">IG.5</span> App Panel Mein Credentials Paste Karo (2 min)</h3>
+      <ol>
+        <li>Apna panel kholo → <b>Admin → Integrations → Meta App</b>.</li>
+        <li>Naye fields mein paste karo: <b>Instagram App ID</b> + <b>Instagram App Secret</b> → <b>Save</b>.</li>
+        <li>Purane fields (App ID, App Secret, Webhook Verify Token, Config ID waghaira) <b>mat chhedo</b> — WhatsApp unhi pe chal raha hai.</li>
+        <li>(Optional, bina OAuth ke) Meta Dashboard ke usi “API setup with Instagram login” page pe <b>“Generate token”</b> button bhi hai — apne khud ke account ka 60-din token banata hai. Panel ke <b>Instagram → Setup</b> mein “manual token” field se wo bhi paste ho sakta hai.</li>
+      </ol>
+      <label class="chk"><input type="checkbox" data-k="ig5"><span>IG App ID/Secret admin panel mein save ho gaye</span></label>
+    </div>
+
+    <div class="sub"><h3><span class="n">IG.6</span> Client Connect + Test (2 min)</h3>
+      <ol>
+        <li><b>Instagram → Setup</b> ya <b>Inbox → Setup (Channels)</b> kholo — ab purple <b>“Connect with Instagram”</b> button dikhna chahiye.</li>
+        <li>Click karo → Instagram ka apna login window khulega → <b>Instagram username/password</b> daalo (jo professional/business/creator account hai) → permissions <b>Allow</b> karo.</li>
+        <li>Wapas redirect hoga aur connection khud save ho jayegi — Inbox DMs + comment automation <b>ek hi connection</b> se dono chalu. Facebook Page link karne ki zaroorat nahi.</li>
+        <li>Facebook wala purana flow ab bhi drawer mein available hai — purane Page-linked accounts waise ke waise chalte rahenge.</li>
+        <li><b>Test:</b> doosre IG account se post pe comment karo → private-reply DM aani chahiye → reply karo → gate loop chalna chahiye.</li>
+      </ol>
+      <label class="chk"><input type="checkbox" data-k="ig6"><span>“Connect with Instagram” se account connect hua</span></label>
+      <label class="chk"><input type="checkbox" data-k="ig7"><span>Test comment → DM → reply → delivery sab chala</span></label>
+    </div>
+
+    <div class="sub"><h3><span class="n">IG.7</span> Verify — Diagnose + Token Expiry</h3>
+      <ol class="plain">
+        <li><code class="inline">php artisan instagram:diagnose</code> chalao — naya <b>“Instagram Login readiness”</b> section dekho:</li>
+        <li>[ OK ] Instagram App ID configured → IG.5 sahi hua</li>
+        <li>[ OK ] Instagram-Login accounts: N + token valid for X days → connect + token fine</li>
+        <li>[ FAIL ] token EXPIRED → bas dobara “Connect with Instagram” karo (ya manual token paste karo)</li>
+      </ol>
+      <div class="note warn"><div class="ic">🔄</div><div><b>60-day tokens (naya system):</b> Facebook Page token kabhi expire nahi hota tha, Instagram-Login token <b>60 din</b> ka hota hai. System daily raat 2:30 baje refresh job chalata hai jo expiry se pehle naya 60-day token le aata hai — tab tak sab automatic. Sirf <b>cron + worker</b> zinda rakhna (jo pehle se hain).</div></div>
+
+      <div class="note ok"><div class="ic">✅</div><div><b>Webhooks bilkul waise hi automatic hain:</b> connect hote hi system khud Meta ko callback + fields register karta hai (pehle jaisa) — dashboard mein manually kuch nahi karna. Comments, DMs, postbacks sab pehle ke jaise hi aayenge; naye flow mein sirf host <code class="inline">graph.instagram.com</code> hai aur koi Facebook Page nahi.</div></div>
+    </div>
   </div>
 </div>
 

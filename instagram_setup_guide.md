@@ -70,7 +70,7 @@ Both modes coexist on the **same Meta app** — WhatsApp is completely untouched
 3. Open **Business login settings** and copy the **Instagram app ID** + **Instagram app secret**
 4. In the same section add the **OAuth redirect URI** (exact, no trailing slash):
    ```
-   https://wa.careerinpak.com/instagram/setup
+   https://wa.careerinpak.com/app/instagram/setup
    ```
    (If the Inbox Channels page also starts IG-Login flows, add `https://wa.careerinpak.com/app/inbox/setup` too.)
 5. **Scopes requested automatically by the app:** `instagram_business_basic`, `instagram_business_manage_messages`, `instagram_business_manage_comments` — nothing to configure by hand.
