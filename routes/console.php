@@ -2,6 +2,7 @@
 
 use App\Modules\Broadcasting\Jobs\LaunchScheduledCampaignsJob;
 use App\Modules\Broadcasting\Models\UsageMeter;
+use App\Modules\Instagram\Jobs\RefreshInstagramLoginTokensJob;
 use App\Modules\Social\Jobs\DispatchScheduledPostsJob;
 use App\Modules\Social\Jobs\RefreshSocialTokensJob;
 use App\Modules\Whatsapp\Jobs\TemplateSyncJob;
@@ -48,6 +49,11 @@ Schedule::job(new DispatchScheduledPostsJob, 'social')
 Schedule::job(new RefreshSocialTokensJob, 'social')
     ->dailyAt('02:00')
     ->name('refresh-social-tokens');
+
+// Refresh 60-day Instagram-Login tokens before they expire (daily)
+Schedule::job(RefreshInstagramLoginTokensJob)
+    ->dailyAt('02:30')
+    ->name('refresh-instagram-login-tokens');
 
 // Reset monthly usage meters on the 1st of each month
 Schedule::call(function () {

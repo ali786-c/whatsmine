@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\Route;
 // started on the Channels page resolves cleanly.
 Route::get('/setup', [ConnectController::class, 'index'])->name('setup');
 Route::post('/setup/connect', [ConnectController::class, 'connect'])->name('connect');
+Route::get('/setup/connect-instagram-login', [ConnectController::class, 'connectInstagramLogin'])->name('connect-instagram-login');
 Route::get('/setup/status', [ConnectController::class, 'status'])->name('setup.status');
 
 Route::get('/automations', [AutomationController::class, 'index'])->name('automations.index');

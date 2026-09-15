@@ -205,7 +205,10 @@ class CommentFunnelService
     {
         $senderId = (string) data_get($event, 'sender.id', '');
         $mid = data_get($event, 'message.mid');
-        $text = (string) data_get($event, 'message.text', '');
+        // A tapped quick reply arrives as quick_reply.payload with the button
+        // TITLE in text — the payload ("DONE" / "no") is what the funnel logic
+        // expects, so it wins whenever present.
+        $text = (string) (data_get($event, 'message.quick_reply.payload') ?: data_get($event, 'message.text', ''));
 
         if ($senderId === '' || data_get($event, 'message.is_echo') || ! isset($event['message'])) {
             return false; // echoes / reads / deliveries are not replies
@@ -369,12 +372,34 @@ class CommentFunnelService
         array $event,
     ): void {
         try {
-            $this->client->sendMessage($account, $toIgsid, $text);
+            $this->client->sendMessage($account, $toIgsid, $text, $this->followGateQuickReplies($automation));
             $this->mirror->mirrorOutbound($participant, $text);
             $this->log($account, $automation, $participant->comment_id, CommentAutomationLog::ACTION_NUDGED, $event, $participant);
         } catch (\Throwable $e) {
             $this->log($account, $automation, $participant->comment_id, CommentAutomationLog::ACTION_SKIPPED, $event, $participant, 'follow-up failed: '.$e->getMessage());
         }
+    }
+
+    /**
+     * Tappable YES/NO quick replies for gated automations (Instagram Login
+     * supports quick replies on graph.instagram.com). The payload mirrors what
+     * the user would type, so messaging_postbacks are handled by the same
+     * keyword matcher. Ungated automations send plain text.
+     *
+     * @return array<int, array{content_type: string, title: string, payload: string}>
+     */
+    private function followGateQuickReplies(CommentAutomation $automation): array
+    {
+        if (! $automation->follow_gate) {
+            return [];
+        }
+
+        $keyword = trim((string) ($automation->reply_keyword ?: 'DONE'));
+
+        return [
+            ['content_type' => 'text', 'title' => '✅ I followed', 'payload' => $keyword],
+            ['content_type' => 'text', 'title' => 'Not yet', 'payload' => 'no'],
+        ];
     }
 
     /**

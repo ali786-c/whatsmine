@@ -1,4 +1,5 @@
-import { Head, usePage } from '@inertiajs/react';
+import { useEffect } from 'react';
+import { Head, usePage, router } from '@inertiajs/react';
 import ClientLayout from '@/Layouts/ClientLayout';
 import Card from '@/Components/ui/Card';
 import Button from '@/Components/ui/Button';
@@ -17,11 +18,27 @@ const STATUS_STYLES = {
  * this page is read-only: it shows the mirrored accounts and links to the
  * single connect point.
  */
-export default function InstagramSetup({ accounts = [], automationsCount = 0 }) {
+export default function InstagramSetup({ accounts = [], automationsCount = 0, igAuthUrl = null }) {
     const { props } = usePage();
     const flash = props.flash ?? {};
     const channelsUrl = route('client.inbox.setup');
     const active = accounts.filter((a) => a.status === 'active');
+
+    // Business Login for Instagram redirect-back: when Instagram lands here
+    // with ?code=, POST it to the connect endpoint and clean the URL so a
+    // refresh cannot replay the code.
+    useEffect(() => {
+        const params = new window.URLSearchParams(window.location.search);
+        const code = params.get('code');
+        if (! code) return;
+        params.delete('code');
+        params.delete('state');
+        window.history.replaceState({}, '', window.location.pathname + (params.toString() ? `?${params}` : ''));
+        router.post(route('client.inbox.setup.instagram-login.connect'), { code }, {
+            preserveScroll: true,
+            onSuccess: () => router.reload({ only: [] }),
+        });
+    }, []);
 
     return (
         <ClientLayout>
@@ -52,18 +69,35 @@ export default function InstagramSetup({ accounts = [], automationsCount = 0 }) 
                                 </p>
                             </div>
                         </div>
-                        <a href={channelsUrl}>
-                            <Button>
-                                <Settings2 className="h-4 w-4" /> Connect via Channels
-                            </Button>
-                        </a>
+                        <div className="flex flex-wrap items-center gap-2">
+                            {igAuthUrl ? (
+                                <a href={igAuthUrl}>
+                                    <Button>
+                                        <Instagram className="h-4 w-4" /> Connect with Instagram
+                                    </Button>
+                                </a>
+                            ) : (
+                                <a href={channelsUrl}>
+                                    <Button>
+                                        <Settings2 className="h-4 w-4" /> Connect via Channels
+                                    </Button>
+                                </a>
+                            )}
+                        </div>
                     </div>
-                    <div className="mt-3 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700 dark:border-blue-800 dark:bg-blue-900/30 dark:text-blue-300">
-                        <strong>One connection powers everything.</strong> Instagram accounts are connected from the{' '}
-                        <a href={channelsUrl} className="underline font-medium">Inbox → Setup (Channels)</a> page.
-                        Connecting there enables Instagram DMs in the Inbox <em>and</em> comment automation together —
-                        this page manages the automation side.
-                    </div>
+                    {igAuthUrl ? (
+                        <div className="mt-3 rounded-lg border border-purple-200 bg-purple-50 px-4 py-3 text-sm text-purple-700 dark:border-purple-800 dark:bg-purple-900/30 dark:text-purple-300">
+                            <strong>Connect with Instagram</strong> — log in with your Instagram credentials (no Facebook Page
+                            needed). One click connects DMs in the Inbox <em>and</em> comment automation together.
+                        </div>
+                    ) : (
+                        <div className="mt-3 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700 dark:border-blue-800 dark:bg-blue-900/30 dark:text-blue-300">
+                            <strong>One connection powers everything.</strong> Instagram accounts are connected from the{' '}
+                            <a href={channelsUrl} className="underline font-medium">Inbox → Setup (Channels)</a> page.
+                            Connecting there enables Instagram DMs in the Inbox <em>and</em> comment automation together —
+                            this page manages the automation side.
+                        </div>
+                    )}
                 </Card>
 
                 <Card padding={false}>
@@ -90,6 +124,15 @@ export default function InstagramSetup({ accounts = [], automationsCount = 0 }) 
                                             <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLES[account.status] ?? STATUS_STYLES.disconnected}`}>
                                                 {String(account.status).replaceAll('_', ' ')}
                                             </span>
+                                            {(account.meta_json?.auth_type ?? null) === 'instagram_login' ? (
+                                                <span className="rounded-full bg-purple-100 px-2 py-0.5 text-xs font-medium text-purple-700 dark:bg-purple-900/40 dark:text-purple-300">
+                                                    Instagram Login
+                                                </span>
+                                            ) : (
+                                                <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-xs font-medium text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400">
+                                                    Facebook Page
+                                                </span>
+                                            )}
                                         </div>
                                         <p className="text-xs text-neutral-500 dark:text-neutral-400">
                                             IG ID {account.ig_user_id} · connected {new Date(account.created_at).toLocaleDateString()}

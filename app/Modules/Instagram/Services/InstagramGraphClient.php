@@ -8,15 +8,38 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Thin Instagram Graph API client (Facebook Login path — Page access token,
- * graph.facebook.com). All module Meta calls go through here so error mapping
- * and logging are consistent.
+ * Thin Instagram Graph API client. All module Meta calls go through here so
+ * error mapping and logging are consistent.
+ *
+ * HOST ROUTING (Instagram Login migration):
+ *  - auth_type='instagram_login' (or no page_id) → graph.instagram.com + the
+ *    IG User access token stored in page_token. NO Facebook Page involved.
+ *  - legacy Facebook Login accounts → graph.facebook.com + Page token (unchanged).
  */
 class InstagramGraphClient
 {
     private function apiVersion(): string
     {
         return (string) config('instagram.api_version', 'v20.0');
+    }
+
+    /**
+     * True when the account connected through Business Login for Instagram
+     * (Instagram credentials, IG User token, graph.instagram.com).
+     */
+    public function isInstagramLogin(InstagramAccount $account): bool
+    {
+        if (($account->meta_json['auth_type'] ?? null) === 'instagram_login') {
+            return true;
+        }
+
+        // No linked page => it cannot be a Facebook Login connection.
+        return blank($account->page_id);
+    }
+
+    private function graphHost(InstagramAccount $account): string
+    {
+        return $this->isInstagramLogin($account) ? 'graph.instagram.com' : 'graph.facebook.com';
     }
 
     /**
@@ -37,17 +60,25 @@ class InstagramGraphClient
 
     /**
      * A normal DM send to an IGSID. Only valid while the 24h window
-     * (opened by the commenter's reply) is open.
+     * (opened by the commenter's reply) is open. Optional quick replies
+     * render as tappable buttons (used by the follow-gate loop).
      *
+     * @param  array<int, array{content_type: string, title: string, payload: string}>|array<int, mixed>  $quickReplies
      * @return array<string, mixed>
      *
      * @throws InstagramGraphException
      */
-    public function sendMessage(InstagramAccount $account, string $igsid, string $text): array
+    public function sendMessage(InstagramAccount $account, string $igsid, string $text, array $quickReplies = []): array
     {
+        $message = ['text' => $text];
+
+        if ($quickReplies !== []) {
+            $message['quick_replies'] = $quickReplies;
+        }
+
         return $this->post($account, "{$account->ig_user_id}/messages", [
             'recipient' => ['id' => $igsid],
-            'message' => ['text' => $text],
+            'message' => $message,
         ]);
     }
 
@@ -77,6 +108,7 @@ class InstagramGraphClient
     /**
      * Subscribe this IG account to the webhook fields the module needs
      * (per-account subscription; harmless if the platform ignores it).
+     * IG-Login accounts subscribe on graph.instagram.com.
      *
      * @return array<string, mixed>
      *
@@ -137,7 +169,7 @@ class InstagramGraphClient
      */
     public function getRecentMedia(InstagramAccount $account, int $limit = 12): array
     {
-        $url = "https://graph.facebook.com/{$this->apiVersion()}/{$account->ig_user_id}/media";
+        $url = "https://{$this->graphHost($account)}/{$this->apiVersion()}/{$account->ig_user_id}/media";
 
         try {
             $res = Http::withToken($account->page_token)
@@ -175,7 +207,7 @@ class InstagramGraphClient
      */
     public function doesUserFollow(InstagramAccount $account, string $igsid): ?bool
     {
-        $url = "https://graph.facebook.com/{$this->apiVersion()}/{$igsid}";
+        $url = "https://{$this->graphHost($account)}/{$this->apiVersion()}/{$igsid}";
 
         try {
             $res = Http::withToken($account->page_token)
@@ -216,7 +248,7 @@ class InstagramGraphClient
      */
     private function post(InstagramAccount $account, string $path, array $body): array
     {
-        $url = "https://graph.facebook.com/{$this->apiVersion()}/{$path}";
+        $url = "https://{$this->graphHost($account)}/{$this->apiVersion()}/{$path}";
 
         try {
             $res = Http::withToken($account->page_token)

@@ -53,10 +53,27 @@ class InstagramWebhookController extends Controller
             abort(403);
         }
 
-        $appSecret = $meta->appSecret();
-        if ($appSecret) {
-            $expected = 'sha256='.hash_hmac('sha256', $request->getContent(), $appSecret);
-            if (! hash_equals($expected, $request->header('X-Hub-Signature-256', ''))) {
+        // Dual-signature: webhooks registered through the classic Meta app are
+        // signed with the FB app secret; Instagram-Login registrations are signed
+        // with the Instagram app secret. Accept either — both secrets staying
+        // configured is the normal state after the Instagram Login migration.
+        $signature = (string) $request->header('X-Hub-Signature-256', '');
+        $secrets = array_values(array_filter([
+            $meta->appSecret(),
+            $meta->igAppSecret(),
+        ]));
+
+        if ($secrets !== []) {
+            $valid = false;
+            foreach ($secrets as $secret) {
+                $expected = 'sha256='.hash_hmac('sha256', $request->getContent(), (string) $secret);
+                if ($expected !== '' && hash_equals($expected, $signature)) {
+                    $valid = true;
+                    break;
+                }
+            }
+
+            if (! $valid) {
                 InstagramLog::webhook('warning', 'instagram_module.webhook.signature_mismatch', ['ip' => $request->ip()]);
 
                 abort(401, 'Invalid signature');

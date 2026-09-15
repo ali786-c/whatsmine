@@ -89,6 +89,9 @@ class IntegrationConfig extends Model
             ['key' => 'verify_token',        'label' => 'Webhook Verify Token',                 'type' => 'text',     'required' => false],
             ['key' => 'config_id_whatsapp',  'label' => 'Embedded Signup Config ID (WhatsApp)', 'type' => 'text',     'required' => false, 'hint' => 'From Meta App Dashboard → Facebook Login for Business → WhatsApp Embedded Signup configuration'],
             ['key' => 'config_id_social',    'label' => 'Embedded Signup Config ID (Instagram / Messenger)', 'type' => 'text', 'required' => false, 'hint' => 'From Meta App Dashboard → Facebook Login for Business → Social Embedded Signup configuration'],
+            ['key' => 'ig_app_id',           'label' => 'Instagram App ID (Instagram Login)', 'type' => 'text',  'required' => false, 'hint' => 'From Meta App Dashboard → Instagram → API setup with Instagram login → Business login settings — enables the Connect with Instagram flow'],
+            ['key' => 'ig_app_secret',       'label' => 'Instagram App Secret (Instagram Login)', 'type' => 'password', 'required' => false, 'hint' => 'Instagram App Secret from the same Business login settings page'],
+            ['key' => 'ig_manual_token',     'label' => 'Instagram Manual Token (optional)', 'type' => 'password', 'required' => false, 'hint' => 'Optional: a 60-day token generated via App Dashboard → Generate token — lets clients connect without OAuth'],
         ],
         'oauth_linkedin' => [
             ['key' => 'client_id',     'label' => 'Client ID',     'type' => 'text',     'required' => true],

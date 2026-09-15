@@ -965,11 +965,17 @@ function EmbeddedSignupButton({ configId, appId, channel, label, color, onCode, 
 
 /* ─────────────────── Instagram connect drawer ─────────────────── */
 
-function AddInstagramForm({ onSuccess, metaConfigIdSocial, metaAppId, metaConfigIdWhatsapp }) {
+function AddInstagramForm({ onSuccess, metaConfigIdSocial, metaAppId, metaConfigIdWhatsapp, igAuthorizeUrl = null }) {
     const { t } = useTranslation();
     const [apiError, setApiError] = useState(null);
     const [submitting, setSubmitting] = useState(false);
     const configMismatch = metaConfigIdSocial && metaConfigIdWhatsapp && metaConfigIdSocial === metaConfigIdWhatsapp;
+
+    // Marker so the redirect-back useEffect knows this is an Instagram-Login
+    // flow (not the Facebook embedded-signup flow that also lands on ?code=).
+    const startIgLogin = () => {
+        window.sessionStorage.setItem('ig_login_oauth', '1');
+    };
 
     const handleEmbeddedCode = useCallback(async (code) => {
         setApiError(null);
@@ -1013,6 +1019,19 @@ function AddInstagramForm({ onSuccess, metaConfigIdSocial, metaAppId, metaConfig
                 <div className="rounded-lg border border-amber-200 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 px-3 py-2.5 text-xs text-amber-700 dark:text-amber-300 flex items-start gap-2">
                     <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
                     <span><strong>{t('inbox.misconfiguration_label')}</strong> {t('inbox.config_mismatch_instagram')}</span>
+                </div>
+            )}
+            {igAuthorizeUrl && (
+                <div className="rounded-lg border border-purple-200 dark:border-purple-700 bg-purple-50 dark:bg-purple-900/20 px-3 py-3">
+                    <p className="text-xs font-medium text-purple-700 dark:text-purple-300">Recommended — Connect with Instagram</p>
+                    <p className="mt-0.5 text-xs text-purple-600 dark:text-purple-400 leading-relaxed">
+                        Log in with your Instagram credentials. No Facebook Page required — works for professional (business/creator) accounts.
+                    </p>
+                    <a href={igAuthorizeUrl} onClick={startIgLogin} className="mt-2 inline-flex">
+                        <button type="button" className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-tr from-purple-500 via-pink-500 to-orange-400 px-4 py-2 text-sm font-semibold text-white hover:opacity-90">
+                            <InstagramLogo className="h-4 w-4" /> Connect with Instagram
+                        </button>
+                    </a>
                 </div>
             )}
             <p className="text-xs text-neutral-500 dark:text-neutral-400 leading-relaxed">
@@ -1136,6 +1155,7 @@ export default function ChannelSetup({
     wabas, whatsappWebhookGlobalUrl,
     channelAccountsByWaba, instagramAccounts, messengerAccounts, metaWebhookUrl,
     metaAppId = null, metaConfigIdWhatsapp = null, metaConfigIdSocial = null,
+    igAuthorizeUrl = null,
     chatbots = [],
 }) {
     const { t } = useTranslation();
@@ -1158,6 +1178,40 @@ export default function ChannelSetup({
             pending = JSON.parse(window.sessionStorage.getItem('meta_social_oauth') || 'null');
         } catch {
             pending = null;
+        }
+
+        // Business Login for Instagram redirect-back: state is tracked via the
+        // ig_login_oauth marker (set when the Connect-with-Instagram link is
+        // clicked), NOT the meta_social_oauth embedded-signup marker.
+        if (!pending && code && window.sessionStorage.getItem('ig_login_oauth')) {
+            window.sessionStorage.removeItem('ig_login_oauth');
+            window.history.replaceState({}, document.title, window.location.pathname + window.location.hash);
+
+            const igLoginConnect = async () => {
+                setOauthCallbackStatus({ type: 'loading', message: 'Connecting Instagram account…' });
+                try {
+                    const res = await fetch(route('client.inbox.setup.instagram-login.connect'), {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                            'Accept': 'application/json',
+                        },
+                        body: JSON.stringify({ code }),
+                    });
+                    const json = await res.json();
+                    if (!res.ok) {
+                        setOauthCallbackStatus({ type: 'error', message: json.message ?? 'Instagram connection failed.' });
+                    } else {
+                        setOauthCallbackStatus({ type: 'success', message: `Instagram connected${json.username ? ` (@${json.username})` : ''} via Instagram Login.` });
+                        router.reload({ preserveScroll: true });
+                    }
+                } catch {
+                    setOauthCallbackStatus({ type: 'error', message: 'Network error — please retry.' });
+                }
+            };
+            window.queueMicrotask(igLoginConnect);
+            return;
         }
 
         window.sessionStorage.removeItem('meta_social_oauth');
@@ -1413,7 +1467,7 @@ export default function ChannelSetup({
                 title={t('inbox.connect_instagram')}
                 icon={InstagramLogo}
                 iconBg="bg-white dark:bg-neutral-800 shadow-sm border border-neutral-100 dark:border-neutral-700">
-                <AddInstagramForm onSuccess={closeDrawer} metaConfigIdSocial={metaConfigIdSocial} metaAppId={metaAppId} metaConfigIdWhatsapp={metaConfigIdWhatsapp} />
+                <AddInstagramForm onSuccess={closeDrawer} metaConfigIdSocial={metaConfigIdSocial} metaAppId={metaAppId} metaConfigIdWhatsapp={metaConfigIdWhatsapp} igAuthorizeUrl={igAuthorizeUrl} />
             </ConnectDrawer>
 
             {/* Connect Messenger drawer */}

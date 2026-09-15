@@ -397,6 +397,7 @@ tail -f timeout.log          # 7d / 24h sweeps</pre><button class="copy">Copy</b
         <tr><td><code class="inline">INSTAGRAM_FOLLOW_CHECK</code></td><td>true</td><td><b>Real follow verification</b> — User Profile API se <code class="inline">is_user_follow_business</code> check (DM reply ke baad). false = purana trust-mode (sirf user ke jawab par bharosa)</td></tr>
         <tr><td><code class="inline">INSTAGRAM_SENDS_PER_MINUTE</code></td><td>30</td><td>Per-account rate limit (self-protection)</td></tr>
         <tr><td><code class="inline">INSTAGRAM_MAX_NUDGES</code></td><td>2</td><td>Follow-up budget — keyword na match ho to reminders + gate loop ke repeats isi budget se bounded hain</td></tr>
+        <tr><td><code class="inline">IG_APP_ID / IG_APP_SECRET</code></td><td>—</td><td>Admin → Integrations → Meta App mein <b>Instagram App ID</b> + <b>Instagram App Secret</b> fields — Business Login for Instagram enable karte hain (Meta App Dashboard → Instagram → API setup with Instagram login → Business login settings se values milti hain)</td></tr>
         <tr><td><code class="inline">INSTAGRAM_GRAPH_VERSION</code></td><td>v20.0</td><td>Graph API version</td></tr>
       </table>
       <p class="muted">Badalne ke baad: <code class="inline">php artisan config:cache && php artisan queue:restart</code></p>
@@ -499,6 +500,37 @@ sudo supervisorctl status</pre><button class="copy">Copy</button></div>
   </div>
 </div>
 
+<!-- INSTAGRAM LOGIN MIGRATION -->
+<div class="step">
+  <div class="step-head"><div class="step-num" style="background:linear-gradient(135deg,#E1306C,#833AB4)">📸</div><h2>Instagram Login Migration — Ab Facebook Page Ki Zaroorat Nahi</h2><span class="time">Sep 15, 2026</span></div>
+  <div class="step-body">
+    <p class="muted">Ab Instagram <b>apni Instagram credentials</b> se connect hota hai (Business Login for Instagram). Facebook Page link karna <b>optional</b> ho gaya — naye accounts sirf Instagram se connect honge, aur WhatsApp ka Facebook-Login path bilkul untouched rahega (same Meta app, dono flows coexist karte hain).</p>
+
+    <h3 style="margin-top:14px">Admin side — ek dafa setup (5 min)</h3>
+    <ol>
+      <li><b>Meta App Dashboard</b> → apna app kholo → <b>Instagram</b> product → <b>API setup with Instagram login</b> → <b>Business login settings</b> mein jao.</li>
+      <li>Wahan se <b>Instagram app ID</b> + <b>Instagram app secret</b> copy karo.</li>
+      <li>Usi section mein <b>OAuth redirect URIs</b> ke tor par add karo: <code class="inline">https://wa.careerinpak.com/instagram/setup</code> (exact URL, trailing slash nahi).</li>
+      <li>Admin panel kholo → <b>Admin → Integrations → Meta App</b> → naye <b>Instagram App ID</b> + <b>Instagram App Secret</b> fields mein paste karo → Save. (Purane app_id/app_secret/config_id waise hi rehne do — WhatsApp unhi pe chal raha hai.)</li>
+      <li><b>Data Access Reset nahi chahiye:</b> App Review/Advanced Access sirf tab chahiye jab doosron ke accounts connect karne hon; apne accounts ke liye Standard Access kaafi hai.</li>
+    </ol>
+
+    <h3 style="margin-top:14px">Client side — connect (2 min)</h3>
+    <ol>
+      <li><b>Inbox → Setup (Channels)</b> ya <b>Instagram → Setup</b> kholo — agar admin ne IG credentials dale hain to purple <b>“Connect with Instagram”</b> button dikhega.</li>
+      <li>Button click → Instagram apna login window kholega → apne <b>Instagram credentials</b> se log in karo (jo professional/business/creator account hai) → permissions allow karo.</li>
+      <li>Redirect wapas aayega aur connection khud store ho jayega — Inbox DMs + comment automation <b>ek hi connection</b> se dono chalu.</li>
+      <li>Facebook wala purana flow ab bhi available hai (drawer mein neeche) — purane accounts waise ke waise chalte rahenge.</li>
+    </ol>
+
+    <div class="note warn"><div class="ic">🔄</div><div><b>60-day tokens (naya system):</b> Facebook Page token kabhi expire nahi hota tha, Instagram-Login token <b>60 din</b> ka hota hai. System daily raat 2:30 baje refresh job chalata hai jo expiry se pehle naya 60-day token le aata hai — tab tak sab automatic. Sirf <b>cron + worker</b> zinda rakhna (jo pehle se hain). Agar kahin token phir bhi expire ho jaye to diagnose command khud bata degi: <code class="inline">php artisan instagram:diagnose</code> mein naya “Instagram Login readiness” section hai.</div></div>
+
+    <div class="note ok"><div class="ic">✅</div><div><b>Webhooks bilkul waise hi automatic hain:</b> connect hote hi system khud Meta ko callback + fields register karta hai (pehle jaisa) — dashboard mein manually kuch nahi karna. Comments, DMs, postbacks sab pehle ke jaise hi aayenge; naye flow mein sirf host <code class="inline">graph.instagram.com</code> hai aur koi Facebook Page nahi.</div></div>
+
+    <p class="muted" style="margin-top:10px"><b>Verify:</b> <code class="inline">php artisan instagram:diagnose</code> chalao — “Instagram Login readiness” section mein IG credentials + accounts + token runway sab green dikhne chahiye.</p>
+  </div>
+</div>
+
 <!-- CHANGELOG -->
 <div class="step">
   <div class="step-head"><div class="step-num" style="background:linear-gradient(135deg,#7c3aed,#a855f7)">📋</div><h2>Changelog — Issues Jo Mile Aur Kaise Fix Huwe</h2><span class="time">Sep 13–14, 2026</span></div>
@@ -533,7 +565,7 @@ sudo supervisorctl status</pre><button class="copy">Copy</button></div>
 </div>
 
 <p style="text-align:center;color:var(--muted);font-size:.8rem;margin-top:30px">
-  Instagram Comment Automation · wa.careerinpak.com · Guide version 1.6 · Sep 2026
+  Instagram Comment Automation · wa.careerinpak.com · Guide version 1.7 · Sep 2026
 </p>
 
 </div>

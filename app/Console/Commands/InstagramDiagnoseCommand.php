@@ -319,10 +319,55 @@ class InstagramDiagnoseCommand extends Command
 
                 if ($ageMin > 10) {
                     $this->line("$warn Scheduler last ran $ageMin minute(s) ago — the schedule:run cron is missing or intermittent.");
-                    $this->line('       Funnel windows/stranded-send healing depend on it — add the cron (Admin → Cron Setup).');
-                } else {
-                    $this->line("$ok Scheduler running (last heartbeat: $ageMin min ago).");
+                    $this->line('       Funnel windows/stranded-send healing depend on it — add the cron (Admin → Cron Setup).');            } else {
+                $this->line("$ok Scheduler running (last heartbeat: $ageMin min ago).");
                 }
+            }
+
+            // Instagram-Login readiness: IG app credentials, IG-login accounts
+            // and their 60-day token runway (refresh job keeps them alive).
+            $igAppId = CredentialResolver::system()->meta()?->igAppId();
+            $igAccounts = \App\Modules\Instagram\Models\InstagramAccount::where('status', 'active')
+                ->whereJsonContains('meta_json->auth_type', 'instagram_login')->count();
+
+            $this->line('');
+            $this->line('--- Instagram Login readiness ---');
+
+            if ($igAppId) {
+                $this->line("$ok Instagram App ID configured (Business Login for Instagram available)..");
+            } else {
+                $this->line("$warn Instagram App ID/Secret not configured — 'Connect with Instagram' unavailable; accounts use the legacy Facebook Page flow.");
+                $this->line('       Optional: Admin → Integrations → Meta App → Instagram App ID / Instagram App Secret.');
+            }
+
+            if ($igAccounts > 0) {
+                $this->line("$ok Instagram-Login accounts: $igAccounts (graph.instagram.com + 60-day tokens).");
+
+                \App\Modules\Instagram\Models\InstagramAccount::where('status', 'active')
+                    ->whereJsonContains('meta_json->auth_type', 'instagram_login')
+                    ->get()
+                    ->each(function ($account) use ($ok, $warn, $bad, &$hasFailure): void {
+                        $expiresAt = isset($account->meta_json['token_expires_at'])
+                            ? \Illuminate\Support\Carbon::parse($account->meta_json['token_expires_at'])
+                            : null;
+
+                        if ($expiresAt === null) {
+                            $this->line("$warn @{$account->username} ({$account->ig_user_id}): no token expiry recorded — reconnect recommended.");
+
+                            return;
+                        }
+
+                        $days = (int) now()->diffInDays($expiresAt, false);
+
+                        if ($days <= 0) {
+                            $this->line("$bad @{$account->username} ({$account->ig_user_id}): token EXPIRED — reconnect via 'Connect with Instagram'.");
+                            $hasFailure = true;
+                        } elseif ($days <= 7) {
+                            $this->line("$warn @{$account->username} ({$account->ig_user_id}): token expires in $days day(s) — refresh job should renew it within 24h (check scheduler + worker).");
+                        } else {
+                            $this->line("$ok @{$account->username} ({$account->ig_user_id}): token valid for $days more day(s).");
+                        }
+                    });
             }
         }
 

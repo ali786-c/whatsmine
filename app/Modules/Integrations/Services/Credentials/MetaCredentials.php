@@ -46,4 +46,37 @@ class MetaCredentials extends CredentialValueObject
         $val = $this->get('config_id_social');
         return $val !== null && trim((string) $val) !== '' ? trim((string) $val) : null;
     }
+
+    public function igAppId(): ?string
+    {
+        $val = $this->get('ig_app_id');
+        return $val !== null && trim((string) $val) !== '' ? trim((string) $val) : null;
+    }
+
+    /** Same masked-bullet guard as appSecret(). */
+    public function igAppSecret(): ?string
+    {
+        $val = $this->get('ig_app_secret');
+        if ($val === null) {
+            return null;
+        }
+        $str = trim((string) $val);
+        if (preg_match('/[\x{2022}•]/u', $str)) {
+            return null; // Safety guard: never return masked bullet placeholder as actual secret
+        }
+        return $str !== '' ? $str : null;
+    }
+
+    public function igManualToken(): ?string
+    {
+        $val = $this->get('ig_manual_token');
+        if ($val === null) {
+            return null;
+        }
+        $str = trim((string) $val);
+        if (preg_match('/[\x{2022}•]/u', $str)) {
+            return null;
+        }
+        return $str !== '' ? $str : null;
+    }
 }

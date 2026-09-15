@@ -44,6 +44,9 @@ Route::middleware(['web', 'client-app'])->prefix('app/inbox')->name('client.inbo
     Route::get('/setup', [InboxSetupController::class, 'index'])->name('setup');
     Route::post('/setup/embedded-signup/instagram', [InboxSetupController::class, 'embeddedSignupInstagram'])->name('setup.embedded-signup.instagram');
     Route::post('/setup/embedded-signup/messenger', [InboxSetupController::class, 'embeddedSignupMessenger'])->name('setup.embedded-signup.messenger');
+    // Business Login for Instagram (Instagram credentials — no Facebook Page).
+    Route::post('/setup/instagram-login/connect', [InboxSetupController::class, 'instagramLoginConnect'])->name('setup.instagram-login.connect');
+    Route::post('/setup/instagram-login/token', [InboxSetupController::class, 'instagramManualToken'])->name('setup.instagram-login.token');
     Route::patch('/setup/{channelAccount}/chatbot', [InboxSetupController::class, 'assignChatbot'])->name('setup.assign-chatbot');
     Route::delete('/setup/{channelAccount}', [InboxSetupController::class, 'destroy'])->name('setup.destroy');
 });

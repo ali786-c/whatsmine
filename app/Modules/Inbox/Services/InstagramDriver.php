@@ -19,6 +19,9 @@ class InstagramDriver implements ChannelDriverInterface
 {
     private const BASE = 'https://graph.facebook.com/v20.0';
 
+    /** Host for Instagram-Login connections (IG User token, no Facebook Page). */
+    private const IG_LOGIN_BASE = 'https://graph.instagram.com/v20.0';
+
     public function __construct(private ContactService $contactService) {}
 
     public function send(Message $message): string
@@ -37,20 +40,26 @@ class InstagramDriver implements ChannelDriverInterface
         $payload = $message->payload ?? [];
         $imageUrl = $payload['link'] ?? $payload['preview_url'] ?? null;
 
+        // Instagram-Login connections talk to graph.instagram.com with the IG
+        // User token; legacy Facebook-Login connections keep graph.facebook.com.
+        $base = (($channelAcct->meta_json['auth_type'] ?? null) === 'instagram_login')
+            ? self::IG_LOGIN_BASE
+            : self::BASE;
+
         // Image messages (e.g. shared products): send the photo as an attachment,
         // then the caption as a follow-up — an IG attachment carries no text.
         if ($message->type === 'image' && $imageUrl) {
-            $messageId = $this->postMessage($accessToken, $igAccountId, $recipientId, [
+            $messageId = $this->postMessage($base, $accessToken, $igAccountId, $recipientId, [
                 'attachment' => ['type' => 'image', 'payload' => ['url' => $imageUrl, 'is_reusable' => true]],
             ]);
             if (! empty($message->body)) {
-                $this->postMessage($accessToken, $igAccountId, $recipientId, ['text' => $message->body]);
+                $this->postMessage($base, $accessToken, $igAccountId, $recipientId, ['text' => $message->body]);
             }
 
             return $messageId;
         }
 
-        return $this->postMessage($accessToken, $igAccountId, $recipientId, ['text' => $message->body]);
+        return $this->postMessage($base, $accessToken, $igAccountId, $recipientId, ['text' => $message->body]);
     }
 
     /**
@@ -59,12 +68,12 @@ class InstagramDriver implements ChannelDriverInterface
      *
      * @param  array<string, mixed>  $messageObj
      */
-    private function postMessage(string $accessToken, string $igAccountId, string $recipientId, array $messageObj): string
+    private function postMessage(string $baseUrl, string $accessToken, string $igAccountId, string $recipientId, array $messageObj): string
     {
         // Primary (existing behaviour): send via the IG account messages endpoint.
         $resp = Http::withToken($accessToken)
             ->timeout(15)
-            ->post(self::BASE."/{$igAccountId}/messages", [
+            ->post($baseUrl."/{$igAccountId}/messages", [
                 'recipient' => ['id' => $recipientId],
                 'message' => $messageObj,
                 'messaging_type' => 'RESPONSE',
@@ -92,7 +101,7 @@ class InstagramDriver implements ChannelDriverInterface
         // already succeed above, so their behaviour is unchanged.
         $fallback = Http::withToken($accessToken)
             ->timeout(15)
-            ->post(self::BASE.'/me/messages', [
+            ->post($baseUrl.'/me/messages', [
                 'recipient' => ['id' => $recipientId],
                 'message' => $messageObj,
                 'messaging_type' => 'RESPONSE',

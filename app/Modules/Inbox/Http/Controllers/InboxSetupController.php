@@ -66,6 +66,7 @@ class InboxSetupController extends Controller
         $metaWebhookUrl = $meta ? url('/webhooks/meta/'.$meta->verifyToken()) : null;
 
         $metaCreds = CredentialResolver::system()->meta();
+        $igAuthService = $metaCreds?->igAppId() ? app(\App\Modules\Instagram\Services\InstagramAuthService::class) : null;
 
         return Inertia::render('Inbox/Setup', [
             'wabas'                        => $wabas,
@@ -79,6 +80,8 @@ class InboxSetupController extends Controller
             'chatbots'                     => $chatbots,
             'metaWebhookUrl'               => $metaWebhookUrl,
             'metaAppId'                    => $metaCreds?->appId() ?: null,
+            'igAppId'                      => $metaCreds?->igAppId() ?: null,
+            'igAuthorizeUrl'               => $igAuthService ? $igAuthService->authorizeUrl(route('client.inbox.setup'), 'connect') : null,
             'metaConfigIdWhatsapp'         => $metaCreds?->configIdWhatsapp() ?: null,
             'metaConfigIdSocial'           => $metaCreds?->configIdSocial() ?: null,
         ]);
@@ -621,6 +624,169 @@ class InboxSetupController extends Controller
         }
     }
 
+    /**
+     * Business Login for Instagram: the redirect-back handler. Setup.jsx detects
+     * ?code= on the Setup page and POSTs it here. Exchanges the code, upgrades to
+     * a 60-day token, resolves the account via /me (data-array shape) and stores
+     * the connection with auth_type='instagram_login'. NO Facebook Page involved.
+     */
+    public function instagramLoginConnect(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'code' => ['required', 'string', 'max:2048'],
+        ]);
+
+        $workspaceId = $request->user()->current_workspace_id ?? $request->user()->workspace_id;
+
+        $meta = CredentialResolver::system()->meta();
+        if (! $meta?->igAppId() || ! $meta?->igAppSecret()) {
+            return response()->json(['message' => 'Instagram App credentials are not configured. Ask your administrator to fill Instagram App ID/Secret in Admin → Integrations → Meta App.'], 422);
+        }
+
+        $auth = app(\App\Modules\Instagram\Services\InstagramAuthService::class);
+
+        $short = $auth->exchangeCode($validated['code'], route('client.inbox.setup'));
+        if (! $short) {
+            return response()->json(['message' => 'Failed to exchange the authorization code with Instagram.'], 422);
+        }
+
+        $long = $auth->exchangeForLongLived($short['access_token']);
+        $token = $long['access_token'] ?? $short['access_token'];
+        $expiresIn = $long['expires_in'] ?? 3600;
+
+        $account = $auth->fetchAccount($token);
+        if (! $account) {
+            return response()->json(['message' => 'Connected, but could not read your Instagram account details. Please retry.'], 422);
+        }
+
+        $connected = $this->persistInstagramLoginAccount($workspaceId, $account, $token, $expiresIn);
+
+        if ($connected === 0) {
+            return response()->json(['message' => 'Could not persist the Instagram connection. Check the Instagram logs.'], 422);
+        }
+
+        return response()->json(['success' => true, 'connected' => $connected, 'username' => $account['username']]);
+    }
+
+    /**
+     * Manual token path: a 60-day token generated via App Dashboard →
+     * Generate token. Lets a client connect without any OAuth flow.
+     */
+    public function instagramManualToken(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'access_token' => ['required', 'string', 'min:20'],
+        ]);
+
+        $workspaceId = $request->user()->current_workspace_id ?? $request->user()->workspace_id;
+
+        $meta = CredentialResolver::system()->meta();
+        if (! $meta?->igAppId() || ! $meta?->igAppSecret()) {
+            return response()->json(['message' => 'Instagram App credentials are not configured. Ask your administrator to fill Instagram App ID/Secret in Admin → Integrations → Meta App.'], 422);
+        }
+
+        $auth = app(\App\Modules\Instagram\Services\InstagramAuthService::class);
+
+        // The dashboard token is already long-lived — validate it by fetching /me.
+        $account = $auth->fetchAccount($validated['access_token']);
+        if (! $account) {
+            return response()->json(['message' => 'Token rejected by Instagram — make sure it was generated for YOUR Instagram professional account and has not expired.'], 422);
+        }
+
+        $connected = $this->persistInstagramLoginAccount($workspaceId, $account, $validated['access_token'], 5184000);
+
+        if ($connected === 0) {
+            return response()->json(['message' => 'Could not persist the Instagram connection. Check the Instagram logs.'], 422);
+        }
+
+        return response()->json(['success' => true, 'connected' => $connected, 'username' => $account['username']]);
+    }
+
+    /**
+     * Shared persistence for both IG-login connect paths: channel_accounts +
+     * instagram_accounts rows with auth_type='instagram_login', automatic
+     * webhook registration and best-effort account field subscription.
+     * NO page subscription — this flow has no Facebook Page.
+     */
+    private function persistInstagramLoginAccount(int $workspaceId, array $account, string $token, int $expiresIn): int
+    {
+        $igId = $account['user_id'];
+        $name = $account['username'] ?? ($account['name'] ?? $igId);
+
+        $metaJson = [
+            'instagram_page_id'    => $igId,
+            'instagram_account_id' => $igId,
+            'auth_type'            => 'instagram_login',
+            'token_expires_at'     => now()->addSeconds($expiresIn)->toIso8601String(),
+            'token_refreshed_at'   => now()->toIso8601String(),
+        ];
+
+        $existing = ChannelAccount::where('workspace_id', $workspaceId)
+            ->where('channel', 'instagram')
+            ->whereJsonContains('meta_json->instagram_page_id', $igId)
+            ->first();
+
+        if ($existing) {
+            $existing->update([
+                'credentials' => ['access_token' => $token, 'instagram_account_id' => $igId],
+                'meta_json'   => array_merge($existing->meta_json ?? [], $metaJson),
+                'status'      => 'active',
+            ]);
+        } else {
+            ChannelAccount::create([
+                'workspace_id' => $workspaceId,
+                'channel'      => 'instagram',
+                'provider'     => 'meta',
+                'display_name' => mb_substr((string) $name, 0, 128),
+                'credentials'  => ['access_token' => $token, 'instagram_account_id' => $igId],
+                'meta_json'    => $metaJson,
+                'status'       => 'active',
+            ]);
+        }
+
+        // Comment-automation module row — page_token carries the IG User token.
+        \App\Modules\Instagram\Models\InstagramAccount::updateOrCreate(
+            ['workspace_id' => $workspaceId, 'ig_user_id' => $igId],
+            [
+                'username'     => $account['username'] ?? null,
+                'display_name' => $account['name'] ?? ($account['username'] ?? $igId),
+                'page_id'      => null,
+                'page_token'   => $token,
+                'status'       => 'active',
+                'meta_json'    => [
+                    'connected_at'       => now()->toIso8601String(),
+                    'auth_type'          => 'instagram_login',
+                    'token_expires_at'   => now()->addSeconds($expiresIn)->toIso8601String(),
+                    'token_refreshed_at' => now()->toIso8601String(),
+                    'connected_via'      => 'instagram_login',
+                ],
+            ],
+        );
+
+        // Automatic webhook registration (same shared registrar the FB flow uses).
+        \App\Modules\Shared\Services\MetaWebhookRegistrar::registerInstagramObject();
+
+        // Best-effort account-level field subscription over the IG host.
+        try {
+            $moduleAccount = \App\Modules\Instagram\Models\InstagramAccount::where('workspace_id', $workspaceId)->where('ig_user_id', $igId)->first();
+            if ($moduleAccount) {
+                app(\App\Modules\Instagram\Services\InstagramGraphClient::class)->subscribeAccountFields($moduleAccount);
+            }
+        } catch (\Throwable $e) {
+            Log::warning('ig_login: account field subscription failed (webhooks may still deliver)', [
+                'ig_id' => $igId,
+                'error' => $e->getMessage(),
+            ]);
+        }
+
+        Log::info('ig_login: account connected', [
+            'workspace_id' => $workspaceId,
+            'ig_user_id'   => $igId,
+            'username'     => $account['username'] ?? null,
+        ]);
+
+        return 1;
+    }
     public function assignChatbot(Request $request, ChannelAccount $channelAccount): RedirectResponse
     {
         $workspaceId = $request->user()->current_workspace_id ?? $request->user()->workspace_id;
