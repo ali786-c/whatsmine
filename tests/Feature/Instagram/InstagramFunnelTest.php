@@ -310,4 +310,104 @@ class InstagramFunnelTest extends TestCase
         $this->assertTrue(\Illuminate\Support\Facades\Schema::hasTable('comment_automation_logs'));
         $this->assertSame('instagram', config('instagram.queue'));
     }
+
+    public function test_gate_no_reply_repeats_ask_then_closes_after_budget(): void
+    {
+        Http::fake([
+            'graph.facebook.com/*/17841400000001/messages' => Http::sequence()
+                ->push(['message_id' => 'msg-1'], 200)   // private reply (follow ask)
+                ->push(['message_id' => 'msg-2'], 200)   // NO → re-ask (follow-up 1)
+                ->push(['message_id' => 'msg-3'], 200),  // NO → re-ask (follow-up 2)
+        ]);
+
+        $this->automation([
+            'follow_gate' => true,
+            'reply_keyword' => 'DONE',
+            'delivery' => ['type' => 'text', 'text' => 'Here is your file!'],
+        ]);
+
+        $funnel = app(CommentFunnelService::class);
+        $funnel->handleComment('17841400000001', $this->commentValue());
+
+        $participant = FunnelParticipant::where('comment_id', 'comment-123')->firstOrFail();
+        $this->assertSame(FunnelParticipant::STAGE_AWAITING_FOLLOW, $participant->stage);
+
+        $noEvent = fn (string $mid) => [
+            'sender' => ['id' => 'igsid-customer'],
+            'recipient' => ['id' => '17841400000001'],
+            'message' => ['mid' => $mid, 'text' => 'no'],
+        ];
+
+        $this->assertTrue($funnel->handleDmReply('17841400000001', $noEvent('dm-1')));
+        $this->assertTrue($funnel->handleDmReply('17841400000001', $noEvent('dm-2')));
+        $this->assertSame(2, $participant->fresh()->nudge_count);
+        $this->assertSame(FunnelParticipant::STAGE_AWAITING_FOLLOW, $participant->fresh()->stage);
+
+        // Third NO: budget exhausted → closed for agent handoff, no further sends.
+        $this->assertTrue($funnel->handleDmReply('17841400000001', $noEvent('dm-3')));
+        $this->assertSame(FunnelParticipant::STAGE_CLOSED, $participant->fresh()->stage);
+        Http::assertSentCount(3); // private reply + 2 re-asks — the third NO sent nothing
+    }
+
+    public function test_gate_yes_reply_reminds_keyword_then_keyword_delivers(): void
+    {
+        Http::fake([
+            'graph.facebook.com/*/17841400000001/messages' => Http::sequence()
+                ->push(['message_id' => 'msg-1'], 200)   // private reply (follow ask)
+                ->push(['message_id' => 'msg-2'], 200)   // YES → keyword reminder
+                ->push(['message_id' => 'msg-3'], 200),  // DONE → delivery
+        ]);
+
+        $this->automation([
+            'follow_gate' => true,
+            'reply_keyword' => 'DONE',
+            'delivery' => ['type' => 'text', 'text' => 'Here is your file!'],
+        ]);
+
+        $funnel = app(CommentFunnelService::class);
+        $funnel->handleComment('17841400000001', $this->commentValue());
+
+        $this->assertTrue($funnel->handleDmReply('17841400000001', [
+            'sender' => ['id' => 'igsid-customer'],
+            'recipient' => ['id' => '17841400000001'],
+            'message' => ['mid' => 'dm-yes', 'text' => 'yes'],
+        ]));
+
+        $participant = FunnelParticipant::where('comment_id', 'comment-123')->firstOrFail();
+        $this->assertSame(FunnelParticipant::STAGE_AWAITING_FOLLOW, $participant->stage);
+        $this->assertSame(1, $participant->nudge_count);
+
+        // The reminder must contain the exact keyword.
+        $reminder = (string) (Http::recorded()[1][0]['message']['text'] ?? '');
+        $this->assertStringContainsString('DONE', $reminder);
+
+        // Now the real keyword (case-insensitive "done") → delivery.
+        $this->assertTrue($funnel->handleDmReply('17841400000001', [
+            'sender' => ['id' => 'igsid-customer'],
+            'recipient' => ['id' => '17841400000001'],
+            'message' => ['mid' => 'dm-done', 'text' => 'done'],
+        ]));
+        $this->assertSame(FunnelParticipant::STAGE_DELIVERED, $participant->fresh()->stage);
+        Http::assertSentCount(3);
+    }
+
+    public function test_ungated_automation_does_not_intercept_yes_no_replies(): void
+    {
+        Http::fake(['graph.facebook.com/*' => Http::response(['message_id' => 'msg-1'], 200)]);
+
+        $this->automation(['follow_gate' => false]);
+
+        $funnel = app(CommentFunnelService::class);
+        $funnel->handleComment('17841400000001', $this->commentValue());
+        $this->assertSame(FunnelParticipant::STAGE_DELIVERED, FunnelParticipant::where('comment_id', 'comment-123')->firstOrFail()->stage);
+
+        // Delivered funnels no longer intercept replies — "no" flows to the Inbox pipeline.
+        $handled = $funnel->handleDmReply('17841400000001', [
+            'sender' => ['id' => 'igsid-customer'],
+            'recipient' => ['id' => '17841400000001'],
+            'message' => ['mid' => 'dm-no', 'text' => 'no'],
+        ]);
+
+        $this->assertFalse($handled);
+    }
 }

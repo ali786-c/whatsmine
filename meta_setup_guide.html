@@ -286,7 +286,7 @@ curl "https://wa.careerinpak.com/webhooks/instagram/VERIFY_TOKEN?hub.mode=subscr
       <tr><td><b>Enabled</b></td><td>✅ ON → Save</td></tr>
     </table>
     <div class="note ok"><div class="ic">💡</div><div><b>Per-post rule:</b> specific posts wali automation hamesha account-wide automation ko override karti hai apne posts pe.</div></div>
-    <div class="note warn"><div class="ic">⏱️</div><div><b>Meta ke rules (system khud enforce karta hai):</b> 1 comment = 1 DM · private reply sirf 7 din ke andar · follow-up sirf customer ke reply ke baad <b>24h tak</b> · keyword na match ho to max <b>1 nudge</b> (<code class="inline">INSTAGRAM_MAX_NUDGES</code> se control hota hai).</div></div>
+    <div class="note warn"><div class="ic">⏱️</div><div><b>Meta ke rules (system khud enforce karta hai):</b> 1 comment = 1 DM · private reply sirf 7 din ke andar · follow-up sirf customer ke reply ke baad <b>24h tak</b> · keyword na match ho to bounded follow-up loop (<code class="inline">INSTAGRAM_MAX_NUDGES</code>, default <b>2</b>) — <b>NO</b> reply par follow ask dobara bheja jata hai, <b>YES</b> par keyword reminder, aur budget khatam hote hi conversation Inbox ke agent ko hand over ho jati hai. Follow status Graph API se verify NAHI hota — user ke jawab par trust kiya jata hai.</div></div>
     <label class="chk"><input type="checkbox" data-k="s61"><span>Automation banayi + enabled</span></label>
   </div>
 </div>

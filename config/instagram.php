@@ -30,8 +30,11 @@ return [
     // Outbound sends per minute per connected IG account (self-protection).
     'rate_limit_per_minute' => (int) env('INSTAGRAM_SENDS_PER_MINUTE', 30),
 
-    // Polite nudges to a commenter who replies with something other than the
-    // follow-gate keyword. Meta allows follow-ups only within the 24h window.
-    'max_nudges' => (int) env('INSTAGRAM_MAX_NUDGES', 1),
+    // Follow-up sends to a commenter who replied without the follow-gate
+    // keyword. This budget also bounds the conversational gate loop ("no" →
+    // re-ask, "yes" → keyword reminder); when it runs out the funnel closes and
+    // the thread is handed to a human agent in the Inbox. Meta allows follow-ups
+    // only within the 24h window opened by the user's reply.
+    'max_nudges' => (int) env('INSTAGRAM_MAX_NUDGES', 2),
 
 ];

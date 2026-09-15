@@ -16,6 +16,8 @@ use Illuminate\Database\QueryException;
  *  - The single private reply carries everything (hook + follow ask + delivery)
  *    because no second message is allowed before the user replies.
  *  - Follow-ups only after the user replies and within the 24h window.
+ *  - The gated loop ("no" → re-ask, "yes" → keyword reminder) stays inside the
+ *    bounded nudge budget; an exhausted budget closes the funnel for agent handoff.
  */
 class CommentFunnelService
 {
@@ -267,11 +269,39 @@ class CommentFunnelService
 
         $this->mirror->mirrorInbound($participant, $text, $mid ? (string) $mid : null, $event);
 
+        // Conversational follow-gate loop (Meta-safe):
+        //   keyword → delivery · "no" → repeat the follow ask · "yes" → confirm + remind keyword.
+        // Every non-keyword branch still consumes the bounded nudge budget, so the
+        // loop can never be driven forever by endless non-keyword replies.
         // Gated automations without an explicit keyword tell the user "reply DONE"
         // in the private reply — the matcher must expect exactly that default.
         // Treating an empty keyword as match-anything made ANY reply ("hello",
         // "thanks") trigger the delivery, contradicting the instructions sent.
         $keyword = trim((string) ($automation?->reply_keyword ?? '')) ?: 'DONE';
+        $saidNo = KeywordMatcher::matches(['no', 'nope', 'nahi', 'nahin', 'nai', 'not yet', 'abhi nahi'], 'exact', $text);
+        $saidYes = ! $saidNo && KeywordMatcher::matches(['yes', 'yess', 'haan', 'han', 'ho gaya', 'done'], 'exact', $text);
+
+        if ($saidNo) {
+            $maxNudges = max(0, (int) config('instagram.max_nudges', 2));
+            if ($participant->nudge_count < $maxNudges) {
+                $participant->increment('nudge_count');
+                $nudge = 'No problem! Once you follow us, just reply '.$keyword.' and I\'ll send it right over! 😊';
+                InstagramLog::dm('info', 'gate: user said NO — repeating the follow ask', ['participant_id' => $participant->id, 'nudge_count' => $participant->nudge_count]);
+                $this->sendFollowUp($account, $participant, $automation, $senderId, $nudge, $event);
+
+                return true;
+            }
+
+            // Budget exhausted — hand the stalled conversation to a human. The
+            // Inbox thread already holds the full history (mirrored above), so an
+            // agent can pick it up; Meta keeps a fresh 24h send window open.
+            $participant->forceFill(['stage' => FunnelParticipant::STAGE_CLOSED, 'closed_at' => now()])->save();
+            $this->log($account, $automation, $participant->comment_id, CommentAutomationLog::ACTION_SKIPPED, $event, $participant, 'gate loop budget exhausted (user said NO)');
+            InstagramLog::dm('info', 'gate: nudge budget exhausted after NO — closed for agent handoff', ['participant_id' => $participant->id]);
+
+            return true;
+        }
+
         $keywordMatched = KeywordMatcher::matches([$keyword], 'contains', $text);
 
         if ($keywordMatched) {
@@ -282,20 +312,23 @@ class CommentFunnelService
             return true;
         }
 
-        // Polite nudge (bounded) reminding them of the exact keyword.
-        $maxNudges = max(0, (int) config('instagram.max_nudges', 1));
+        if ($saidYes) {
+            // They claim they followed but skipped the keyword: confirm the
+            // follow (the API cannot verify it) and remind the exact keyword.
+            $nudge = 'Amazing! 🎉 Just reply '.$keyword.' to confirm and I\'ll send it over right away!';
+            InstagramLog::dm('info', 'gate: user said YES — reminding the keyword', ['participant_id' => $participant->id, 'received_text' => mb_substr($text, 0, 120)]);
+            $this->sendFollowUp($account, $participant, $automation, $senderId, $nudge, $event);
+
+            return true;
+        }
+
+        // Any other reply (question, "haha", gibberish) → bounded keyword nudge.
+        $maxNudges = max(0, (int) config('instagram.max_nudges', 2));
         if ($participant->nudge_count < $maxNudges) {
             $participant->increment('nudge_count');
             $nudge = "Just reply {$keyword} and I'll send it right over! 😊";
             InstagramLog::dm('info', 'reply did not match keyword — sending nudge', ['participant_id' => $participant->id, 'nudge_count' => $participant->nudge_count, 'expected_keyword' => $keyword, 'received_text' => mb_substr($text, 0, 120)]);
-
-            try {
-                $this->client->sendMessage($account, $senderId, $nudge);
-                $this->mirror->mirrorOutbound($participant, $nudge);
-                $this->log($account, $automation, $participant->comment_id, CommentAutomationLog::ACTION_NUDGED, $event, $participant);
-            } catch (\Throwable $e) {
-                $this->log($account, $automation, $participant->comment_id, CommentAutomationLog::ACTION_SKIPPED, $event, $participant, 'nudge failed: '.$e->getMessage());
-            }
+            $this->sendFollowUp($account, $participant, $automation, $senderId, $nudge, $event);
 
             return true;
         }
@@ -303,6 +336,28 @@ class CommentFunnelService
         $this->log($account, $automation, $participant->comment_id, CommentAutomationLog::ACTION_SKIPPED, $event, $participant, 'nudge limit reached; keyword not matched');
 
         return true;
+    }
+
+    /**
+     * Send one gated follow-up DM, mirror it into the Inbox thread and write the
+     * audit log. Transient Graph failures are logged, never thrown — a failed
+     * follow-up must not crash the webhook pipeline or close the funnel.
+     */
+    private function sendFollowUp(
+        InstagramAccount $account,
+        FunnelParticipant $participant,
+        CommentAutomation $automation,
+        string $toIgsid,
+        string $text,
+        array $event,
+    ): void {
+        try {
+            $this->client->sendMessage($account, $toIgsid, $text);
+            $this->mirror->mirrorOutbound($participant, $text);
+            $this->log($account, $automation, $participant->comment_id, CommentAutomationLog::ACTION_NUDGED, $event, $participant);
+        } catch (\Throwable $e) {
+            $this->log($account, $automation, $participant->comment_id, CommentAutomationLog::ACTION_SKIPPED, $event, $participant, 'follow-up failed: '.$e->getMessage());
+        }
     }
 
     /**
