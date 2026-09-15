@@ -94,12 +94,73 @@ class MetaWebhookRegistrar
                 'fields' => $fields,
             ]);
 
+            // Also register on the INSTAGRAM app (Business Login for Instagram)
+            // — events for IG-Login connections are delivered from that app's
+            // subscription. Best-effort; the manual dashboard option still works.
+            self::registerInstagramAppObject();
+
             // Read back what Meta actually stored so drift is visible in logs
             // AND fixed the next time any connect flow runs.
             self::auditInstagramObject();
         } catch (\Throwable $e) {
             Log::warning('meta_webhook_registrar: instagram object registration exception', [
                 'callback_url' => $callbackUrl,
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    /**
+     * Register the instagram webhook object on the INSTAGRAM app (the one from
+     * Instagram → API setup with Instagram login → Business login settings).
+     * Same callback URL and verify token as the classic app; Meta signs those
+     * deliveries with the Instagram app secret, which the webhook endpoint's
+     * dual-signature check accepts.
+     */
+    public static function registerInstagramAppObject(): void
+    {
+        $meta = CredentialResolver::system()->meta();
+        $igAppId = $meta?->igAppId();
+        $igAppSecret = $meta?->igAppSecret();
+        $verifyToken = $meta?->verifyToken();
+
+        if (! $igAppId || ! $igAppSecret || ! $verifyToken) {
+            return;
+        }
+
+        $moduleRouteExists = Route::has('webhooks.instagram.receive');
+        $callbackUrl = $moduleRouteExists
+            ? url('/webhooks/instagram/'.$verifyToken)
+            : url('/webhooks/meta/'.$verifyToken);
+        $fields = $moduleRouteExists ? self::INSTAGRAM_FIELDS : self::INBOX_ONLY_FIELDS;
+
+        try {
+            $res = Http::post("https://graph.facebook.com/v20.0/{$igAppId}/subscriptions", [
+                'access_token' => $igAppId.'|'.$igAppSecret,
+                'object' => 'instagram',
+                'callback_url' => $callbackUrl,
+                'verify_token' => $verifyToken,
+                'fields' => $fields,
+            ]);
+
+            if (! $res->successful()) {
+                Log::warning('meta_webhook_registrar: instagram-app object registration failed', [
+                    'ig_app_id' => $igAppId,
+                    'status' => $res->status(),
+                    'response' => $res->json(),
+                ]);
+
+                return;
+            }
+
+            Log::info('meta_webhook_registrar: instagram-app object registered', [
+                'ig_app_id' => $igAppId,
+                'callback_url' => $callbackUrl,
+                'fields' => $fields,
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning('meta_webhook_registrar: instagram-app object registration exception', [
+                'ig_app_id' => $igAppId,
                 'error' => $e->getMessage(),
             ]);
         }
