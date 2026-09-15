@@ -51,7 +51,7 @@ Schedule::job(new RefreshSocialTokensJob, 'social')
     ->name('refresh-social-tokens');
 
 // Refresh 60-day Instagram-Login tokens before they expire (daily)
-Schedule::job(RefreshInstagramLoginTokensJob)
+Schedule::job(new RefreshInstagramLoginTokensJob)
     ->dailyAt('02:30')
     ->name('refresh-instagram-login-tokens');
 
