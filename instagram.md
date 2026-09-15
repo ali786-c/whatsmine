@@ -1,5 +1,7 @@
 # Instagram Module — Complete Deep Dive
 
+> **Update (Sep 15, 2026):** Connection ab **Business Login for Instagram** bhi support karta hai — Instagram credentials se login, `graph.instagram.com`, koi Facebook Page nahi, 60-day tokens daily-refreshed. Setup ke liye **`instagram_setup_guide.md` (v2)** dekho; is doc ka connection-flow section Facebook-Login (legacy) path describe karta hai jo ab bhi kaam karta hai.
+
 Analysis of every Instagram-related function in the codebase, derived from reading the source. Instagram is implemented in **two fully separate integrations** that share nothing:
 
 | # | Integration | What it does | Driver |

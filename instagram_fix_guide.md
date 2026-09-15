@@ -1,5 +1,7 @@
 # Instagram DM Fix Guide — verify_token + Webhook Registration
 
+> **📜 Historical (Sep 13, 2026):** Ye us waqt ke fix ka record hai. Ab ke current system ke liye **`instagram_setup_guide.md` (v2)** dekho — usme Instagram Login flow (bina Facebook Page), follow verification, gate loop, token refresh aur saare 11 fixes documented hain. Webhook/verify-token ka ye fix aaj bhi valid hai.
+
 **Masla:** Instagram connected hai, log DM bhej rahe hain, lekin Inbox mein messages show nahi ho rahe.
 
 **Root cause (from `php artisan instagram:diagnose`):** Meta ke paas hamara `instagram` webhook subscription hi nahi hai, kyunki `verify_token` field khali hai. Meta events bhej hi nahi raha — Inbox ka code bilkul theek hai.
