@@ -53,13 +53,34 @@ class InstagramDriver implements ChannelDriverInterface
                 'attachment' => ['type' => 'image', 'payload' => ['url' => $imageUrl, 'is_reusable' => true]],
             ]);
             if (! empty($message->body)) {
-                $this->postMessage($base, $accessToken, $igAccountId, $recipientId, ['text' => $message->body]);
+                $this->postMessage($base, $accessToken, $igAccountId, $recipientId, ['text' => $this->limitText((string) $message->body)]);
             }
 
             return $messageId;
         }
 
-        return $this->postMessage($base, $accessToken, $igAccountId, $recipientId, ['text' => $message->body]);
+        return $this->postMessage($base, $accessToken, $igAccountId, $recipientId, ['text' => $this->limitText((string) $message->body)]);
+    }
+
+    /**
+     * Meta caps DM text at 1000 UTF-8 bytes (Send Messages docs) and REJECTS
+     * longer sends — cap the agent's reply at a safe 998 bytes on a character
+     * boundary so a long reply fails nowhere.
+     */
+    private function limitText(string $text): string
+    {
+        if (strlen($text) <= 998) {
+            return $text;
+        }
+
+        Log::warning('Instagram inbox reply truncated to 1000-byte cap', ['original_bytes' => strlen($text)]);
+        $truncated = substr($text, 0, 998);
+
+        while ($truncated !== '' && ! mb_check_encoding($truncated, 'UTF-8')) {
+            $truncated = substr($truncated, 0, -1);
+        }
+
+        return $truncated;
     }
 
     /**
@@ -123,6 +144,39 @@ class InstagramDriver implements ChannelDriverInterface
             'error_code' => $fbCode,
             'error' => $fbMsg,
         ]);
+
+        // (#10 / "outside allowed window") = the 24-hour customer window has
+        // closed. Docs: a HUMAN_AGENT tagged send may still reach the user for
+        // 7 days. Retry once with that tag before surfacing the failure.
+        $windowClosed = (int) $errCode === 10
+            || (int) $fbCode === 10
+            || str_contains((string) $errMsg, 'outside allowed window')
+            || str_contains((string) $fbMsg, 'outside allowed window');
+
+        if ($windowClosed && ($messageObj['text'] ?? null) !== null) {
+            $tagged = Http::withToken($accessToken)
+                ->timeout(15)
+                ->post($baseUrl."/{$igAccountId}/messages", [
+                    'recipient' => ['id' => $recipientId],
+                    'message' => $messageObj,
+                    'messaging_type' => 'MESSAGE_TAG',
+                    'tag' => 'HUMAN_AGENT',
+                ]);
+
+            if ($tagged->successful()) {
+                Log::info('Instagram send: delivered via HUMAN_AGENT tag after 24h window closed', [
+                    'recipient' => $recipientId,
+                ]);
+
+                return $tagged->json('message_id', '');
+            }
+
+            Log::warning('Instagram HUMAN_AGENT retry failed', [
+                'recipient' => $recipientId,
+                'error_code' => $tagged->json('error.code'),
+                'error' => $tagged->json('error.message') ?? $tagged->body(),
+            ]);
+        }
 
         // (#3) = the app / page token lacks the capability for this call. For
         // Instagram sending that means the `instagram_manage_messages` permission

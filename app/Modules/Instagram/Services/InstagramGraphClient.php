@@ -54,7 +54,7 @@ class InstagramGraphClient
     {
         return $this->post($account, "{$account->ig_user_id}/messages", [
             'recipient' => ['comment_id' => $commentId],
-            'message' => ['text' => $text],
+            'message' => ['text' => $this->limitText($text, 'private reply')],
         ]);
     }
 
@@ -70,7 +70,7 @@ class InstagramGraphClient
      */
     public function sendMessage(InstagramAccount $account, string $igsid, string $text, array $quickReplies = []): array
     {
-        $message = ['text' => $text];
+        $message = ['text' => $this->limitText($text, 'DM')];
 
         if ($quickReplies !== []) {
             $message['quick_replies'] = $quickReplies;
@@ -91,6 +91,8 @@ class InstagramGraphClient
      */
     public function sendAttachment(InstagramAccount $account, string $igsid, string $type, string $url): array
     {
+        $this->assertAttachmentSize($type, $url);
+
         return $this->post($account, "{$account->ig_user_id}/messages", [
             'recipient' => ['id' => $igsid],
             'message' => [
@@ -205,6 +207,57 @@ class InstagramGraphClient
         InstagramLog::dm('info', 'follow-status resolved', ['igsid' => $igsid, 'follows' => $follows]);
 
         return $follows;
+    }
+
+    /**
+     * Meta hard-caps DM text at 1000 UTF-8 bytes (Send Messages docs). A longer
+     * text is REJECTED by Graph and fails the whole job with an opaque error —
+     * truncate to a safe 998 bytes on a character boundary instead, with a log.
+     */
+    private function limitText(string $text, string $context): string
+    {
+        $bytes = strlen($text);
+
+        if ($bytes <= 998) {
+            return $text;
+        }
+
+        InstagramLog::warning('instagram text truncated to 1000-byte cap', ['context' => $context, 'original_bytes' => $bytes]);
+        $truncated = substr($text, 0, 998);
+
+        // Never leave a broken multi-byte character at the end.
+        while ($truncated !== '' && ! mb_check_encoding($truncated, 'UTF-8')) {
+            $truncated = substr($truncated, 0, -1);
+        }
+
+        return $truncated;
+    }
+
+    /**
+     * Reject media the Graph API would bounce anyway: images > 8MB and
+     * audio/video/files > 25MB (docs: Media types and specifications). A HEAD
+     * probe keeps oversized deliveries from failing after the fact — the caller
+     * sees the real reason instead of an opaque Graph error. Probe failure is
+     * fail-open (send anyway) so a CDN that blocks HEAD cannot break deliveries.
+     */
+    private function assertAttachmentSize(string $type, string $url): void
+    {
+        $maxBytes = $type === 'image' ? 8 * 1024 * 1024 : 25 * 1024 * 1024;
+
+        try {
+            $head = Http::timeout(10)->head($url);
+            $length = (int) ($head->header('Content-Length') ?? 0);
+        } catch (\Throwable $e) {
+            InstagramLog::warning('attachment size probe failed — sending anyway', ['url' => $url, 'error' => $e->getMessage()]);
+
+            return;
+        }
+
+        if ($length > 0 && $length > $maxBytes) {
+            throw new InstagramGraphException(
+                'Attachment too large for Instagram ('.round($length / 1048576, 1).'MB > '.round($maxBytes / 1048576).'MB '.$type.' limit): '.$url
+            );
+        }
     }
 
     /**
