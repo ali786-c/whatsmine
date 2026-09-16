@@ -199,6 +199,12 @@ class InboxController extends Controller
 
         // Require body for plain text messages
         if ($msgType === 'text' && empty($validated['body'])) {
+            // JSON callers (Inertia composer) need a parseable error — a back()
+            // redirect would be silently followed by axios and swallowed.
+            if ($request->wantsJson()) {
+                return response()->json(['error' => 'Message body is required.'], 422);
+            }
+
             return back()->withErrors(['body' => 'Message body is required.']);
         }
 
@@ -206,7 +212,13 @@ class InboxController extends Controller
         if ($conversation->channelAccount?->channel === 'whatsapp'
             && ! $conversation->isWhatsappWindowOpen()
             && $msgType !== 'template') {
-            return back()->with('error', 'WhatsApp 24-hour session is closed. Use an approved template to re-engage this contact.');
+            $windowError = 'WhatsApp 24-hour session is closed. Use an approved template to re-engage this contact.';
+
+            if ($request->wantsJson()) {
+                return response()->json(['error' => $windowError], 422);
+            }
+
+            return back()->with('error', $windowError);
         }
 
         $message = Message::create([
