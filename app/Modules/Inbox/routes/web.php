@@ -42,7 +42,6 @@ Route::middleware(['web', 'client-app'])->prefix('app/inbox')->name('client.inbo
 
     // Channel account setup (Instagram / Messenger)
     Route::get('/setup', [InboxSetupController::class, 'index'])->name('setup');
-    Route::post('/setup/embedded-signup/instagram', [InboxSetupController::class, 'embeddedSignupInstagram'])->name('setup.embedded-signup.instagram');
     Route::post('/setup/embedded-signup/messenger', [InboxSetupController::class, 'embeddedSignupMessenger'])->name('setup.embedded-signup.messenger');
     // Business Login for Instagram (Instagram credentials — no Facebook Page).
     Route::post('/setup/instagram-login/connect', [InboxSetupController::class, 'instagramLoginConnect'])->name('setup.instagram-login.connect');

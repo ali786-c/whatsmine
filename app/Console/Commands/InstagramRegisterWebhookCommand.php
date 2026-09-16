@@ -2,27 +2,28 @@
 
 namespace App\Console\Commands;
 
-use App\Modules\Shared\Models\ChannelAccount;
+use App\Modules\Instagram\Models\InstagramAccount;
+use App\Modules\Instagram\Services\InstagramGraphClient;
 use App\Modules\Shared\Services\MetaWebhookRegistrar;
 use Illuminate\Console\Command;
-use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Log;
 
 /**
- * (Re-)register the app-level `instagram` webhook subscription against Meta
- * AND re-subscribe every connected Facebook Page to Instagram messaging.
+ * (Re-)register the `instagram` webhook subscription against Meta on BOTH apps
+ * (the classic Meta app AND the Instagram app) AND subscribe every connected
+ * IG-Login account's fields on graph.instagram.com.
  *
- * Use when instagram:diagnose reports "NO instagram webhook subscription at
- * Meta" or a page missing the `messages` field — typically after the
- * verify_token was added/changed, or the subscription was lost. Idempotent:
- * always writes the full expected callback + field set through the shared
- * registrar.
+ * Use when instagram:diagnose reports a missing webhook subscription or an
+ * account without field subscriptions. Idempotent: always writes the full
+ * expected callback + field set through the shared registrar.
+ *
+ * NOTE: the legacy "re-subscribe Facebook Page to messages" step is gone —
+ * Instagram connects exclusively via Business Login for Instagram now.
  */
 class InstagramRegisterWebhookCommand extends Command
 {
     protected $signature = 'instagram:register-webhook';
 
-    protected $description = '(Re-)register the instagram webhook subscription with Meta (app-level callback + fields + page messaging)';
+    protected $description = '(Re-)register the instagram webhook subscription with Meta (both apps + IG account field subscription)';
 
     public function handle(): int
     {
@@ -44,7 +45,7 @@ class InstagramRegisterWebhookCommand extends Command
         $this->line('  callback_url: '.($subscription['callback_url'] ?? '(none)'));
         $this->line('  fields:       '.implode(', ', MetaWebhookRegistrar::normalizeFields($subscription['fields'] ?? [])));
 
-        $this->reSubscribePages();
+        $this->subscribeAccounts();
 
         $this->line('');
         $this->line('Next: send a DM from another Instagram account, then re-run php artisan instagram:diagnose.');
@@ -53,76 +54,36 @@ class InstagramRegisterWebhookCommand extends Command
     }
 
     /**
-     * Re-subscribe every connected Facebook Page to Instagram messaging
-     * webhooks (page-level subscribed_apps). Without the `messages` field on
-     * the PAGE, Meta never delivers that account's DMs even when the app-level
-     * subscription is perfect.
+     * Subscribe every connected Instagram-Login account's webhook fields on
+     * graph.instagram.com (account-level subscription — the IG-Login flow has
+     * no Facebook Page to subscribe).
      */
-    private function reSubscribePages(): void
+    private function subscribeAccounts(): void
     {
-        $accounts = ChannelAccount::where('channel', 'instagram')->where('status', 'active')->get();
+        $accounts = InstagramAccount::where('status', 'active')->get();
 
         if ($accounts->isEmpty()) {
             $this->line('');
-            $this->line('No active instagram channel accounts — nothing to re-subscribe at page level.');
+            $this->line('No active Instagram module accounts — nothing to subscribe at account level.');
 
             return;
         }
 
         $this->line('');
-        $this->line('Re-subscribing pages to Instagram messaging...');
+        $this->line('Subscribing Instagram accounts on graph.instagram.com...');
+
+        $client = app(InstagramGraphClient::class);
 
         foreach ($accounts as $account) {
-            $pageId = (string) ($account->meta_json['facebook_page_id'] ?? '');
-            $token = (string) ($account->credentials['access_token'] ?? '');
-            $label = sprintf('#%d ws#%d "%s"', $account->id, $account->workspace_id, $account->display_name);
-
-            if ($pageId === '' || $token === '') {
-                $this->line("  [SKIP] $label — missing facebook_page_id or access_token.");
-
-                continue;
-            }
+            $label = sprintf('#%d ws#%d "%s"', $account->id, $account->workspace_id, $account->username ?? $account->ig_user_id);
 
             try {
-                $res = Http::withToken($token)
-                    ->timeout(20)
-                    ->post("https://graph.facebook.com/v20.0/{$pageId}/subscribed_apps", [
-                        'subscribed_fields' => 'messages,messaging_postbacks,message_reactions,message_reads',
-                    ]);
-
-                if (! $res->successful()) {
-                    $msg = (string) ($res->json('error.message') ?? $res->body());
-                    $this->line("  [FAIL] $label page $pageId: ".$msg);
-
-                    if (str_contains($msg, 'pages_messaging')) {
-                        $this->line('         Root cause: the stored page token has NO `pages_messaging` permission (error #200).');
-                        $this->line('         Fix: add `pages_messaging` to the Social config in Facebook Login for Business → Configurations,');
-                        $this->line('              then reconnect the account (Channels → Connect Instagram) and re-run this command.');
-                    } else {
-                        $this->line('         Token expired? Reconnect the Instagram account from Channels → Connect Instagram.');
-                    }
-
-                    continue;
-                }
-
-                $check = Http::withToken($token)
-                    ->timeout(20)
-                    ->get("https://graph.facebook.com/v20.0/{$pageId}/subscribed_apps");
-                $fields = (array) $check->json('data.0.subscribed_fields', []);
-
-                if (in_array('messages', $fields, true)) {
-                    $this->line("  [ OK ] $label page $pageId subscribed to: ".implode(', ', $fields));
-                } else {
-                    $this->line("  [FAIL] $label page $pageId — `messages` still missing after subscribe (fields: ".implode(', ', $fields).')');
-                }
+                $client->subscribeAccountFields($account);
+                $this->line("  [ OK ] $label (ig {$account->ig_user_id})");
             } catch (\Throwable $e) {
                 $this->line("  [FAIL] $label: ".$e->getMessage());
+                $this->line('         Token expired? Reconnect via "Connect with Instagram".');
             }
-
-            Log::info('instagram:register-webhook re-subscribed page', [
-                'channel_account_id' => $account->id,
-                'page_id' => $pageId,
-            ]);
         }
     }
 }

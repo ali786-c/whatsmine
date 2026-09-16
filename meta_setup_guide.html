@@ -159,7 +159,8 @@ Meta ──► /webhooks/instagram/{token} ──► "instagram" queue
       </div>
       <div class="note warn"><div class="ic">ℹ️</div><div>Aakhri 2 permissions (<code class="inline">pages_messaging</code> + <code class="inline">pages_manage_metadata</code>) <b>bilkul zaroori</b> hain — inke baghair page subscribe nahi hota aur DMs kabhi nahi aati (Graph error #200). v1.3 mein add hui.</div></div>
       <ol class="plain" start="4"><li><b>Save</b> → jo <b>Config ID</b> bane usse copy kar lo 📋</li></ol>
-      <div class="note danger"><div class="ic">⚠️</div><div>Yeh Config ID <b>WhatsApp wali config se BILKUL alag</b> honi chahiye. Same di to Instagram login par WhatsApp permissions aayengi aur kaam nahi karega.</div></div>
+      <div class="note danger"><div class="ic">⚠️</div><div>Yeh Config ID <b>WhatsApp wali config se BILKUL alag</b> honi chahiye. Same di to login par WhatsApp permissions aayengi aur kaam nahi karega.</div></div>
+      <div class="note ok"><div class="ic">✅</div><div><b>Instagram ke liye ab yeh Config ID ZAROORI NAHI</b> — Instagram ab Business Login for Instagram (IG App ID/Secret) se connect hota hai, neeche 📸 Instagram Login Migration section dekho. Yeh Config ID ab sirf <b>Messenger</b> ke liye hai.</div></div>
       <label class="chk"><input type="checkbox" data-k="s12"><span>Social config banayi + Config ID copy ki</span></label>
     </div>
 
@@ -504,7 +505,7 @@ sudo supervisorctl status</pre><button class="copy">Copy</button></div>
 <div class="step">
   <div class="step-head"><div class="step-num" style="background:linear-gradient(135deg,#E1306C,#833AB4)">📸</div><h2>Instagram Login Migration — Meta Dashboard Setup (Detailed)</h2><span class="time">Sep 15, 2026</span></div>
   <div class="step-body">
-    <p class="muted">Ab Instagram <b>apni Instagram credentials</b> se connect hota hai (Business Login for Instagram). Facebook Page link karna <b>optional</b> ho gaya — naye accounts sirf Instagram se connect honge, aur WhatsApp ka Facebook-Login path bilkul untouched rahega (same Meta app, dono flows coexist karte hain). Neeche poora Meta Dashboard setup step-by-step hai.</p>
+    <p class="muted">Ab Instagram <b>sirf apni Instagram credentials</b> se connect hota hai (Business Login for Instagram). <b>Purana Facebook-Page wala connect flow code aur UI dono se hata diya gaya hai</b> — agar koi account pehle FB-login se connected tha to usay ek dafa <b>Connect with Instagram</b> se dobara connect karo. WhatsApp ka Facebook-Login path bilkul untouched rahega (same Meta app). Messenger apne embedded-signup pe chalta rahega. Neeche poora Meta Dashboard setup step-by-step hai.</p>
 
     <div class="sub"><h3><span class="n">IG.1</span> Instagram Product Add Karo (agar pehle se nahi hai)</h3>
       <ol>

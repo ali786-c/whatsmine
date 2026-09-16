@@ -46,9 +46,10 @@ class InstagramInboundDmTest extends TestCase
             'ig_user_id' => '17841400000001',
             'username' => 'myshop',
             'display_name' => 'My Shop',
-            'page_id' => '10000000001',
-            'page_token' => 'page-token-secret',
+            'page_id' => null,
+            'page_token' => 'ig-user-token-secret',
             'status' => 'active',
+            'meta_json' => ['auth_type' => 'instagram_login', 'connected_via' => 'instagram_login'],
         ]);
 
         // The Inbox module's channel account the driver matches inbound DMs on.
@@ -57,11 +58,11 @@ class InstagramInboundDmTest extends TestCase
             'channel' => 'instagram',
             'provider' => 'meta',
             'display_name' => 'myshop',
-            'credentials' => ['access_token' => 'page-token-secret', 'instagram_account_id' => '17841400000001'],
+            'credentials' => ['access_token' => 'ig-user-token-secret', 'instagram_account_id' => '17841400000001'],
             'meta_json' => [
                 'instagram_page_id' => '17841400000001',
                 'instagram_account_id' => '17841400000001',
-                'facebook_page_id' => '10000000001',
+                'auth_type' => 'instagram_login',
             ],
             'status' => 'active',
         ]);
@@ -226,9 +227,10 @@ class InstagramInboundDmTest extends TestCase
             'ig_user_id' => '17841400000002',
             'username' => 'secondshop',
             'display_name' => 'Second Shop',
-            'page_id' => '10000000002',
-            'page_token' => 'page-token-b',
+            'page_id' => null,
+            'page_token' => 'ig-user-token-b',
             'status' => 'active',
+            'meta_json' => ['auth_type' => 'instagram_login', 'connected_via' => 'instagram_login'],
         ]);
 
         $channelB = ChannelAccount::create([
@@ -236,11 +238,11 @@ class InstagramInboundDmTest extends TestCase
             'channel' => 'instagram',
             'provider' => 'meta',
             'display_name' => 'secondshop',
-            'credentials' => ['access_token' => 'page-token-b', 'instagram_account_id' => '17841400000002'],
+            'credentials' => ['access_token' => 'ig-user-token-b', 'instagram_account_id' => '17841400000002'],
             'meta_json' => [
                 'instagram_page_id' => '17841400000002',
                 'instagram_account_id' => '17841400000002',
-                'facebook_page_id' => '10000000002',
+                'auth_type' => 'instagram_login',
             ],
             'status' => 'active',
         ]);

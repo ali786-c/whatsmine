@@ -33,18 +33,18 @@ doesUserFollow() ── GET /{igsid}?fields=is_user_follow_business
 
 ---
 
-## Two connection modes (choose per account)
+## Connection mode: Instagram Login (the only path)
 
-| | **Instagram Login** (new, recommended) | **Facebook Login** (legacy, still works) |
-|---|---|---|
-| Login credentials | Instagram username/password | Facebook account |
-| Facebook Page required | **No** | Yes |
-| Graph host | `graph.instagram.com` | `graph.facebook.com` |
-| Token type | Instagram User token, **60 days** (auto-refreshed daily) | Page token, never expires |
-| Connect button | **"Connect with Instagram"** (purple, primary) | Embedded-signup (in the connect drawer) |
-| Works for | Professional (business/creator) accounts | Professional accounts linked to a Page |
+| Property | Value |
+|---|---|
+| Login credentials | **Instagram username/password** (no Facebook account) |
+| Facebook Page required | **No** |
+| Graph host | `graph.instagram.com` |
+| Token type | Instagram User token, **60 days** (auto-refreshed daily) |
+| Connect button | **"Connect with Instagram"** (purple, primary) |
+| Works for | Professional (business/creator) accounts |
 
-Both modes coexist on the **same Meta app** — WhatsApp is completely untouched either way. Old Facebook-Login accounts keep working unchanged; new connects prefer Instagram Login.
+> **Migration note:** the old Facebook-Page connect flow (Facebook Login embedded signup for Instagram) has been **removed** from the UI and code. If an account was connected the old way, reconnect it once with **Connect with Instagram** — the new flow needs no Facebook Page and delivers DMs/comments through `graph.instagram.com`. WhatsApp and Messenger are unaffected: they still use the same Meta app and their own flows.
 
 ---
 
@@ -57,7 +57,6 @@ Both modes coexist on the **same Meta app** — WhatsApp is completely untouched
 - [ ] A Meta app (the **existing WhatsApp app works — no new app needed**)
 - [ ] Instagram App ID + App Secret configured (Part A — for Instagram Login)
 - [ ] Instagram account(s) converted to **Professional** (Business/Creator)
-- [ ] *(Legacy path only)* each professional IG account linked to a Facebook Page
 
 ---
 
@@ -76,19 +75,11 @@ Both modes coexist on the **same Meta app** — WhatsApp is completely untouched
 5. **Scopes requested automatically by the app:** `instagram_business_basic`, `instagram_business_manage_messages`, `instagram_business_manage_comments` — nothing to configure by hand.
 6. **Access level:** connecting **your own** accounts works on Standard Access. App Review + Business Verification are only needed when third parties' accounts connect (SaaS).
 
-### 2. Facebook Login setup (legacy path — needed only for Page-linked connects)
+### 2. Facebook Login setup — NOT needed for Instagram anymore
 
-Use the **same app**. Add **Facebook Login for Business** → create a Configuration with:
-`pages_show_list`, `pages_read_engagement`, `instagram_basic`, `instagram_manage_comments`, `instagram_manage_messages` → copy its **Config ID** (this is `config_id_social`; must be **different** from the WhatsApp config ID).
+The Instagram connect flow **no longer uses Facebook Login at all** (no Page, no `config_id_social` requirement for Instagram). Leave your existing Facebook Login for Business configuration untouched — **Messenger and WhatsApp still use theirs**. Just don't add anything new for Instagram here.
 
-**Valid OAuth Redirect URIs** (Facebook Login for Business → Settings) must contain exactly:
-
-```
-https://wa.careerinpak.com/app/instagram/setup
-https://wa.careerinpak.com/app/inbox/setup
-```
-
-### 3. Copy credentials (both paths)
+### 3. Copy credentials
 
 Settings → Basic → copy the **App ID** and **App Secret**. These plus the IG App ID/Secret all go into the admin panel next.
 
@@ -102,12 +93,12 @@ Go to **Admin → Integrations → Meta App** and fill:
 
 | Field | Value | Used by |
 |---|---|---|
-| **App ID** | Meta App ID | FB-login connects + webhook registration + WhatsApp |
+| **App ID** | Meta App ID | webhook registration + WhatsApp + Messenger |
 | **App Secret** | Meta App Secret | same |
 | **Instagram App ID** | from Part A step 1 | **Instagram Login flow** (`ig_app_id`) |
 | **Instagram App Secret** | from Part A step 1 | **Instagram Login flow** (`ig_app_secret`) |
 | **Webhook Verify Token** | any long random string, e.g. `php -r "echo bin2hex(random_bytes(20));"` | webhook endpoint URL |
-| **Config ID (Instagram/Messenger)** | legacy FB-login config ID | Facebook embedded-signup only |
+| **Config ID (Instagram/Messenger)** | Messenger embedded-signup config | **Messenger only** — Instagram no longer uses it |
 
 Save. Once the IG App ID/Secret are present, the client panel shows the primary purple **Connect with Instagram** button.
 
@@ -115,20 +106,18 @@ Save. Once the IG App ID/Secret are present, the client panel shows the primary 
 
 ## Part C — Client Panel Connect
 
-### Recommended: Connect with Instagram
+### Connect with Instagram
 
 1. Sidebar → **Instagram → Setup** (or **Inbox → Setup** → connect drawer)
 2. Click **Connect with Instagram** → Instagram's own login window opens
-3. Log in with the **Instagram credentials** of the professional account → allow the permissions
+3. Log in with the **Instagram credentials** of the professional account → allow the permissions ("View profile and access media (required)", comments, messages — leave all ON)
 4. Redirect back → the account is stored automatically with `auth_type = instagram_login`:
    - Inbox channel row created (DMs land in the shared Inbox)
    - Comment-automation module row created (automations can be built)
    - Webhook registration + account field subscription run automatically
 5. **ONE connection powers both features** — Inbox DMs AND comment automation.
 
-### Legacy: Facebook connect (drawer)
-
-The Facebook embedded-signup flow still works exactly as before for Page-linked accounts. Old connected accounts stay on the Facebook path (never-expiring Page token, `graph.facebook.com`) and need no migration.
+There is no other connect path anymore — the old Facebook-Page flow was removed.
 
 ### Token lifetime (Instagram Login)
 
@@ -255,7 +244,7 @@ php artisan instagram:register-webhook
 | # | Symptom | Root cause | Fix |
 |---|---|---|---|
 | 1 | Zero webhooks arriving, diagnose FAIL at credentials | `verify_token` field empty in admin → Meta subscription never created | Fill Webhook Verify Token → `instagram:register-webhook` |
-| 2 | Page subscribe fails `(#200) pages_messaging needed` | Token scopes missing | Add `pages_messaging` + `pages_manage_metadata` to the FB-login configuration, reconnect |
+| 2 | *(historical)* Page subscribe fails `(#200) pages_messaging needed` | Token scopes missing on the old FB-login flow | Flow removed — reconnect with **Connect with Instagram** |
 | 3 | DMs arrive only when running `queue:work --stop-when-empty` manually | Worker's `--queue` list missing `instagram` | Add `instagram,` to the supervisor command, restart (Part E) |
 | 4 | **`Data too long for column 'avatar'`** in laravel.log, message lost | IG avatar CDN URLs ≈700 chars > `contacts.avatar` column (512) | Fixed permanently: column is `TEXT` + avatar sync is non-fatal (run `php artisan migrate --force`) |
 | 5 | One account's DM swallowed by another account's funnel | Cross-workspace participant matching | Fixed in `CommentFunnelService` (account-scoped queries) |
@@ -295,7 +284,7 @@ tail -20 storage/logs/worker.log              # supervisor worker stdout
 
 | Key | Meaning |
 |---|---|
-| `app_id` / `app_secret` | Meta app (FB-login connects, webhook registration, WhatsApp) |
+| `app_id` / `app_secret` | Meta app (webhook registration, WhatsApp, Messenger) |
 | `ig_app_id` / `ig_app_secret` | **Instagram app** (Business Login for Instagram) |
 | `verify_token` | webhook callback URL token |
 | `config_id_whatsapp` / `config_id_social` | embedded-signup configs (WhatsApp / legacy IG-Messenger) |
@@ -335,7 +324,7 @@ app/Modules/Instagram/
 │   ├── ProcessInstagramCommentJob / ProcessInstagramDmJob / CheckFunnelTimeoutsJob
 │   └── RefreshInstagramLoginTokensJob   # NEW — daily 60-day token renewal
 └── Http/Controllers/
-    ├── ConnectController            # IG-Login redirect-back + legacy FB OAuth + persistence
+    ├── ConnectController            # IG-Login redirect-back + persistence
     ├── InstagramWebhookController   # dual-signature verify (FB secret OR IG secret)
     ├── AutomationController (CRUD + wizard presets + recent-posts)
     └── LogsController

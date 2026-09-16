@@ -22,8 +22,6 @@ use Illuminate\Support\Facades\Redis;
  */
 class InstagramDiagnoseCommand extends Command
 {
-    private ?string $lastGraphError = null;
-
     protected $signature = 'instagram:diagnose
                             {--workspace= : Workspace id to check (default: all workspaces)}';
 
@@ -153,7 +151,7 @@ class InstagramDiagnoseCommand extends Command
         }
 
         // ------------------------------------------------------------------
-        // 4. Connected accounts + channel_account mirror + page subscription
+        // 4. Connected accounts + channel_account mirror (Instagram Login flow)
         // ------------------------------------------------------------------
         $workspaceId = $this->option('workspace') !== null ? (int) $this->option('workspace') : null;
 
@@ -167,10 +165,9 @@ class InstagramDiagnoseCommand extends Command
             $hasFailure = true;
         }
 
-        $tokenByPageId = [];
-
         foreach ($channelAccounts as $account) {
             $igId = (string) ($account->meta_json['instagram_page_id'] ?? $account->meta_json['instagram_account_id'] ?? '');
+            $authType = (string) ($account->meta_json['auth_type'] ?? 'facebook_login');
             $label = sprintf('channel_account #%d ws#%d "%s" ig_id=%s status=%s', $account->id, $account->workspace_id, $account->display_name, $igId ?: '?', $account->status);
 
             if ($igId === '' || $account->status !== 'active') {
@@ -180,38 +177,20 @@ class InstagramDiagnoseCommand extends Command
                 $this->line("$ok $label");
             }
 
-            // Live page-subscription check: without the `messages` field on the
-            // PAGE, Meta never delivers that account's DMs to the app.
-            $pageToken = (string) ($account->credentials['access_token'] ?? '');
-            if ($pageToken !== '' && $appId !== null) {
-                $tokenByPageId[$igId] = $pageToken;
+            if ($authType === 'instagram_login') {
+                // IG-Login account: live account-level subscription check on
+                // graph.instagram.com. Without subscribed fields Meta never
+                // delivers that account's DMs/comments.
+                $token = (string) ($account->credentials['access_token'] ?? '');
 
-                // Token-level diagnosis FIRST — it explains every page-level
-                // failure below (missing scopes / expiry).
-                if ($appSecret !== null) {
-                    $hasFailure = $this->checkStoredPageToken($pageToken, $appId, $appSecret) || $hasFailure;
-                }
-
-                $pageId = (string) ($account->meta_json['facebook_page_id'] ?? '');
-
-                if ($pageId !== '') {
-                    $subscribed = $this->pageSubscribedFields($pageId, $pageToken);
-
-                    if ($subscribed === null) {
-                        $reason = $this->lastGraphError !== null
-                            ? ' — Graph says: '.$this->lastGraphError
-                            : ' (token may be expired) — check connect logs';
-                        $this->line("$warn Could not read page $pageId subscribed_apps$reason.");
-                    } elseif (! in_array('messages', $subscribed, true)) {
-                        $this->line("$bad Facebook page $pageId is NOT subscribed to `messages` — Meta never delivers this account's DMs.");
-                        $this->line('       Fix: reconnect the account so subscribePageToInstagram() runs again.');
-                        $hasFailure = true;
-                    } else {
-                        $this->line("$ok Facebook page $pageId subscribed to `messages`.");
-                    }
+                if ($token === '') {
+                    $this->line("$bad channel_account #$account->id has no access_token — reconnect via 'Connect with Instagram'.");
+                    $hasFailure = true;
                 } else {
-                    $this->line("$warn channel_account #$account->id has no facebook_page_id in meta_json — cannot verify page subscription.");
+                    $hasFailure = $this->checkInstagramLoginAccount($account, $token) || $hasFailure;
                 }
+            } else {
+                $this->line("$warn channel_account #$account->id is a legacy Facebook-Login connection ($authType) — Instagram now connects only via 'Connect with Instagram'. Reconnect it.");
             }
 
             // Mirror state in the automation module (comment funnel).
@@ -360,7 +339,7 @@ class InstagramDiagnoseCommand extends Command
             if ($igAppId) {
                 $this->line("$ok Instagram App ID configured (Business Login for Instagram available)..");
             } else {
-                $this->line("$warn Instagram App ID/Secret not configured — 'Connect with Instagram' unavailable; accounts use the legacy Facebook Page flow.");
+                $this->line("$warn Instagram App ID/Secret not configured — 'Connect with Instagram' unavailable; Instagram accounts cannot connect.");
                 $this->line('       Optional: Admin → Integrations → Meta App → Instagram App ID / Instagram App Secret.');
             }
 
@@ -440,106 +419,72 @@ class InstagramDiagnoseCommand extends Command
     }
 
     /**
-     * Read the page's subscribed fields live from Graph. Returns null when the
-     * read fails (bad token, network) — distinguishable from an empty list.
+     * Live-check an Instagram-Login channel account against graph.instagram.com:
+     * token validity (/me) and whether its webhook fields are subscribed.
      *
-     * @return array<int, string>|null
+     * @param  \App\Modules\Shared\Models\ChannelAccount  $account
      */
-    private function pageSubscribedFields(string $pageId, string $pageToken): ?array
-    {
-        $this->lastGraphError = null;
-
-        try {
-            $res = \Illuminate\Support\Facades\Http::withToken($pageToken)
-                ->timeout(15)
-                ->get("https://graph.facebook.com/v20.0/{$pageId}/subscribed_apps");
-
-            if (! $res->successful()) {
-                $this->lastGraphError = (string) ($res->json('error.message') ?? ('HTTP '.$res->status()));
-
-                return null;
-            }
-
-            $fields = $res->json('data.0.subscribed_fields', []);
-
-            return is_array($fields) ? array_map('strval', $fields) : null;
-        } catch (\Throwable) {
-            return null;
-        }
-    }
-
-    /**
-     * Inspect the stored page token LIVE via /debug_token: validity, expiry
-     * and — critically — whether `pages_messaging` is granted. Meta requires
-     * that permission before a page can subscribe to `messages`, and its
-     * absence is the #1 cause of "connected, but no DMs ever arrive"
-     * (Graph error #200 on /subscribed_apps).
-     */
-    private function checkStoredPageToken(string $pageToken, string $appId, string $appSecret): bool
+    private function checkInstagramLoginAccount($account, string $token): bool
     {
         $ok = '[ OK ]';
         $warn = '[ !! ]';
         $bad = '[FAIL]';
 
         try {
-            $res = \Illuminate\Support\Facades\Http::timeout(15)
-                ->get('https://graph.facebook.com/v20.0/debug_token', [
-                    'input_token' => $pageToken,
-                    'access_token' => $appId.'|'.$appSecret,
-                ]);
+            $res = \Illuminate\Support\Facades\Http::withToken($token)
+                ->timeout(15)
+                ->get('https://graph.instagram.com/v20.0/me', ['fields' => 'id,username']);
         } catch (\Throwable) {
-            $this->line("$warn Could not inspect the stored page token (/debug_token unreachable).");
+            $this->line("$warn Could not reach graph.instagram.com — cannot verify the stored token.");
 
             return false;
         }
 
         if (! $res->successful()) {
-            $this->line("$warn Could not inspect the stored page token (/debug_token: HTTP ".$res->status().').');
+            $this->line("$bad Stored token REJECTED by graph.instagram.com (HTTP ".$res->status().') — expired or revoked.');
+            $this->line('       Fix: reconnect via "Connect with Instagram" (fresh 60-day token).');
 
-            return false;
+            return true;
         }
 
-        $data = $res->json('data');
+        $username = (string) ($res->json('username') ?? $res->json('id'));
+        $this->line("$ok Stored token is valid (me: @$username).");
 
-        if (! is_array($data)) {
-            $this->line("$warn /debug_token returned an unexpected shape — cannot inspect token scopes.");
+        // Account-level subscription: /me/subscribed_apps exists on the IG host.
+        try {
+            $sub = \Illuminate\Support\Facades\Http::withToken($token)
+                ->timeout(15)
+                ->get('https://graph.instagram.com/v20.0/me/subscribed_apps');
 
-            return false;
-        }
+            if (! $sub->successful()) {
+                $this->line("$warn Could not read me/subscribed_apps — Graph says: ".(string) ($sub->json('error.message') ?? ('HTTP '.$sub->status())));
 
-        $failed = false;
-        $scopes = array_values(array_map('strval', (array) ($data['scopes'] ?? [])));
-        $expiresAt = (int) ($data['expires_at'] ?? 0);
-        $expiryText = $expiresAt === 0 ? 'never expires' : 'expires '.date('Y-m-d H:i', $expiresAt);
-
-        if (($data['is_valid'] ?? false) !== true) {
-            $this->line("$bad Stored page token is INVALID at Meta (is_valid=false) — every page-level call fails with it.");
-            $this->line('       Fix: reconnect the account — Channels → Connect Instagram.');
-            $failed = true;
-        } elseif ($expiresAt !== 0 && $expiresAt < time()) {
-            $this->line("$bad Stored page token EXPIRED ($expiryText) — every page-level call fails with it.");
-            $this->line('       Fix: reconnect the account — Channels → Connect Instagram.');
-            $failed = true;
-        } else {
-            $this->line("$ok Stored page token is valid ($expiryText).");
-        }
-
-        if (in_array('pages_messaging', $scopes, true)) {
-            $this->line("$ok Token scope: pages_messaging granted.");
-        } else {
-            $this->line("$bad Token scope MISSING: pages_messaging — Meta refuses to subscribe the page to `messages` (error #200).");
-            $this->line('       Fix: 1) developers.facebook.com → your app → Facebook Login for Business → Configurations →');
-            $this->line('             Social config → add `pages_messaging` → Save.');
-            $this->line('          2) Reconnect the account: Channels → Connect Instagram (the new token picks it up automatically).');
-            $failed = true;
-        }
-
-        foreach (['instagram_manage_messages', 'pages_manage_metadata'] as $needed) {
-            if (! in_array($needed, $scopes, true)) {
-                $this->line("$warn Token scope also missing: $needed — sending DMs / page subscribe will fail even after `pages_messaging` is added.");
+                return false;
             }
+
+            $apps = (array) $sub->json('data', []);
+            $fields = [];
+
+            foreach ($apps as $app) {
+                if ((string) ($app['id'] ?? '') === (string) (CredentialResolver::system()->meta()?->igAppId() ?? '')) {
+                    $fields = array_map('strval', (array) ($app['subscribed_fields'] ?? []));
+
+                    break;
+                }
+            }
+
+            if ($fields === []) {
+                $this->line("$bad Account is NOT subscribed for webhooks on graph.instagram.com — Meta never delivers its DMs/comments.");
+                $this->line('       Fix: php artisan instagram:register-webhook  (or reconnect the account).');
+
+                return true;
+            }
+
+            $this->line("$ok Account subscribed on graph.instagram.com: ".implode(', ', $fields));
+        } catch (\Throwable $e) {
+            $this->line("$warn Subscription check failed: ".$e->getMessage());
         }
 
-        return $failed;
+        return false;
     }
 }

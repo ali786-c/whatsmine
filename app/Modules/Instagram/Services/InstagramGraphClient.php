@@ -122,44 +122,6 @@ class InstagramGraphClient
     }
 
     /**
-     * Subscribe the linked FACEBOOK PAGE to Instagram messaging webhooks
-     * (page-level subscribed_apps). Without this Meta never delivers inbound
-     * Instagram messages — this mirrors the Inbox module's own connect step so
-     * DMs flow no matter which connect flow was used.
-     *
-     * @return array<string, mixed>
-     *
-     * @throws InstagramGraphException
-     */
-    public function subscribePageToMessaging(string $pageId, string $pageToken): array
-    {
-        $url = "https://graph.facebook.com/{$this->apiVersion()}/{$pageId}/subscribed_apps";
-
-        try {
-            $res = Http::withToken($pageToken)
-                ->acceptJson()
-                ->timeout(30)
-                ->post($url, [
-                    'subscribed_fields' => 'messages,messaging_postbacks,message_reactions,message_reads',
-                ]);
-        } catch (\Throwable $e) {
-            throw new InstagramGraphException('Network error talking to Graph: '.$e->getMessage(), httpStatus: 0);
-        }
-
-        if (! $res->successful()) {
-            $error = (array) $res->json('error', []);
-
-            throw new InstagramGraphException(
-                message: (string) ($error['message'] ?? $res->body()),
-                graphErrorCode: isset($error['code']) ? (int) $error['code'] : null,
-                httpStatus: $res->status(),
-            );
-        }
-
-        return (array) $res->json();
-    }
-
-    /**
      * Recent posts/reels of the account — powers the automation builder's
      * post picker (per-post scoping via comment webhook media.id).
      *
