@@ -15,9 +15,12 @@ class PusherSettingsServiceProvider extends ServiceProvider
                 $secret  = SystemSetting::get('pusher_app_secret');
                 $appId   = SystemSetting::get('pusher_app_id');
                 $cluster = SystemSetting::get('pusher_app_cluster');
-                $enabled = SystemSetting::get('pusher_enabled', 'false');
+                $enabled = SystemSetting::get('pusher_enabled');
+                // Explicitly disabled in the panel (false/0) → keep the .env default
+                // broadcaster; never set (null) with full creds → pusher (legacy behaviour).
+                $explicitlyDisabled = in_array($enabled, ['false', '0'], true);
 
-                if ($key && $secret && $appId) {
+                if (! $explicitlyDisabled && $key && $secret && $appId) {
                     config([
                         'broadcasting.default' => 'pusher',
                         'broadcasting.connections.pusher.key' => $key,
