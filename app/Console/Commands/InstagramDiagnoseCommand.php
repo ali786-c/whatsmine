@@ -408,8 +408,7 @@ class InstagramDiagnoseCommand extends Command
         $this->line('');
         $this->line('--- If everything above is OK but messages are still missing ---');
         $this->line('1. Send a DM from another Instagram account, then immediately check:');
-        $this->line('   storage/logs/laravel.log  → grep "Instagram webhook"');
-        $this->line('   storage/logs/instagram/   → webhook.log, dm.log, mirror.log');
+        $this->line('   storage/logs/laravel.log  → grep "Instagram webhook"');            $this->line('   storage/logs/instagram/   → webhook.log-YYYY-MM-DD, dm.log-YYYY-MM-DD  (daily files, date suffix zaroori hai)');
         if ($verifyToken) {
             $this->line('2. Verify Meta can reach the webhook from the outside:');
             $this->line('   curl "https://'.parse_url((string) config('app.url'), PHP_URL_HOST).'/webhooks/instagram/'.$verifyToken.'?hub.mode=subscribe&hub.verify_token='.$verifyToken.'&hub.challenge=hello"');
@@ -472,9 +471,15 @@ class InstagramDiagnoseCommand extends Command
             $apps = (array) $sub->json('data', []);
             $fields = [];
 
+            // Meta quirk: for Instagram-Login apps the subscription can be returned
+            // under an internal app-node id (NOT the dashboard IG App ID), so a
+            // strict id match reports a working subscription as missing. Verify by
+            // the subscribed FIELDS instead — the field set is what delivery uses.
             foreach ($apps as $app) {
-                if ((string) ($app['id'] ?? '') === (string) (\App\Modules\Integrations\Services\CredentialResolver::system()->meta()?->igAppId() ?? '')) {
-                    $fields = array_map('strval', (array) ($app['subscribed_fields'] ?? []));
+                $appFields = array_map('strval', (array) ($app['subscribed_fields'] ?? []));
+
+                if (in_array('messages', $appFields, true) || in_array('comments', $appFields, true)) {
+                    $fields = $appFields;
 
                     break;
                 }
@@ -486,7 +491,6 @@ class InstagramDiagnoseCommand extends Command
                 $this->line('       If that [FAIL]s on this account, subscribe MANUALLY once (same effect):');
                 $this->line('       Meta Dashboard → Instagram app → Webhooks → Configure → object "instagram" → add fields');
                 $this->line('       comments, messages, messaging_postbacks — then reconnect the account.');
-                $this->line('       Fix: php artisan instagram:register-webhook  (or reconnect the account).');
 
                 return true;
             }

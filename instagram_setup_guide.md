@@ -259,6 +259,8 @@ php artisan instagram:register-webhook
 | 14 | Lambi delivery/funnel message poora job fail kar deti thi (opaque Graph error) | Docs: DM text **1000 UTF-8 bytes** se zyada REJECT hota hai — koi guard nahi tha | Fixed — `limitText()` har send pe 998-byte UTF-8-safe truncate + warning log (module client + Inbox driver dono) |
 | 15 | Badi file delivery ke baad Graph reject karta tha (koi pehle se pata nahi chalta) | Docs limits: image 8MB, audio/video/file 25MB — code size check nahi karta tha | Fixed — `assertAttachmentSize()` HEAD probe POST se pehle; probe fail ho to fail-open (send anyway) |
 | 16 | User agle din reply kare to agent ka jawab 24h window band hone se reject hota hai | Docs: window ke baad sirf **HUMAN_AGENT** tag wali send chalti hai (7 din tak) | Fixed — Inbox driver error (#10 / "outside allowed window") pe automatic `MESSAGE_TAG: HUMAN_AGENT` retry |
+| 17 | Diagnose `[FAIL] Account is NOT subscribed` bola lekin Meta ka `me/subscribed_apps` API sahi subscription dikha raha tha | Diagnose IG app ID se compare karta hai; Meta subscription `17947744827279284` (alag internal app id) ke naam par return karta hai — **Meta quirk**: IG-login apps ka subscription unke apne app-node id ke under aata hai, dashboard wale IG App ID se mukhtalif | Diagnose ab **fields-based** verify karta hai (kisi bhi app entry me `messages` ho to subscribed samjho); `register-webhook` idempotent hai |
+| 18 | `tail: cannot open 'storage/logs/instagram/webhook.log'` | Log channels **daily** driver hain — filename date suffix ke sath banta hai (`webhook.log-2026-09-16`), bina-suffix file kabhi exist nahi karti | `ls storage/logs/instagram/` kar ke **dated** file tail karo, ya master `instagram-YYYY-MM-DD.log` dekho |
 
 Quick log locations:
 
