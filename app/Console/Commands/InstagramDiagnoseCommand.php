@@ -127,7 +127,7 @@ class InstagramDiagnoseCommand extends Command
 
             // Instagram-Login connections receive their events from the
             // INSTAGRAM app's subscription — check it too when configured.
-            $igAppId = CredentialResolver::system()->meta()?->igAppId();
+            $igAppId = \App\Modules\Integrations\Services\CredentialResolver::system()->meta()?->igAppId();
             if ($igAppId) {
                 $igSubscription = MetaWebhookRegistrar::verifyInstagramAppObject();
 
@@ -329,7 +329,7 @@ class InstagramDiagnoseCommand extends Command
 
             // Instagram-Login readiness: IG app credentials, IG-login accounts
             // and their 60-day token runway (refresh job keeps them alive).
-            $igAppId = CredentialResolver::system()->meta()?->igAppId();
+            $igAppId = \App\Modules\Integrations\Services\CredentialResolver::system()->meta()?->igAppId();
             $igAccounts = \App\Modules\Instagram\Models\InstagramAccount::where('status', 'active')
                 ->whereJsonContains('meta_json->auth_type', 'instagram_login')->count();
 
@@ -466,7 +466,7 @@ class InstagramDiagnoseCommand extends Command
             $fields = [];
 
             foreach ($apps as $app) {
-                if ((string) ($app['id'] ?? '') === (string) (CredentialResolver::system()->meta()?->igAppId() ?? '')) {
+                if ((string) ($app['id'] ?? '') === (string) (\App\Modules\Integrations\Services\CredentialResolver::system()->meta()?->igAppId() ?? '')) {
                     $fields = array_map('strval', (array) ($app['subscribed_fields'] ?? []));
 
                     break;
