@@ -254,6 +254,7 @@ php artisan instagram:register-webhook
 | 9 | Tinker multi-line paste parse errors | Shell quoting | Use single-line `--execute="..."` commands |
 | 10 | User replies swallowed after funnel close / automation delete | Reply handler returned before mirroring | Fixed — message mirrors to the Inbox thread for agent handoff |
 | 11 | Delivery sent to users who never followed ("DONE" liars) | Trust-based gate | Fixed — Graph API verification (`is_user_follow_business`) before delivery; bounded NO-loop; fail-open on inconclusive |
+| 12 | Connected OK, token valid, par account **NOT subscribed** on graph.instagram.com — zero DMs | Code POSTed to `/{ig_id}/subscribed_fields` — **endpoint does not exist** (docs: Enable Subscriptions uses `/subscribed_apps`), so the account-level subscription never happened | Fixed — now POSTs to `/{ig_id}/subscribed_apps` per docs; run `php artisan instagram:register-webhook` once after pull |
 
 Quick log locations:
 

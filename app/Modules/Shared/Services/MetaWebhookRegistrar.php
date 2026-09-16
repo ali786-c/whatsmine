@@ -162,7 +162,7 @@ class MetaWebhookRegistrar
      * deliveries with the Instagram app secret, which the webhook endpoint's
      * dual-signature check accepts.
      */
-    public static function registerInstagramAppObject(): void
+    public static function registerInstagramAppObject(): ?array
     {
         $meta = CredentialResolver::system()->meta();
         $igAppId = $meta?->igAppId();
@@ -170,7 +170,7 @@ class MetaWebhookRegistrar
         $verifyToken = $meta?->verifyToken();
 
         if (! $igAppId || ! $igAppSecret || ! $verifyToken) {
-            return;
+            return null;
         }
 
         $moduleRouteExists = Route::has('webhooks.instagram.receive');
@@ -195,7 +195,7 @@ class MetaWebhookRegistrar
                     'response' => $res->json(),
                 ]);
 
-                return;
+                return ['ok' => false, 'error' => (string) ($res->json('error.message') ?? ('HTTP '.$res->status()))];
             }
 
             Log::info('meta_webhook_registrar: instagram-app object registered', [
@@ -203,11 +203,15 @@ class MetaWebhookRegistrar
                 'callback_url' => $callbackUrl,
                 'fields' => $fields,
             ]);
+
+            return ['ok' => true, 'callback_url' => $callbackUrl, 'fields' => $fields];
         } catch (\Throwable $e) {
             Log::warning('meta_webhook_registrar: instagram-app object registration exception', [
                 'ig_app_id' => $igAppId,
                 'error' => $e->getMessage(),
             ]);
+
+            return ['ok' => false, 'error' => $e->getMessage()];
         }
     }
 

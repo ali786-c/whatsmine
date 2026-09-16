@@ -106,9 +106,14 @@ class InstagramGraphClient
     }
 
     /**
-     * Subscribe this IG account to the webhook fields the module needs
-     * (per-account subscription; harmless if the platform ignores it).
-     * IG-Login accounts subscribe on graph.instagram.com.
+     * Subscribe this IG account to the webhook fields the module needs —
+     * account-level subscription on graph.instagram.com. The IG-Login flow has
+     * no Facebook Page, so this replaces the old page subscribed_apps call.
+     *
+     * Docs (Instagram Platform → Webhooks → Enable Subscriptions): the account
+     * must POST to "{ig_id}/subscribed_apps" with subscribed_fields —
+     * a "/subscribed_fields" path does NOT exist (calls to it silently 404'd,
+     * which is why connected accounts never received DMs).
      *
      * @return array<string, mixed>
      *
@@ -116,7 +121,7 @@ class InstagramGraphClient
      */
     public function subscribeAccountFields(InstagramAccount $account): array
     {
-        return $this->post($account, "{$account->ig_user_id}/subscribed_fields", [
+        return $this->post($account, "{$account->ig_user_id}/subscribed_apps", [
             'subscribed_fields' => 'comments,messages,messaging_postbacks,message_reactions',
         ]);
     }

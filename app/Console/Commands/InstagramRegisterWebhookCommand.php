@@ -45,6 +45,18 @@ class InstagramRegisterWebhookCommand extends Command
         $this->line('  callback_url: '.($subscription['callback_url'] ?? '(none)'));
         $this->line('  fields:       '.implode(', ', MetaWebhookRegistrar::normalizeFields($subscription['fields'] ?? [])));
 
+        // Instagram-app (Business Login for Instagram) object — the one that
+        // actually delivers events for IG-Login accounts.
+        $igResult = MetaWebhookRegistrar::registerInstagramAppObject();
+
+        if ($igResult === null) {
+            $this->warn('Instagram app subscription SKIPPED — IG App ID/Secret not configured (Admin → Integrations → Meta App).');
+        } elseif (($igResult['ok'] ?? false) === true) {
+            $this->info('Instagram app subscription confirmed: callback '.($igResult['callback_url'] ?? '?'));
+        } else {
+            $this->error('Instagram app subscription FAILED: '.(string) ($igResult['error'] ?? 'unknown error'));
+        }
+
         $this->subscribeAccounts();
 
         $this->line('');
