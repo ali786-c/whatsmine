@@ -565,7 +565,6 @@ https://wa.careerinpak.com/app/inbox/setup</pre></div>
         <li><b>Instagram → Setup</b> ya <b>Inbox → Setup (Channels)</b> kholo — ab purple <b>“Connect with Instagram”</b> button dikhna chahiye.</li>
         <li>Click karo → Instagram ka apna login window khulega → <b>Instagram username/password</b> daalo (jo professional/business/creator account hai) → permissions <b>Allow</b> karo.</li>
         <li>Wapas redirect hoga aur connection khud save ho jayegi — Inbox DMs + comment automation <b>ek hi connection</b> se dono chalu. Facebook Page link karne ki zaroorat nahi.</li>
-        <li>Facebook wala purana flow ab bhi drawer mein available hai — purane Page-linked accounts waise ke waise chalte rahenge.</li>
         <li><b>Test:</b> doosre IG account se post pe comment karo → private-reply DM aani chahiye → reply karo → gate loop chalna chahiye.</li>
       </ol>
       <label class="chk"><input type="checkbox" data-k="ig6"><span>“Connect with Instagram” se account connect hua</span></label>
@@ -581,7 +580,7 @@ https://wa.careerinpak.com/app/inbox/setup</pre></div>
       </ol>
       <div class="note warn"><div class="ic">🔄</div><div><b>60-day tokens (naya system):</b> Facebook Page token kabhi expire nahi hota tha, Instagram-Login token <b>60 din</b> ka hota hai. System daily raat 2:30 baje refresh job chalata hai jo expiry se pehle naya 60-day token le aata hai — tab tak sab automatic. Sirf <b>cron + worker</b> zinda rakhna (jo pehle se hain).</div></div>
 
-      <div class="note ok"><div class="ic">✅</div><div><b>Webhooks bilkul waise hi automatic hain:</b> connect hote hi system khud Meta ko callback + fields register karta hai (pehle jaisa) — dashboard mein manually kuch nahi karna. Comments, DMs, postbacks sab pehle ke jaise hi aayenge; naye flow mein sirf host <code class="inline">graph.instagram.com</code> hai aur koi Facebook Page nahi.</div></div>
+      <div class="note ok"><div class="ic">✅</div><div><b>Webhooks automatic hain — ek chhoti si had ke sath:</b> connect hote hi system dono apps pe callback + fields register karta hai (classic Meta app + Instagram app) aur account-level subscription bhi khud bana deta hai. Sirf IG app ka registration API se fail ho jaye (Meta kabhi-kabhi <i>“Error validating application… system error”</i> de deta hai) to <code class="inline">instagram:register-webhook</code> ki FAIL line me <b>exact manual steps</b> print hoti hain: Meta Dashboard → Instagram app → Webhooks → object <code class="inline">instagram</code> → callback <code class="inline">/webhooks/instagram</code> + same verify token + fields — ek dafa manually karne se kaam poora ho jata hai.</div></div>
     </div>
   </div>
 </div>

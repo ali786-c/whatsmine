@@ -131,9 +131,16 @@ class InstagramDiagnoseCommand extends Command
             if ($igAppId) {
                 $igSubscription = MetaWebhookRegistrar::verifyInstagramAppObject();
 
-                if ($igSubscription === null) {
-                    $this->line("$warn Instagram app ($igAppId) has NO instagram webhook subscription — Instagram-Login connects will NOT receive DMs/comments.");
-                    $this->line('       Fix: reconnect the account once (any connect flow registers it), or php artisan instagram:register-webhook.');
+                if (is_array($igSubscription) && ($igSubscription['unverifiable'] ?? null) !== null) {
+                    $this->line("$warn Instagram app ($igAppId) subscription could NOT be verified via API — Meta says: \"".$igSubscription['unverifiable']."\"");
+                    $this->line('       Meta rejects the IG app App-Access token, so the API path is unavailable on this app.');
+                    $this->line('       Verify MANUALLY (2 min): Meta Dashboard → your Instagram app → Webhooks → instagram object →');
+                    $this->line('       fields must include: '.str_replace(',', ', ', MetaWebhookRegistrar::INSTAGRAM_APP_FIELDS).'.');
+                } elseif ($igSubscription === null) {
+                    $this->line("$bad Instagram app ($igAppId) has NO instagram webhook subscription — Instagram-Login connects will NOT receive DMs/comments.");
+                    $this->line('       Fix: php artisan instagram:register-webhook, or add it manually:');
+                    $this->line('       Meta Dashboard → Instagram app → Webhooks → object "instagram" → Configure →');
+                    $this->line('       callback '.url('/webhooks/instagram/{token}').' + the same verify token, fields: '.str_replace(',', ', ', MetaWebhookRegistrar::INSTAGRAM_APP_FIELDS).'.');
                     $hasFailure = true;
                 } else {
                     $igFields = MetaWebhookRegistrar::normalizeFields($igSubscription['fields'] ?? []);
@@ -475,6 +482,10 @@ class InstagramDiagnoseCommand extends Command
 
             if ($fields === []) {
                 $this->line("$bad Account is NOT subscribed for webhooks on graph.instagram.com — Meta never delivers its DMs/comments.");
+                $this->line('       Fix: php artisan instagram:register-webhook  (subscribes via POST /me/subscribed_apps with the account token).');
+                $this->line('       If that [FAIL]s on this account, subscribe MANUALLY once (same effect):');
+                $this->line('       Meta Dashboard → Instagram app → Webhooks → Configure → object "instagram" → add fields');
+                $this->line('       comments, messages, messaging_postbacks — then reconnect the account.');
                 $this->line('       Fix: php artisan instagram:register-webhook  (or reconnect the account).');
 
                 return true;

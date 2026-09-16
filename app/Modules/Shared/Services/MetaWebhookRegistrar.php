@@ -51,7 +51,13 @@ class MetaWebhookRegistrar
      * Read back the INSTAGRAM app's instagram subscription (or null when the
      * object is not subscribed / credentials missing). Used by diagnostics.
      *
-     * @return array<string, mixed>|null
+     * NOTE: the IG app's App Access Token can fail with "Error validating
+     * application. Cannot get application info due to a system error." — a
+     * Meta-side rejection seen on some Instagram apps. That is reported as
+     * ['unverifiable' => reason] so diagnostics can say "could NOT verify"
+     * instead of a false "NO subscription" FAIL.
+     *
+     * @return array<string, mixed>|null subscription · null = not subscribed · ['unverifiable' => reason]
      */
     public static function verifyInstagramAppObject(): ?array
     {
@@ -69,7 +75,7 @@ class MetaWebhookRegistrar
             ]);
 
             if (! $check->successful()) {
-                return null;
+                return ['unverifiable' => (string) ($check->json('error.message') ?? ('HTTP '.$check->status()))];
             }
 
             foreach ((array) $check->json('data', []) as $subscription) {
@@ -79,8 +85,8 @@ class MetaWebhookRegistrar
             }
 
             return null;
-        } catch (\Throwable) {
-            return null;
+        } catch (\Throwable $e) {
+            return ['unverifiable' => $e->getMessage()];
         }
     }
 

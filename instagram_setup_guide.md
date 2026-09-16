@@ -255,6 +255,7 @@ php artisan instagram:register-webhook
 | 10 | User replies swallowed after funnel close / automation delete | Reply handler returned before mirroring | Fixed — message mirrors to the Inbox thread for agent handoff |
 | 11 | Delivery sent to users who never followed ("DONE" liars) | Trust-based gate | Fixed — Graph API verification (`is_user_follow_business`) before delivery; bounded NO-loop; fail-open on inconclusive |
 | 12 | Connected OK, token valid, par account **NOT subscribed** on graph.instagram.com — zero DMs | Code POSTed to `/{ig_id}/subscribed_fields` — **endpoint does not exist** (docs: Enable Subscriptions uses `/subscribed_apps`), so the account-level subscription never happened | Fixed — now POSTs to `/{ig_id}/subscribed_apps` per docs; run `php artisan instagram:register-webhook` once after pull |
+| 13 | `Instagram app subscription FAILED: Error validating application. Cannot get application info due to a system error.` | Meta rejects the **Instagram app's** App-Access token via API (known Meta-side rejection on some IG apps) — API registration AND API verification dono unavailable | Register the IG-app webhook **manually** once: Meta Dashboard → Instagram app → Webhooks → object `instagram` → Configure → callback `/webhooks/instagram` + same verify token + fields (command prints exact values). Account-level subscription command se hi ho jata hai |
 
 Quick log locations:
 

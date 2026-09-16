@@ -55,6 +55,14 @@ class InstagramRegisterWebhookCommand extends Command
             $this->info('Instagram app subscription confirmed: callback '.($igResult['callback_url'] ?? '?'));
         } else {
             $this->error('Instagram app subscription FAILED: '.(string) ($igResult['error'] ?? 'unknown error'));
+            $this->line('  Meta rejected the API registration for this Instagram app (a known Meta-side');
+            $this->line('  rejection on some IG apps). Register it MANUALLY once in the dashboard:');
+            $this->line('  1. developers.facebook.com → your Instagram app (the one used at connect) → Webhooks');
+            $this->line('  2. Object: "instagram" → Configure');
+            $this->line('  3. Callback URL:  '.url('/webhooks/instagram'));
+            $this->line('  4. Verify token:  the SAME Webhook Verify Token saved in Admin → Integrations → Meta App');
+            $this->line('  5. Fields:        '.str_replace(',', ', ', MetaWebhookRegistrar::INSTAGRAM_APP_FIELDS));
+            $this->line('  6. Verify and Save — the dashboard test must return the challenge.');
         }
 
         $this->subscribeAccounts();
