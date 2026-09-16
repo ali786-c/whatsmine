@@ -220,6 +220,12 @@ export default function InboxIndex({ conversations: initialConversations, filter
     const userTz = props.timezone || 'Asia/Dhaka';
 
     const [conversations, setConversations] = useState(initialConversations);
+    // Polling fallback refreshes the `conversations` prop; sync it into state so
+    // new/unread updates reach the UI without WebSockets (same bug as Show.jsx).
+    useEffect(() => {
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- prop→state sync for the polling fallback
+        setConversations(initialConversations);
+    }, [initialConversations]);
     const [flashingIds, setFlashingIds]     = useState(new Set());
     const [loading, setLoading]             = useState(false);
     const [search, setSearch]               = useState('');

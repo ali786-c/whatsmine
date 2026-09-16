@@ -1411,6 +1411,24 @@ export default function InboxShow({
     const isWhatsApp = channel === 'whatsapp';
 
     const [messages, setMessages]           = useState(initialMessages ?? []);
+    // Polling fallback (router.reload) refreshes the `messages` prop, but useState
+    // keeps its first value — without this sync, new server messages never reach
+    // the UI when WebSockets (Echo/Pusher) are unavailable. Merge by id so local
+    // optimistic/status updates are never clobbered.
+    useEffect(() => {
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- prop→state sync for the polling fallback (id-merged, see below)
+        setMessages(prev => {
+            const byId = new Map(initialMessages.map(m => [m.id, m]));
+            // Keep local-only messages (e.g. optimistic sends) and prefer local
+            // status for ids we already track.
+            const localOnly = prev.filter(m => !byId.has(m.id));
+            const merged = [...byId.values()].map(m => {
+                const local = prev.find(p => p.id === m.id);
+                return local ? { ...m, status: local.status ?? m.status } : m;
+            });
+            return [...merged, ...localOnly];
+        });
+    }, [initialMessages]);
     const [viewers, setViewers]             = useState([]);
     const [typingUsers, setTypingUsers]     = useState([]);
     const [activeTab, setActiveTab]         = useState('messages');
