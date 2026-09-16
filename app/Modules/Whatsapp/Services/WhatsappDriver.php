@@ -29,6 +29,15 @@ class WhatsappDriver implements ChannelDriverInterface
         $contact = $conversation->contact;
         $phone = $contact->phone_e164;
 
+        // Contacts.phone_e164 is nullable — a conversation created without a phone
+        // (e.g. imported/legacy row) would otherwise crash sendText(null) with an
+        // opaque TypeError. Fail with a clear, loggable message instead.
+        if (! $phone) {
+            throw new \RuntimeException(
+                "Contact #{$contact->id} has no phone_e164 — cannot send WhatsApp message. Fix the contact's phone number."
+            );
+        }
+
         // Prefer the phone number tied to this conversation's channel account so
         // outbound replies go from the same number the customer wrote to.
         $phoneNumberId = $conversation->channelAccount?->phone_number_id;
