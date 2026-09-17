@@ -1130,7 +1130,9 @@ function IgTemplateComposer({ conversationId, onSent, onClose }) {
                 next.unshift(saved);
                 return next;
             });
-            setEditing(null);
+            // Keep editing the saved template (id now set) instead of dropping the
+            // panel — the old setEditing(null) left a blank pane.
+            setEditing(e => ({ ...e, id: saved.id }));
         } catch (err) {
             setSendError(err.response?.data?.error ?? err.response?.data?.message ?? 'Save failed');
         }
@@ -1314,19 +1316,16 @@ function IgTemplateComposer({ conversationId, onSent, onClose }) {
 
 /** Shared button rows editor for both template types */
 function ButtonListEditor({ t, buttons: rawButtons, onChange, small = false }) {
-    const buttons = rawButtons.length < 3 ? [...rawButtons, null] : rawButtons; // trailing add-slot
-
-    const update = (i, patch) => onChange(buttons.map((b, j) => j === i ? { ...(b ?? emptyIgButton()), ...patch } : b));
+    // Normalise once — a null/undefined slot must never reach onChange (it would
+    // crash the validity check and the whole page on the next keystroke).
+    const buttons = (rawButtons ?? []).filter(Boolean);
+    const update = (i, patch) => onChange(buttons.map((b, j) => j === i ? { ...b, ...patch } : b));
+    const remove = (i) => onChange(buttons.filter((_, j) => j !== i));
 
     return (
         <div className="space-y-1.5">
             <p className="text-[10px] font-bold uppercase tracking-wider text-neutral-400">{t('inbox.ig_tpl_buttons_n')}</p>
-            {buttons.map((b, i) => b === null ? (
-                <button key={`add-${i}`} type="button" onClick={() => onChange([...buttons.filter(Boolean), emptyIgButton()])}
-                    className="w-full rounded-lg border border-dashed border-neutral-300 dark:border-neutral-600 py-1 text-[11px] text-neutral-500 hover:bg-neutral-50 dark:hover:bg-neutral-800">
-                    + {t('inbox.ig_tpl_add_button')}
-                </button>
-            ) : (
+            {buttons.map((b, i) => (
                 <div key={i} className={`rounded-lg border border-neutral-200 dark:border-neutral-700 ${small ? 'p-1.5' : 'p-2'} space-y-1.5`}>
                     <div className="flex items-center gap-1.5">
                         <select value={b.type ?? 'web_url'} onChange={e => update(i, { type: e.target.value })}
@@ -1337,7 +1336,7 @@ function ButtonListEditor({ t, buttons: rawButtons, onChange, small = false }) {
                         <input type="text" value={b.title ?? ''} maxLength={20} onChange={e => update(i, { title: e.target.value })}
                             placeholder={t('inbox.ig_tpl_btn_title')}
                             className="flex-1 min-w-0 rounded border border-neutral-300 dark:border-neutral-600 bg-neutral-50 dark:bg-neutral-800 px-1.5 py-0.5 text-[10px]" />
-                        <button type="button" onClick={() => onChange(buttons.filter((_, j) => j !== i))}
+                        <button type="button" onClick={() => remove(i)}
                             className="text-neutral-400 hover:text-red-500 shrink-0"><X className="h-3 w-3" /></button>
                     </div>
                     {(b.type ?? 'web_url') === 'web_url' ? (
@@ -1351,6 +1350,12 @@ function ButtonListEditor({ t, buttons: rawButtons, onChange, small = false }) {
                     )}
                 </div>
             ))}
+            {buttons.length < 3 && (
+                <button type="button" onClick={() => onChange([...buttons, emptyIgButton()])}
+                    className="w-full rounded-lg border border-dashed border-neutral-300 dark:border-neutral-600 py-1 text-[11px] text-neutral-500 hover:bg-neutral-50 dark:hover:bg-neutral-800">
+                    + {t('inbox.ig_tpl_add_button')}
+                </button>
+            )}
         </div>
     );
 }
