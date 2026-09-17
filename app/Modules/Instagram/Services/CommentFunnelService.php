@@ -439,11 +439,19 @@ class CommentFunnelService
     /** Whether the automation's trigger fires for this comment. */
     private function triggerMatches(CommentAutomation $automation, string $text, string $mediaType, array $value): bool
     {
-        $filter = (array) ($automation->media_filter ?? []);
+        // Meta names image posts "FEED" while the editor saves "POST" —
+        // canonicalize both sides so a "post only" automation still matches.
+        $canonical = fn (string $t): string => match (strtoupper($t)) {
+            'POST' => 'FEED',
+            default => strtoupper($t),
+        };
+        $filter = array_map($canonical, array_map(fn ($t) => (string) $t, (array) ($automation->media_filter ?? [])));
+
         // A configured media filter must be respected even when the webhook
         // omits the media product type: treat "unknown" as non-matching
         // rather than silently bypassing the user's restriction.
-        if ($filter !== [] && ! in_array($mediaType !== '' ? $mediaType : 'UNKNOWN', $filter, true)) {
+        $type = $mediaType !== '' ? $canonical($mediaType) : 'UNKNOWN';
+        if ($filter !== [] && ! in_array($type, $filter, true)) {
             return false;
         }
 

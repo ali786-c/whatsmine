@@ -65,11 +65,11 @@ function StepControls({ step, maxStep, errors, saving, onBack, onNext }) {
                     </Button>
                 )}
                 {step < STEPS.length - 1 ? (
-                    <Button type="button" onClick={onNext} disabled={!maxStep}>
+                    <Button type="button" onClick={onNext} disabled={Object.keys(errors ?? {}).length > 0}>
                         Next <ChevronRight className="h-4 w-4" />
                     </Button>
                 ) : (
-                    <Button type="submit" disabled={!maxStep || saving}>{saving ? 'Saving…' : 'Save automation'}</Button>
+                    <Button type="submit" disabled={saving || Object.keys(errors ?? {}).length > 0}>{saving ? 'Saving…' : 'Save automation'}</Button>
                 )}
             </div>
         </div>
@@ -96,7 +96,6 @@ export default function InstagramAutomationEdit({ automation = null, accounts = 
     const [errors, setErrors] = useState({});
     const [saving, setSaving] = useState(false);
     const [step, setStep] = useState(0);
-    const [maxStep, setMaxStep] = useState(0);
     const [showAdvanced, setShowAdvanced] = useState(
         editing && ((automation.media_ids?.length ?? 0) > 0 || (automation.media_filter?.length ?? 0) > 0 || automation.match_mode !== 'contains'),
     );
@@ -139,7 +138,6 @@ export default function InstagramAutomationEdit({ automation = null, accounts = 
     const goto = (next) => {
         if (currentError) return;
         setStep(next);
-        setMaxStep((m) => Math.max(m, next));
     };
 
     const loadPosts = () => {
@@ -395,7 +393,7 @@ export default function InstagramAutomationEdit({ automation = null, accounts = 
                         )}
 
                         <div className="mt-5">
-                            <StepControls step={step} maxStep={maxStep && !currentError} errors={errors} saving={saving} onBack={() => {}} onNext={() => goto(1)} />
+                            <StepControls step={step} maxStep={!currentError} errors={errors} saving={saving} onBack={() => {}} onNext={() => goto(1)} />
                         </div>
                     </Card>
                 )}
@@ -459,7 +457,7 @@ export default function InstagramAutomationEdit({ automation = null, accounts = 
                         </div>
 
                         <div className="mt-5">
-                            <StepControls step={step} maxStep={maxStep && !currentError} errors={errors} saving={saving} onBack={() => setStep(0)} onNext={() => goto(2)} />
+                            <StepControls step={step} maxStep={!currentError} errors={errors} saving={saving} onBack={() => setStep(0)} onNext={() => goto(2)} />
                         </div>
                     </Card>
                 )}
@@ -530,7 +528,7 @@ export default function InstagramAutomationEdit({ automation = null, accounts = 
                         </div>
 
                         <div className="mt-5">
-                            <StepControls step={step} maxStep={maxStep && !currentError} errors={errors} saving={saving} onBack={() => setStep(1)} onNext={() => {}} />
+                            <StepControls step={step} maxStep={!currentError} errors={errors} saving={saving} onBack={() => setStep(1)} onNext={() => {}} />
                         </div>
                     </Card>
                 )}
