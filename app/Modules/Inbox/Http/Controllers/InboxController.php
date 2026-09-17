@@ -221,6 +221,24 @@ class InboxController extends Controller
             return back()->with('error', $windowError);
         }
 
+        // Instagram structured templates (generic carousel / button) composed in
+        // the Inbox composer: the ready-to-send Graph message object travels under
+        // ig_template. Reject malformed payloads instead of crashing mid-send, and
+        // give the thread row a readable body for list previews.
+        if ($conversation->channelAccount?->channel === 'instagram' && $msgType === 'template') {
+            if (! isset($msgPayload['ig_template']['message']['attachment'])) {
+                $tplError = 'Instagram template payload is malformed.';
+
+                if ($request->wantsJson()) {
+                    return response()->json(['error' => $tplError], 422);
+                }
+
+                return back()->with('error', $tplError);
+            }
+
+            $validated['body'] = $validated['body'] ?: (string) ($msgPayload['ig_template']['fallback_text'] ?? '[template]');
+        }
+
         $message = Message::create([
             'conversation_id' => $conversation->id,
             'direction' => 'out',

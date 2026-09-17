@@ -46,6 +46,34 @@ class InstagramDriver implements ChannelDriverInterface
             ? self::IG_LOGIN_BASE
             : self::BASE;
 
+        // Structured template (generic carousel / button template) composed in
+        // the Inbox Instagram template composer. The payload carries the
+        // ready-to-send Graph `message` attachment object, so the driver only
+        // wraps the recipient. Postback taps on rendered buttons come back as
+        // messaging_postbacks webhooks, already recorded in the thread.
+        if (isset($payload['ig_template']['message']['attachment'])) {
+            $resp = Http::withToken($accessToken)
+                ->timeout(15)
+                ->post($base."/{$igAccountId}/messages", [
+                    'recipient' => ['id' => $recipientId],
+                    'message' => $payload['ig_template']['message'],
+                    'messaging_type' => 'RESPONSE',
+                ]);
+
+            if ($resp->successful()) {
+                return (string) $resp->json('message_id', '');
+            }
+
+            Log::warning('Instagram template send failed', [
+                'ig_account_id' => $igAccountId,
+                'recipient' => $recipientId,
+                'error_code' => $resp->json('error.code'),
+                'error' => $resp->json('error.message') ?? $resp->body(),
+            ]);
+
+            throw new \RuntimeException('Instagram template send failed: '.($resp->json('error.message') ?? $resp->body()));
+        }
+
         // Image messages (e.g. shared products): send the photo as an attachment,
         // then the caption as a follow-up — an IG attachment carries no text.
         if ($message->type === 'image' && $imageUrl) {
