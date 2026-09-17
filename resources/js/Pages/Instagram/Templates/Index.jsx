@@ -3,7 +3,7 @@ import { useState } from 'react';
 import ClientLayout from '@/Layouts/ClientLayout';
 import Card from '@/Components/ui/Card';
 import Button from '@/Components/ui/Button';
-import { IgTemplateBody } from '@/Components/Instagram/IgTemplatePreview';
+import { IgTemplateBody, IgDmPreview } from '@/Components/Instagram/IgTemplatePreview';
 import { Plus, Pencil, Trash2, LayoutTemplate } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { igTemplateSummary } from '@/Utils/igTemplate';
@@ -58,11 +58,12 @@ export default function InstagramTemplatesIndex({ templates = [] }) {
                     <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                         {templates.map(tpl => (
                             <Card key={tpl.id} padding={false} className="overflow-hidden flex flex-col">
-                                <div className="border-b border-neutral-100 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-800/50">
-                                    <IgTemplateBody
+                                <div className="border-b border-neutral-100 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-800/50 p-2">
+                                    <IgDmPreview
                                         payload={tpl.type === 'button'
                                             ? { template_type: 'button', text: tpl.definition?.text, buttons: tpl.definition?.buttons ?? [] }
                                             : { template_type: 'generic', elements: tpl.definition?.elements ?? [] }}
+                                        incomingText="Hi! 👋"
                                     />
                                 </div>
                                 <div className="flex items-center gap-2 p-3">

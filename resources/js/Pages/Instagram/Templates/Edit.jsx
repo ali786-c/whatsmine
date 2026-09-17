@@ -2,7 +2,7 @@ import { Head, router } from '@inertiajs/react';
 import { useMemo, useState } from 'react';
 import ClientLayout from '@/Layouts/ClientLayout';
 import Button from '@/Components/ui/Button';
-import { IgTemplateBody, IgTemplatePhoneFrame } from '@/Components/Instagram/IgTemplatePreview';
+import { IgTemplateBody, IgDmPreview } from '@/Components/Instagram/IgTemplatePreview';
 import { Plus, X, Loader2, Send, Save } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -192,23 +192,11 @@ export default function InstagramTemplatesEdit({ template = null }) {
                         {!valid && <p className="text-xs text-neutral-400">{t('inbox.ig_tpl_needs_card')}</p>}
                     </div>
 
-                    {/* Right: live preview */}
+                    {/* Right: live preview — a mock Instagram DM screen */}
                     <div className="space-y-3">
-                        <p className="text-[10px] font-bold uppercase tracking-wider text-neutral-400">Preview</p>
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-neutral-400">Live preview — customer&rsquo;s Instagram</p>
                         <div className="sticky top-4">
-                            <div className="rounded-2xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 overflow-hidden">
-                                <div className="flex items-center gap-1.5 px-3 py-2 border-b border-neutral-100 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-800/50">
-                                    <span className="h-2 w-2 rounded-full bg-red-400" />
-                                    <span className="h-2 w-2 rounded-full bg-amber-400" />
-                                    <span className="h-2 w-2 rounded-full bg-green-400" />
-                                    <span className="ml-2 text-[10px] text-neutral-400">Instagram DM</span>
-                                </div>
-                                <div className="p-2 flex justify-end">
-                                    <div className="max-w-[220px] rounded-2xl bg-brand-600 text-white overflow-hidden">
-                                        <IgTemplateBody payload={graphMessage.attachment.payload} isOut />
-                                    </div>
-                                </div>
-                            </div>
+                            <IgDmPreview payload={graphMessage.attachment.payload} username="yourbusiness" />
                         </div>
                     </div>
                 </div>
