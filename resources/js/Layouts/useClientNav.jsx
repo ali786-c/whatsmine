@@ -5,7 +5,7 @@ import {
     LayoutDashboard, CreditCard, Package, FileText, Users, Settings,
     Layers, Webhook, Key, BookOpen, Image, Radio, Inbox, Bot, Database,
     Zap, Share2, MapPin, Tag, LifeBuoy, ExternalLink, Mail, MessageSquare,
-    ShoppingBag, BarChart2,
+    ShoppingBag, BarChart2, LayoutTemplate,
 } from 'lucide-react';
 
 const iconClass = 'h-4 w-4';
@@ -114,6 +114,7 @@ export default function useClientNav() {
         instagramItems.push(
             { label: t('nav.instagram_setup'), href: safeRoute('client.instagram.setup'), icon: <Share2 className={iconClass} />, activePattern: 'client.instagram.setup' },
             { label: t('nav.instagram_automations'), href: safeRoute('client.instagram.automations.index'), icon: <Zap className={iconClass} />, activePattern: 'client.instagram.automations.*' },
+            { label: t('nav.instagram_templates'), href: safeRoute('client.instagram.templates.gallery'), icon: <LayoutTemplate className={iconClass} />, activePattern: 'client.instagram.templates.gallery' },
             { label: t('nav.instagram_logs'), href: safeRoute('client.instagram.logs.index'), icon: <BarChart2 className={iconClass} />, activePattern: 'client.instagram.logs.*' },
         );
     }

@@ -12,6 +12,7 @@ import {
 import { ChannelBrandIcon, CHANNEL_LABELS } from '@/Components/BrandIcons';
 import { formatTimeTz, formatInTz } from '@/Utils/datetime';
 import { playInboundSound, getSoundPrefs, setChannelSoundEnabled, SOUND_CHANNELS } from '@/Utils/notificationSound';
+import { buildIgTemplateMessage, igTemplateValid, emptyIgButton } from '@/Utils/igTemplate';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import axios from 'axios';
@@ -1031,56 +1032,8 @@ function EmojiPicker({ onPick, onClose }) {
 }
 
 /* ─── Instagram template composer (generic carousel / button) ── */
-/** Build the ready-to-send Graph `message` attachment object from composer state */
-function buildIgTemplateMessage(type, def) {
-    if (type === 'button') {
-        return {
-            attachment: {
-                type: 'template',
-                payload: {
-                    template_type: 'button',
-                    text: (def.text || '').slice(0, 640),
-                    buttons: (def.buttons || []).map(b => b.type === 'web_url'
-                        ? { type: 'web_url', title: (b.title || '').slice(0, 20), url: b.url }
-                        : { type: 'postback', title: (b.title || '').slice(0, 20), payload: b.payload }),
-                },
-            },
-        };
-    }
-
-    return {
-        attachment: {
-            type: 'template',
-            payload: {
-                template_type: 'generic',
-                elements: (def.elements || []).slice(0, 10).map(el => ({
-                    title: (el.title || '').slice(0, 80),
-                    ...(el.subtitle ? { subtitle: el.subtitle.slice(0, 80) } : {}),
-                    ...(el.image_url ? { image_url: el.image_url } : {}),
-                    ...(el.buttons?.length ? {
-                        buttons: el.buttons.slice(0, 3).map(b => b.type === 'web_url'
-                            ? { type: 'web_url', title: (b.title || '').slice(0, 20), url: b.url }
-                            : { type: 'postback', title: (b.title || '').slice(0, 20), payload: b.payload }),
-                    } : {}),
-                })),
-            },
-        },
-    };
-}
-
-/** Does the current composer state form a sendable template? */
-function igTemplateValid(type, def) {
-    const btnOk = (b) => b.title?.trim() && (b.type === 'web_url' ? (b.url || '').trim() : (b.payload || '').trim());
-
-    if (type === 'button') {
-        return (def.text || '').trim() !== '' && (def.buttons || []).length > 0 && def.buttons.every(btnOk);
-    }
-
-    return (def.elements || []).length > 0 && def.elements.every(el =>
-        el.title?.trim() && (el.buttons || []).every(btnOk));
-}
-
-const emptyIgButton = () => ({ type: 'web_url', title: '', url: '', payload: '' });
+/* buildIgTemplateMessage / igTemplateValid / emptyIgButton live in @/Utils/igTemplate
+   so the full-page gallery editor (Instagram → DM Templates) shares them. */
 
 function IgTemplateComposer({ conversationId, onSent, onClose }) {
     const { t } = useTranslation();

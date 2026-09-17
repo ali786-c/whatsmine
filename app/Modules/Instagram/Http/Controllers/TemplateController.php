@@ -8,6 +8,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Validation\ValidationException;
+use Inertia\Inertia;
 
 /**
  * Saved Instagram message templates (generic carousel / button) — the Inbox
@@ -17,6 +18,32 @@ use Illuminate\Validation\ValidationException;
  */
 class TemplateController extends Controller
 {
+    /** Full-page template gallery (Instagram menu → Templates) */
+    public function gallery(Request $request): \Inertia\Response
+    {
+        return Inertia::render('Instagram/Templates/Index', [
+            'templates' => $this->allForWorkspace($request),
+        ]);
+    }
+
+    /** Full-page editor — new template (with live preview) */
+    public function create(): \Inertia\Response
+    {
+        return Inertia::render('Instagram/Templates/Edit', [
+            'template' => null,
+        ]);
+    }
+
+    /** Full-page editor — existing template (with live preview) */
+    public function edit(Request $request, InstagramTemplate $template): \Inertia\Response
+    {
+        abort_unless((int) $template->workspace_id === $this->workspaceId($request), 403);
+
+        return Inertia::render('Instagram/Templates/Edit', [
+            'template' => $template->only(['id', 'name', 'type', 'definition']),
+        ]);
+    }
+
     public function index(Request $request): JsonResponse
     {
         return response()->json(
@@ -36,6 +63,15 @@ class TemplateController extends Controller
         ]);
 
         return response()->json($template->only(['id', 'name', 'type', 'definition']), 201);
+    }
+
+    /** Saved-templates list used by both the gallery and the Inbox composer */
+    private function allForWorkspace(Request $request): array
+    {
+        return InstagramTemplate::forWorkspace($this->workspaceId($request))
+            ->orderByDesc('created_at')
+            ->get(['id', 'name', 'type', 'definition'])
+            ->all();
     }
 
     public function update(Request $request, InstagramTemplate $template): JsonResponse

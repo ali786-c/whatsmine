@@ -25,8 +25,12 @@ Route::delete('/automations/{automation}', [AutomationController::class, 'destro
 
 Route::get('/logs', [LogsController::class, 'index'])->name('logs.index');
 
-// Saved message templates (generic carousel / button) for the Inbox composer.
+// Saved message templates (generic carousel / button) for the Inbox composer
+// plus a full-page gallery/editor under the Instagram menu.
 Route::get('/templates', [TemplateController::class, 'index'])->name('templates.index');
+Route::get('/templates/gallery', [TemplateController::class, 'gallery'])->name('templates.gallery');
+Route::get('/templates/create', [TemplateController::class, 'create'])->name('templates.create');
+Route::get('/templates/{template}/edit', [TemplateController::class, 'edit'])->name('templates.edit');
 Route::post('/templates', [TemplateController::class, 'store'])->name('templates.store');
 Route::put('/templates/{template}', [TemplateController::class, 'update'])->name('templates.update');
 Route::delete('/templates/{template}', [TemplateController::class, 'destroy'])->name('templates.destroy');
