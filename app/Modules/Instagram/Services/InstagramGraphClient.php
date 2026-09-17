@@ -83,6 +83,74 @@ class InstagramGraphClient
     }
 
     /**
+     * Generic template (carousel): 1–10 horizontally scrollable elements, each
+     * with title (80 chars max), optional subtitle (80) and image_url, and up
+     * to 3 web_url/postback buttons (Generic Template docs). Composed in the
+     * Inbox Instagram template composer; no Meta approval is required.
+     *
+     * @param  array<int, array<string, mixed>>  $elements
+     * @return array<string, mixed>
+     *
+     * @throws InstagramGraphException
+     */
+    public function sendGenericTemplate(InstagramAccount $account, string $igsid, array $elements): array
+    {
+        $elements = array_slice($elements, 0, 10);
+
+        foreach ($elements as $i => $el) {
+            $elements[$i]['title'] = mb_substr((string) ($el['title'] ?? ''), 0, 80);
+
+            if (! empty($el['subtitle'])) {
+                $elements[$i]['subtitle'] = mb_substr((string) $el['subtitle'], 0, 80);
+            }
+
+            if (! empty($el['buttons'])) {
+                $elements[$i]['buttons'] = array_slice($el['buttons'], 0, 3);
+            }
+        }
+
+        return $this->post($account, "{$account->ig_user_id}/messages", [
+            'recipient' => ['id' => $igsid],
+            'message' => [
+                'attachment' => [
+                    'type' => 'template',
+                    'payload' => [
+                        'template_type' => 'generic',
+                        'elements' => array_values($elements),
+                    ],
+                ],
+            ],
+        ]);
+    }
+
+    /**
+     * Button template: up-to-640-char text with 1–3 web_url/postback buttons
+     * (Button Template docs). Postback taps arrive as messaging_postbacks,
+     * which the webhook pipeline already records in the thread.
+     *
+     * @param  array<int, array{type: string, title: string, url?: string, payload?: string}>  $buttons
+     * @return array<string, mixed>
+     *
+     * @throws InstagramGraphException
+     */
+    public function sendButtonTemplate(InstagramAccount $account, string $igsid, string $text, array $buttons): array
+    {
+        return $this->post($account, "{$account->ig_user_id}/messages", [
+            'recipient' => ['id' => $igsid],
+            'message' => [
+                'attachment' => [
+                    'type' => 'template',
+                    'payload' => [
+                        'template_type' => 'button',
+                        'text' => $this->limitText($text, 'button template'),
+                        'buttons' => array_values(array_slice($buttons, 0, 3)),
+                    ],
+                ],
+            ],
+        ]);
+    }
+
+    /**
      * Attachment send (image/video/file by public URL) — used for file deliveries.
      *
      * @return array<string, mixed>

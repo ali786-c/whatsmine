@@ -3,6 +3,7 @@
 use App\Modules\Instagram\Http\Controllers\AutomationController;
 use App\Modules\Instagram\Http\Controllers\ConnectController;
 use App\Modules\Instagram\Http\Controllers\LogsController;
+use App\Modules\Instagram\Http\Controllers\TemplateController;
 use Illuminate\Support\Facades\Route;
 
 // Connection lives in ONE place: the Inbox Channels page (Inbox → Setup).
@@ -23,3 +24,9 @@ Route::patch('/automations/{automation}/toggle', [AutomationController::class, '
 Route::delete('/automations/{automation}', [AutomationController::class, 'destroy'])->name('automations.destroy');
 
 Route::get('/logs', [LogsController::class, 'index'])->name('logs.index');
+
+// Saved message templates (generic carousel / button) for the Inbox composer.
+Route::get('/templates', [TemplateController::class, 'index'])->name('templates.index');
+Route::post('/templates', [TemplateController::class, 'store'])->name('templates.store');
+Route::put('/templates/{template}', [TemplateController::class, 'update'])->name('templates.update');
+Route::delete('/templates/{template}', [TemplateController::class, 'destroy'])->name('templates.destroy');

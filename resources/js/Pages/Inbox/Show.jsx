@@ -582,6 +582,74 @@ function EventBubble({ payload, body }) {
     );
 }
 
+/* ─── Instagram template bubbles ─────────────────────── */
+/** Inbound IG template (echo of a carousel/button sent from the IG app or another tool) */
+function IgTemplateIn({ payload }) {
+    const att = payload?.message?.attachment ?? payload?.attachment ?? null;
+    if (!att) return null;
+
+    const tpl = att.payload ?? {};
+
+    return (
+        <div className="max-w-[70%] rounded-2xl overflow-hidden text-sm bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 rounded-bl-sm border border-neutral-200 dark:border-neutral-700">
+            <IgTemplateBody payload={tpl} />
+        </div>
+    );
+}
+
+/** Outbound IG template — the exact object we sent to Graph is stored in payload.ig_template */
+function IgTemplateOut({ payload, isOut }) {
+    const tpl = payload?.message?.attachment?.payload ?? {};
+
+    return <IgTemplateBody payload={tpl} isOut={isOut} />;
+}
+
+function IgTemplateBody({ payload, isOut = false }) {
+    const isCarousel = payload.template_type === 'generic';
+
+    if (isCarousel) {
+        return (
+            <div className="flex gap-2 overflow-x-auto p-2 snap-x">
+                {(payload.elements ?? []).map((el, i) => (
+                    <div key={i} className="w-44 shrink-0 rounded-xl border border-neutral-200 dark:border-neutral-600 overflow-hidden snap-start bg-white dark:bg-neutral-900">
+                        {el.image_url && <img src={el.image_url} alt="" className="w-full h-24 object-cover" />}
+                        <div className="p-2">
+                            <p className="text-xs font-semibold truncate">{el.title}</p>
+                            {el.subtitle && <p className="text-[11px] text-neutral-500 mt-0.5 line-clamp-2">{el.subtitle}</p>}
+                            {(el.buttons ?? []).length > 0 && (
+                                <div className="mt-1.5 space-y-1">
+                                    {el.buttons.map((b, j) => (
+                                        <div key={j} className="text-[10px] text-brand-600 dark:text-brand-400 border border-current/20 rounded px-1.5 py-0.5 truncate">
+                                            {b.type === 'web_url' ? '🔗' : '↩'} {b.title}
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                ))}
+            </div>
+        );
+    }
+
+    return (
+        <div className="p-1">
+            <p className="text-xs whitespace-pre-wrap px-1.5">{payload.text}</p>
+            {(payload.buttons ?? []).length > 0 && (
+                <div className="mt-2 space-y-1">
+                    {payload.buttons.map((b, j) => (
+                        <div key={j} className={`text-[11px] rounded-lg px-2 py-1.5 truncate ${
+                            isOut ? 'bg-white/15 border border-white/25' : 'bg-neutral-50 dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600'
+                        }`}>
+                            {b.type === 'web_url' ? '🔗' : '↩'} {b.title}
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+}
+
 /* ─── main MessageBubble ─────────────────────────────── */
 
 function SoundPrefsMenu() {
@@ -660,6 +728,9 @@ function MessageBubble({ msg, conversationId }) {
 
     // Template header components — prefer `definition` (full text+params) over raw `components` (params-only)
     const templateComponents = p.template?.definition ?? p.template?.components ?? (Array.isArray(p.components) ? p.components : null);
+
+    // Instagram structured template (generic carousel / button) — stored under payload.ig_template
+    const igTemplate = p.ig_template ?? (msg.channel === 'instagram' && mediaType === 'template' ? p : null);
 
     // Inbound raw payload extras
     const location = p.location ?? p[mediaType];
@@ -764,9 +835,12 @@ function MessageBubble({ msg, conversationId }) {
                     )}
 
                     {/* TEMPLATE — inbound raw (no components) */}
-                    {mediaType === 'template' && !templateComponents && (
+                    {mediaType === 'template' && !templateComponents && !igTemplate && (
                         <WaText text={msg.body || '[template]'} />
                     )}
+
+                    {/* INSTAGRAM generic carousel / button template */}
+                    {igTemplate && (isOut ? <IgTemplateOut payload={igTemplate} isOut={isOut} /> : <IgTemplateIn payload={igTemplate} />)}
 
                     {/* POLL (native WhatsApp poll type) */}
                     {mediaType === 'poll' && (
@@ -952,6 +1026,331 @@ function EmojiPicker({ onPick, onClose }) {
                     </button>
                 ))}
             </div>
+        </div>
+    );
+}
+
+/* ─── Instagram template composer (generic carousel / button) ── */
+/** Build the ready-to-send Graph `message` attachment object from composer state */
+function buildIgTemplateMessage(type, def) {
+    if (type === 'button') {
+        return {
+            attachment: {
+                type: 'template',
+                payload: {
+                    template_type: 'button',
+                    text: (def.text || '').slice(0, 640),
+                    buttons: (def.buttons || []).map(b => b.type === 'web_url'
+                        ? { type: 'web_url', title: (b.title || '').slice(0, 20), url: b.url }
+                        : { type: 'postback', title: (b.title || '').slice(0, 20), payload: b.payload }),
+                },
+            },
+        };
+    }
+
+    return {
+        attachment: {
+            type: 'template',
+            payload: {
+                template_type: 'generic',
+                elements: (def.elements || []).slice(0, 10).map(el => ({
+                    title: (el.title || '').slice(0, 80),
+                    ...(el.subtitle ? { subtitle: el.subtitle.slice(0, 80) } : {}),
+                    ...(el.image_url ? { image_url: el.image_url } : {}),
+                    ...(el.buttons?.length ? {
+                        buttons: el.buttons.slice(0, 3).map(b => b.type === 'web_url'
+                            ? { type: 'web_url', title: (b.title || '').slice(0, 20), url: b.url }
+                            : { type: 'postback', title: (b.title || '').slice(0, 20), payload: b.payload }),
+                    } : {}),
+                })),
+            },
+        },
+    };
+}
+
+/** Does the current composer state form a sendable template? */
+function igTemplateValid(type, def) {
+    const btnOk = (b) => b.title?.trim() && (b.type === 'web_url' ? (b.url || '').trim() : (b.payload || '').trim());
+
+    if (type === 'button') {
+        return (def.text || '').trim() !== '' && (def.buttons || []).length > 0 && def.buttons.every(btnOk);
+    }
+
+    return (def.elements || []).length > 0 && def.elements.every(el =>
+        el.title?.trim() && (el.buttons || []).every(btnOk));
+}
+
+const emptyIgButton = () => ({ type: 'web_url', title: '', url: '', payload: '' });
+
+function IgTemplateComposer({ conversationId, onSent, onClose }) {
+    const { t } = useTranslation();
+    const ref = useRef(null);
+    const [mode, setMode] = useState('list'); // list | compose
+    const [templates, setTemplates]         = useState([]);
+    const [loading, setLoading]             = useState(true);
+    const [editing, setEditing]             = useState(null); // template being edited {id?, name, type, definition}
+    const [sending, setSending]             = useState(false);
+    const [sendError, setSendError]         = useState('');
+
+    useEffect(() => {
+        const h = (e) => { if (ref.current && !ref.current.contains(e.target)) onClose(); };
+        document.addEventListener('mousedown', h);
+        return () => document.removeEventListener('mousedown', h);
+    }, [onClose]);
+
+    const loadTemplates = () => {
+        axios.get(route('client.instagram.templates.index'))
+            .then(r => setTemplates(r.data ?? []))
+            .catch(() => setTemplates([]))
+            .finally(() => setLoading(false));
+    };
+
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-on-mount pattern, same as TemplatePicker below
+    useEffect(loadTemplates, []);
+
+    const startNew = () => setEditing({
+        id: null,
+        name: '',
+        type: 'button',
+        definition: { text: '', buttons: [emptyIgButton()], elements: [{ title: '', subtitle: '', image_url: '', buttons: [] }] },
+    });
+
+    const startEdit = (tpl) => setEditing({ id: tpl.id, name: tpl.name, type: tpl.type, definition: JSON.parse(JSON.stringify(tpl.definition ?? {})) });
+
+    const saveTemplate = async () => {
+        setSendError('');
+        const payload = { name: editing.name, type: editing.type, definition: editing.definition };
+        try {
+            const r = editing.id
+                ? await axios.put(route('client.instagram.templates.update', editing.id), payload)
+                : await axios.post(route('client.instagram.templates.store'), payload);
+            const saved = r.data;
+            setTemplates(prev => {
+                const next = prev.filter(x => x.id !== saved.id);
+                next.unshift(saved);
+                return next;
+            });
+            setEditing(null);
+        } catch (err) {
+            setSendError(err.response?.data?.error ?? err.response?.data?.message ?? 'Save failed');
+        }
+    };
+
+    const deleteTemplate = async (tpl) => {
+        try {
+            await axios.delete(route('client.instagram.templates.destroy', tpl.id));
+            setTemplates(prev => prev.filter(x => x.id !== tpl.id));
+        } catch { /* keep the row on failure */ }
+    };
+
+    const sendTemplate = async (tpl) => {
+        setSendError('');
+        setSending(true);
+        try {
+            const message = buildIgTemplateMessage(tpl.type, tpl.definition);
+            const fallbackText = tpl.type === 'button'
+                ? (tpl.definition?.text ?? '[template]')
+                : (tpl.definition?.elements?.[0]?.title ?? '[template]');
+            const r = await axios.post(route('client.inbox.reply', conversationId), {
+                body: fallbackText,
+                type: 'template',
+                payload: { ig_template: { message, fallback_text: fallbackText } },
+            }, { headers: { Accept: 'application/json' } });
+            onSent?.(r.data?.message);
+            onClose();
+        } catch (err) {
+            setSendError(err.response?.data?.error ?? err.response?.data?.message ?? t('inbox.send_failed'));
+            setSending(false);
+        }
+    };
+
+    const def = editing?.definition ?? {};
+    const setDef = (patch) => setEditing(e => ({ ...e, definition: { ...e.definition, ...patch } }));
+    const valid = editing ? igTemplateValid(editing.type, def) : false;
+    const canSend = valid && editing.name.trim() !== '';
+
+    return (
+        <div ref={ref} className="absolute bottom-full mb-2 left-0 right-0 z-50 bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 rounded-xl shadow-lg overflow-hidden flex flex-col max-h-[30rem]">
+            {/* Header */}
+            <div className="flex items-center gap-2 px-3 py-2 border-b border-neutral-100 dark:border-neutral-800 shrink-0">
+                <LayoutTemplate className="h-4 w-4 text-neutral-400 shrink-0" />
+                {mode === 'list' && <span className="text-sm font-semibold text-neutral-700 dark:text-neutral-200 flex-1">{t('inbox.ig_tpl_title')}</span>}
+                {mode === 'compose' && (
+                    <button type="button" onClick={() => { setEditing(null); setMode('list'); }} className="text-xs text-brand-600 hover:underline dark:text-brand-400 flex-1 text-left">
+                        {t('inbox.ig_tpl_back')}
+                    </button>
+                )}
+                <button type="button" onClick={onClose} className="text-neutral-400 hover:text-neutral-600 shrink-0">
+                    <X className="h-4 w-4" />
+                </button>
+            </div>
+
+            {/* Saved templates list */}
+            {mode === 'list' && (
+                <div className="overflow-y-auto flex-1 p-2">
+                    <button type="button" onClick={() => { startNew(); setMode('compose'); }}
+                        className="w-full flex items-center justify-center gap-1.5 rounded-lg border border-dashed border-neutral-300 dark:border-neutral-600 py-2 text-xs font-medium text-brand-600 hover:bg-brand-50 dark:text-brand-400 dark:hover:bg-brand-900/20 mb-2">
+                        <Plus className="h-3.5 w-3.5" /> {t('inbox.ig_tpl_new')}
+                    </button>
+                    {loading && <p className="text-xs text-neutral-400 text-center py-6">…</p>}
+                    {!loading && templates.length === 0 && (
+                        <p className="text-xs text-neutral-400 text-center py-6">{t('inbox.ig_tpl_none')}</p>
+                    )}
+                    {templates.map(tpl => (
+                        <div key={tpl.id} className="flex items-center gap-2 rounded-lg border border-neutral-200 dark:border-neutral-700 px-2.5 py-2 mb-1.5">
+                            <div className="min-w-0 flex-1">
+                                <p className="text-xs font-semibold text-neutral-800 dark:text-neutral-100 truncate">{tpl.name}</p>
+                                <p className="text-[10px] text-neutral-400">
+                                    {tpl.type === 'generic'
+                                        ? `${t('inbox.ig_tpl_carousel')} · ${tpl.definition?.elements?.length ?? 0} ${t('inbox.ig_tpl_cards')}`
+                                        : t('inbox.ig_tpl_buttons')}
+                                </p>
+                            </div>
+                            <button type="button" onClick={() => startEdit(tpl)} className="text-[11px] text-brand-600 hover:underline dark:text-brand-400">✎</button>
+                            <button type="button" onClick={() => deleteTemplate(tpl)} title={t('inbox.ig_tpl_delete')} className="text-[11px] text-neutral-400 hover:text-red-500">✕</button>
+                            <button type="button" disabled={sending} onClick={() => sendTemplate(tpl)}
+                                className="rounded-lg bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white text-[11px] font-semibold px-2.5 py-1">
+                                {t('inbox.ig_tpl_send_saved')}
+                            </button>
+                        </div>
+                    ))}
+                </div>
+            )}
+
+            {/* Compose / edit */}
+            {mode === 'compose' && editing && (
+                <div className="overflow-y-auto flex-1 p-3 space-y-3">
+                    {/* Type toggle */}
+                    <div className="flex gap-1.5">
+                        {['button', 'generic'].map(ty => (
+                            <button key={ty} type="button" onClick={() => setEditing(e => ({ ...e, type: ty }))}
+                                className={`flex-1 rounded-lg px-2 py-1.5 text-xs font-medium border transition ${
+                                    editing.type === ty
+                                        ? 'bg-brand-50 border-brand-300 text-brand-700 dark:bg-brand-900/30 dark:border-brand-700 dark:text-brand-300'
+                                        : 'border-neutral-200 text-neutral-500 hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-800'
+                                }`}>
+                                {ty === 'button' ? t('inbox.ig_tpl_buttons') : t('inbox.ig_tpl_carousel')}
+                            </button>
+                        ))}
+                    </div>
+
+                    <input type="text" value={editing.name} onChange={e => setEditing(ed => ({ ...ed, name: e.target.value }))}
+                        placeholder={t('inbox.ig_tpl_name_placeholder')}
+                        className="w-full rounded-lg border border-neutral-300 dark:border-neutral-600 bg-neutral-50 dark:bg-neutral-800 px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-brand-500" />
+
+                    {/* BUTTON template */}
+                    {editing.type === 'button' && (
+                        <>
+                            <div>
+                                <label className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 mb-1 block">{t('inbox.ig_tpl_text')}</label>
+                                <textarea value={def.text ?? ''} onChange={e => setDef({ text: e.target.value })} rows={2} maxLength={640}
+                                    className="w-full rounded-lg border border-neutral-300 dark:border-neutral-600 bg-neutral-50 dark:bg-neutral-800 px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-brand-500 resize-none" />
+                                <p className="text-[10px] text-neutral-400 mt-0.5">{t('inbox.ig_tpl_text_hint')}</p>
+                            </div>
+                            <ButtonListEditor t={t} buttons={def.buttons ?? []} onChange={buttons => setDef({ buttons })} />
+                        </>
+                    )}
+
+                    {/* GENERIC carousel */}
+                    {editing.type === 'generic' && (
+                        <div>
+                            <p className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 mb-1">{t('inbox.ig_tpl_cards')}</p>
+                            {(def.elements ?? []).map((el, i) => (
+                                <div key={i} className="rounded-lg border border-neutral-200 dark:border-neutral-700 p-2.5 mb-2 space-y-1.5">
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-[10px] font-bold text-neutral-500">{t('inbox.ig_tpl_card', { n: i + 1 })}</span>
+                                        {(def.elements ?? []).length > 1 && (
+                                            <button type="button" onClick={() => setDef({ elements: def.elements.filter((_, j) => j !== i) })}
+                                                className="text-neutral-400 hover:text-red-500"><X className="h-3.5 w-3.5" /></button>
+                                        )}
+                                    </div>
+                                    <input type="text" value={el.title ?? ''} maxLength={80}
+                                        onChange={e => setDef({ elements: def.elements.map((x, j) => j === i ? { ...x, title: e.target.value } : x) })}
+                                        placeholder={t('inbox.ig_tpl_card_title')}
+                                        className="w-full rounded-lg border border-neutral-300 dark:border-neutral-600 bg-neutral-50 dark:bg-neutral-800 px-2.5 py-1.5 text-xs" />
+                                    <input type="text" value={el.subtitle ?? ''} maxLength={80}
+                                        onChange={e => setDef({ elements: def.elements.map((x, j) => j === i ? { ...x, subtitle: e.target.value } : x) })}
+                                        placeholder={t('inbox.ig_tpl_card_subtitle')}
+                                        className="w-full rounded-lg border border-neutral-300 dark:border-neutral-600 bg-neutral-50 dark:bg-neutral-800 px-2.5 py-1.5 text-xs" />
+                                    <input type="url" value={el.image_url ?? ''}
+                                        onChange={e => setDef({ elements: def.elements.map((x, j) => j === i ? { ...x, image_url: e.target.value } : x) })}
+                                        placeholder={t('inbox.ig_tpl_card_image')}
+                                        className="w-full rounded-lg border border-neutral-300 dark:border-neutral-600 bg-neutral-50 dark:bg-neutral-800 px-2.5 py-1.5 text-xs" />
+                                    <ButtonListEditor t={t} buttons={el.buttons ?? []} small
+                                        onChange={buttons => setDef({ elements: def.elements.map((x, j) => j === i ? { ...x, buttons } : x) })} />
+                                </div>
+                            ))}
+                            {(def.elements ?? []).length < 10 && (
+                                <button type="button" onClick={() => setDef({ elements: [...(def.elements ?? []), { title: '', subtitle: '', image_url: '', buttons: [] }] })}
+                                    className="w-full rounded-lg border border-dashed border-neutral-300 dark:border-neutral-600 py-1.5 text-xs text-brand-600 hover:bg-brand-50 dark:text-brand-400 dark:hover:bg-brand-900/20">
+                                    + {t('inbox.ig_tpl_add_card')}
+                                </button>
+                            )}
+                        </div>
+                    )}
+
+                    {sendError && <p className="text-xs text-red-500 bg-red-50 dark:bg-red-900/20 rounded-lg px-3 py-2">{sendError}</p>}
+
+                    <div className="flex gap-2">
+                        <button type="button" disabled={!canSend} onClick={saveTemplate}
+                            className="flex-1 rounded-xl border border-brand-300 text-brand-700 hover:bg-brand-50 disabled:opacity-50 dark:border-brand-700 dark:text-brand-300 dark:hover:bg-brand-900/20 text-sm font-semibold py-2">
+                            {t('inbox.ig_tpl_save')}
+                        </button>
+                        <button type="button" disabled={!canSend || sending} onClick={() => {
+                            if (!canSend) return;
+                            saveTemplate().then(() => sendTemplate({ name: editing.name, type: editing.type, definition: editing.definition }));
+                        }}
+                            className="flex-1 rounded-xl bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white text-sm font-semibold py-2 flex items-center justify-center gap-1.5">
+                            {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                            {t('inbox.ig_tpl_send')}
+                        </button>
+                    </div>
+                    {!valid && <p className="text-[10px] text-neutral-400 text-center">{t('inbox.ig_tpl_needs_card')}</p>}
+                </div>
+            )}
+        </div>
+    );
+}
+
+/** Shared button rows editor for both template types */
+function ButtonListEditor({ t, buttons: rawButtons, onChange, small = false }) {
+    const buttons = rawButtons.length < 3 ? [...rawButtons, null] : rawButtons; // trailing add-slot
+
+    const update = (i, patch) => onChange(buttons.map((b, j) => j === i ? { ...(b ?? emptyIgButton()), ...patch } : b));
+
+    return (
+        <div className="space-y-1.5">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-neutral-400">{t('inbox.ig_tpl_buttons_n')}</p>
+            {buttons.map((b, i) => b === null ? (
+                <button key={`add-${i}`} type="button" onClick={() => onChange([...buttons.filter(Boolean), emptyIgButton()])}
+                    className="w-full rounded-lg border border-dashed border-neutral-300 dark:border-neutral-600 py-1 text-[11px] text-neutral-500 hover:bg-neutral-50 dark:hover:bg-neutral-800">
+                    + {t('inbox.ig_tpl_add_button')}
+                </button>
+            ) : (
+                <div key={i} className={`rounded-lg border border-neutral-200 dark:border-neutral-700 ${small ? 'p-1.5' : 'p-2'} space-y-1.5`}>
+                    <div className="flex items-center gap-1.5">
+                        <select value={b.type ?? 'web_url'} onChange={e => update(i, { type: e.target.value })}
+                            className="rounded border border-neutral-300 dark:border-neutral-600 bg-neutral-50 dark:bg-neutral-800 px-1.5 py-0.5 text-[10px]">
+                            <option value="web_url">{t('inbox.ig_tpl_btn_url')}</option>
+                            <option value="postback">{t('inbox.ig_tpl_btn_postback')}</option>
+                        </select>
+                        <input type="text" value={b.title ?? ''} maxLength={20} onChange={e => update(i, { title: e.target.value })}
+                            placeholder={t('inbox.ig_tpl_btn_title')}
+                            className="flex-1 min-w-0 rounded border border-neutral-300 dark:border-neutral-600 bg-neutral-50 dark:bg-neutral-800 px-1.5 py-0.5 text-[10px]" />
+                        <button type="button" onClick={() => onChange(buttons.filter((_, j) => j !== i))}
+                            className="text-neutral-400 hover:text-red-500 shrink-0"><X className="h-3 w-3" /></button>
+                    </div>
+                    {(b.type ?? 'web_url') === 'web_url' ? (
+                        <input type="url" value={b.url ?? ''} onChange={e => update(i, { url: e.target.value })}
+                            placeholder={t('inbox.ig_tpl_btn_url_field')}
+                            className="w-full rounded border border-neutral-300 dark:border-neutral-600 bg-neutral-50 dark:bg-neutral-800 px-1.5 py-0.5 text-[10px]" />
+                    ) : (
+                        <input type="text" value={b.payload ?? ''} onChange={e => update(i, { payload: e.target.value })}
+                            placeholder={t('inbox.ig_tpl_btn_payload_field')}
+                            className="w-full rounded border border-neutral-300 dark:border-neutral-600 bg-neutral-50 dark:bg-neutral-800 px-1.5 py-0.5 text-[10px]" />
+                    )}
+                </div>
+            ))}
         </div>
     );
 }
@@ -1409,6 +1808,7 @@ export default function InboxShow({
     const channel = conversation.channel_account?.channel ?? 'whatsapp';
     const isWindowOpen = conversation.is_whatsapp_window_open ?? (channel !== 'whatsapp');
     const isWhatsApp = channel === 'whatsapp';
+    const isInstagram = channel === 'instagram';
 
     const [messages, setMessages]           = useState(initialMessages ?? []);
     // Polling fallback (router.reload) refreshes the `messages` prop, but useState
@@ -1467,6 +1867,7 @@ export default function InboxShow({
     // Toolbar state
     const [showEmoji, setShowEmoji]           = useState(false);
     const [showTemplates, setShowTemplates]   = useState(false);
+    const [showIgTemplates, setShowIgTemplates] = useState(false);
     const [showProducts, setShowProducts]     = useState(false);
     const [showAgentDrop, setShowAgentDrop]   = useState(false);
     const [attachPreview, setAttachPreview]   = useState(null); // { file, url, type }
@@ -2027,6 +2428,16 @@ export default function InboxShow({
                             {/* Emoji picker */}
                             {showEmoji && <EmojiPicker onPick={e => setData('body', (data.body ?? '') + e)} onClose={() => setShowEmoji(false)} />}
                             {/* Template picker */}
+                            {showIgTemplates && (
+                                <IgTemplateComposer
+                                    conversationId={conversation.uuid}
+                                    onSent={(msg) => {
+                                        if (msg) setMessages(prev => prev.some(m => m.id === msg.id) ? prev : [...prev, msg]);
+                                        setShowIgTemplates(false);
+                                    }}
+                                    onClose={() => setShowIgTemplates(false)}
+                                />
+                            )}
                             {showTemplates && (
                                 <TemplatePicker
                                     conversationId={conversation.uuid}
@@ -2078,6 +2489,14 @@ export default function InboxShow({
                                             disabled={isWhatsApp && !isWindowOpen}
                                             className={`p-1.5 rounded-lg text-neutral-400 hover:text-neutral-600 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition disabled:opacity-40 disabled:cursor-not-allowed ${showProducts ? 'bg-neutral-100 dark:bg-neutral-800 text-neutral-600' : ''}`}>
                                             <ShoppingBag className="h-4 w-4" />
+                                        </button>
+                                    )}
+                                    {/* Instagram template (generic carousel / button) */}
+                                    {isInstagram && (
+                                        <button type="button" onClick={() => setShowIgTemplates(v => !v)}
+                                            title={t('inbox.ig_tpl_title')}
+                                            className={`p-1.5 rounded-lg text-neutral-400 hover:text-neutral-600 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition ${showIgTemplates ? 'bg-neutral-100 dark:bg-neutral-800 text-neutral-600' : ''}`}>
+                                            <LayoutTemplate className="h-4 w-4" />
                                         </button>
                                     )}
                                     {/* WA Template */}
