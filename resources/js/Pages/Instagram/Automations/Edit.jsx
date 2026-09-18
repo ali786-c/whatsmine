@@ -473,6 +473,10 @@ export default function InstagramAutomationEdit({ automation = null, accounts = 
                         <p className="mb-4 text-xs text-neutral-500 dark:text-neutral-400">
                             Meta allows only ONE private reply per comment — everything goes in this single message.
                         </p>
+                        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
+                        {/* LEFT — editable fields */}
+                        <div className="min-w-0 space-y-4">
+                        <div>
                         <label className="mb-1.5 block text-sm font-medium">Message</label>
                         <textarea
                             value={form.reply_message}
@@ -484,8 +488,9 @@ export default function InstagramAutomationEdit({ automation = null, accounts = 
                         />
                         <p className="mt-1 text-xs text-neutral-500">Tokens: {'{username}'} — use the commenter&apos;s name in the message.</p>
                         {errors.reply_message && <p className="mt-1 text-xs text-red-500">{errors.reply_message}</p>}
+                        </div>
 
-                        <div className="mt-4 flex items-center justify-between rounded-lg border border-neutral-200 px-4 py-3 dark:border-neutral-800">
+                        <div className="flex items-center justify-between rounded-lg border border-neutral-200 px-4 py-3 dark:border-neutral-800">
                             <div>
                                 <p className="text-sm font-medium">Ask them to follow you first</p>
                                 <p className="text-xs text-neutral-500 dark:text-neutral-400">
@@ -495,7 +500,9 @@ export default function InstagramAutomationEdit({ automation = null, accounts = 
                                 </p>
                             </div>
                             <Toggle checked={form.follow_gate} onChange={(v) => set('follow_gate', v)} />
-                        </div>                        {form.follow_gate && (
+                        </div>
+
+                        {form.follow_gate && (
                             <div className="mt-3 space-y-4">
                                 <div className="grid gap-4 md:grid-cols-2">
                                     <div className="md:col-span-2">
@@ -558,8 +565,11 @@ export default function InstagramAutomationEdit({ automation = null, accounts = 
                                 </div>
                             </div>
                         )}
+                        </div>
 
-                        <div className="mt-5 rounded-lg bg-neutral-50 p-4 dark:bg-neutral-800/60">
+                        {/* RIGHT — live DM preview: sticky beside the form on desktop, stacks below on mobile */}
+                        <div className="lg:sticky lg:top-24 self-start">
+                        <div className="rounded-lg bg-neutral-50 p-4 dark:bg-neutral-800/60">
                             <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-neutral-500">
                                 <MessageCircle className="h-3.5 w-3.5" /> DM preview
                             </p>
@@ -590,6 +600,8 @@ export default function InstagramAutomationEdit({ automation = null, accounts = 
                             {form.follow_gate && (
                                 <p className="mt-2 text-xs text-neutral-500 dark:text-neutral-400">Step 1 = hook + button · tap → follow gate · confirm → verified &amp; delivered.</p>
                             )}
+                        </div>
+                        </div>
                         </div>
 
                         <div className="mt-5">
