@@ -1,10 +1,19 @@
 import { Link, usePage } from '@inertiajs/react';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ChevronDown, Plus, X } from 'lucide-react';
 
-function NavGroup({ label, items, onClose }) {
-    const [open, setOpen] = useState(true);
+function NavGroup({ label, items, onClose, autoOpen = false }) {
+    // Collapsible groups start open for discoverability. autoOpen re-derives on
+    // every render from the current route — a group containing the active item
+    // can never be left collapsed by a navigation.
+    const [userToggledClosed, setUserToggledClosed] = useState(false);
+    // A group holding the active item is forced open (even after a refresh);
+    // otherwise the user's last toggle decides.
+    const open = autoOpen || !userToggledClosed;
+    const setOpen = (value) => {
+        setUserToggledClosed(!value);
+    };
 
     return (
         <div className="mb-0.5">
@@ -38,13 +47,13 @@ function NavGroup({ label, items, onClose }) {
                                 key={item.key ?? item.route ?? item.href ?? i}
                                 href={item.href ?? (item.route ? route(item.route) : '#')}
                                 onClick={onClose}
+                                data-nav-active={isActive || undefined}
                                 className={[
                                     'group flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-150',
                                     isActive
                                         ? 'bg-brand-600 text-white shadow-sm'
                                         : 'text-white/80 hover:bg-white/10 hover:text-white',
                                 ].join(' ')}
-                                style={!isActive ? undefined : undefined}
                             >
                                 {item.icon && (
                                     <span className={[
@@ -67,6 +76,37 @@ function NavGroup({ label, items, onClose }) {
     );
 }
 
+/**
+ * Keeps the active nav item visible: after every navigation/refresh the
+ * scrollable <nav> scrolls the highlighted link into view (centered when
+ * possible). Without this, items deep in the sidebar (e.g. Instagram group)
+ * sit below the fold after a page load and the user thinks the menu vanished.
+ */
+function useAutoScrollActiveNav() {
+    const navRef = useRef(null);
+
+    useEffect(() => {
+        const nav = navRef.current;
+        if (!nav) return;
+
+        // Next frame so layout (incl. collapsible groups) has settled.
+        const raf = requestAnimationFrame(() => {
+            const active = nav.querySelector('[data-nav-active="true"]')
+                ?? nav.querySelector('[data-nav-active=""]');
+
+            if (active) {
+                active.scrollIntoView({ block: 'nearest', behavior: 'instant' });
+            } else {
+                nav.scrollTop = 0;
+            }
+        });
+
+        return () => window.cancelAnimationFrame(raf);
+    });
+
+    return navRef;
+}
+
 export default function Sidebar({
     navItems = [],
     navGroups = [],
@@ -81,6 +121,12 @@ export default function Sidebar({
     const appName = import.meta.env.VITE_APP_NAME || 'WhatsMine';
     const { branding } = usePage().props;
     const logoUrl = branding?.logo_url;
+
+    // An item is active when its activePattern/route matches the current URL.
+    // Detecting ANY active item lets the group stay open across navigations.
+    const hasActiveIn = (items = []) => items.some((item) =>
+        typeof item.active === 'function' ? item.active() : item.route ? route().current(item.route) : false,
+    );
 
     const content = (
         <aside className="flex h-full w-64 flex-col bg-secondary-900 dark:bg-neutral-900">
@@ -107,52 +153,12 @@ export default function Sidebar({
                 </div>
             )}
 
-            <nav className="flex-1 overflow-y-auto px-2 py-2 scrollbar-thin scrollbar-track-transparent scrollbar-thumb-white/10">
-                {navGroups.length > 0 &&
-                    navGroups.map((group, gi) => (
-                        <NavGroup
-                            // Index-prefixed: group labels are not guaranteed unique
-                            // (e.g. two "Account" groups), and a duplicate React key
-                            // makes React omit/duplicate siblings, corrupting the
-                            // sidebar across SPA navigations.
-                            key={`${gi}-${group.key ?? group.label ?? ''}`}
-                            label={group.label}
-                            items={group.items ?? []}
-                            onClose={onClose}
-                        />
-                    ))}
-
-                {navGroups.length === 0 &&
-                    navItems.map((item, i) => {
-                        if (item.type === 'divider') {
-                            return <hr key={`div-${i}`} className="my-2 border-white/10" />;
-                        }
-                        const isActive =
-                            typeof item.active === 'function'
-                                ? item.active()
-                                : item.active ?? (item.route && route().current(item.route));
-                        return (
-                            <Link
-                                key={item.key ?? item.route ?? item.href ?? i}
-                                href={item.href ?? (item.route ? route(item.route) : '#')}
-                                onClick={onClose}
-                                className={[
-                                    'group flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-150',
-                                    isActive
-                                        ? 'bg-brand-600 text-white'
-                                        : 'text-white/80 hover:bg-white/10 hover:text-white',
-                                ].join(' ')}
-                            >
-                                {item.icon && (
-                                    <span className={isActive ? 'text-white' : 'text-white/65 group-hover:text-white'}>
-                                        {item.icon}
-                                    </span>
-                                )}
-                                <span className="truncate">{item.label}</span>
-                            </Link>
-                        );
-                    })}
-            </nav>
+            <SidebarNav
+                navItems={navItems}
+                navGroups={navGroups}
+                onClose={onClose}
+                hasActiveIn={hasActiveIn}
+            />
 
             {footer && (
                 <div className="shrink-0 border-t border-white/8 p-3">
@@ -189,5 +195,68 @@ export default function Sidebar({
                 </div>
             )}
         </>
+    );
+}
+
+/**
+ * The scrollable nav body, split out so the auto-scroll hook owns a single
+ * stable <nav> ref across route changes (Inertia swaps page content but the
+ * layout — and therefore this component — persists).
+ */
+function SidebarNav({ navItems, navGroups, onClose, hasActiveIn }) {
+    const navRef = useAutoScrollActiveNav();
+
+    return (
+        <nav
+            ref={navRef}
+            className="flex-1 overflow-y-auto px-2 py-2 scrollbar-thin scrollbar-track-transparent scrollbar-thumb-white/10"
+        >
+            {navGroups.length > 0 &&
+                navGroups.map((group, gi) => (
+                    <NavGroup
+                        // Index-prefixed: group labels are not guaranteed unique
+                        // (e.g. two "Account" groups), and a duplicate React key
+                        // makes React omit/duplicate siblings, corrupting the
+                        // sidebar across SPA navigations.
+                        key={`${gi}-${group.key ?? group.label ?? ''}`}
+                        label={group.label}
+                        items={group.items ?? []}
+                        onClose={onClose}
+                        autoOpen={hasActiveIn(group.items ?? [])}
+                    />
+                ))}
+
+            {navGroups.length === 0 &&
+                navItems.map((item, i) => {
+                    if (item.type === 'divider') {
+                        return <hr key={`div-${i}`} className="my-2 border-white/10" />;
+                    }
+                    const isActive =
+                        typeof item.active === 'function'
+                            ? item.active()
+                            : item.active ?? (item.route && route().current(item.route));
+                    return (
+                        <Link
+                            key={item.key ?? item.route ?? item.href ?? i}
+                            href={item.href ?? (item.route ? route(item.route) : '#')}
+                            onClick={onClose}
+                            data-nav-active={isActive || undefined}
+                            className={[
+                                'group flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-150',
+                                isActive
+                                    ? 'bg-brand-600 text-white'
+                                    : 'text-white/80 hover:bg-white/10 hover:text-white',
+                            ].join(' ')}
+                        >
+                            {item.icon && (
+                                <span className={isActive ? 'text-white' : 'text-white/65 group-hover:text-white'}>
+                                    {item.icon}
+                                </span>
+                            )}
+                            <span className="truncate">{item.label}</span>
+                        </Link>
+                    );
+                })}
+        </nav>
     );
 }
