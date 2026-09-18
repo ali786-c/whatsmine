@@ -342,6 +342,30 @@ class CommentFunnelService
             return true;
         }
 
+        if ($saidNo) {
+            // Explicit "no" / "not yet" (or the quick reply) — repeat the FOLLOW
+            // ask, not the generic keyword nudge. This also covers the
+            // inconclusive-API fail-open case: the quick reply must never be
+            // answered with "just reply DONE" when they told us they haven't
+            // followed yet. Same bounded loop — budget exhausted hands the
+            // thread to a human agent instead of nagging forever.
+            $maxNudges = max(0, (int) config('instagram.max_nudges', 2));
+            if ($participant->nudge_count < $maxNudges) {
+                $participant->increment('nudge_count');
+                $nudge = 'No problem! Just follow our account, then reply '.$keyword.' and I\'ll send it right over! 😊';
+                InstagramLog::dm('info', 'gate: user said NO — repeating the follow ask', ['participant_id' => $participant->id, 'nudge_count' => $participant->nudge_count]);
+                $this->sendFollowUp($account, $participant, $automation, $senderId, $nudge, $event);
+
+                return true;
+            }
+
+            $participant->forceFill(['stage' => FunnelParticipant::STAGE_CLOSED, 'closed_at' => now()])->save();
+            $this->log($account, $automation, $participant->comment_id, CommentAutomationLog::ACTION_SKIPPED, $event, $participant, 'gate loop budget exhausted (user keeps saying no)');
+            InstagramLog::dm('info', 'gate: user keeps saying no — closed for agent handoff', ['participant_id' => $participant->id]);
+
+            return true;
+        }
+
         // Any other reply (question, "haha", gibberish) → bounded keyword nudge.
         $maxNudges = max(0, (int) config('instagram.max_nudges', 2));
         if ($participant->nudge_count < $maxNudges) {

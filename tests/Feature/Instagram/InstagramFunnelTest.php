@@ -475,6 +475,42 @@ class InstagramFunnelTest extends TestCase
         $this->assertNotNull($participant->delivered_at);
     }
 
+    public function test_no_reply_gets_follow_re_ask_not_generic_nudge(): void
+    {
+        // Profile check inconclusive (fail-open) + user explicitly says "no" —
+        // the reply must repeat the FOLLOW ask, never the generic "reply DONE" nudge.
+        Http::fake([
+            'graph.facebook.com/*/17841400000001/messages' => Http::sequence()
+                ->push(['message_id' => 'msg-1'], 200)   // private reply (follow ask)
+                ->push(['message_id' => 'msg-2'], 200),  // re-ask — still the follow ask
+            'graph.facebook.com/*/igsid-customer*' => Http::response(['error' => ['message' => 'User consent is required to access user profile.', 'code' => 10]], 403),
+        ]);
+
+        $this->automation([
+            'follow_gate' => true,
+            'reply_keyword' => 'DONE',
+            'delivery' => ['type' => 'text', 'text' => 'Here is your file!'],
+        ]);
+
+        $funnel = app(CommentFunnelService::class);
+        $funnel->handleComment('17841400000001', $this->commentValue());
+
+        $this->assertTrue($funnel->handleDmReply('17841400000001', [
+            'sender' => ['id' => 'igsid-customer'],
+            'recipient' => ['id' => '17841400000001'],
+            'message' => ['mid' => 'dm-no', 'text' => 'no'],
+        ]));
+
+        $participant = FunnelParticipant::where('comment_id', 'comment-123')->firstOrFail();
+        $this->assertSame(FunnelParticipant::STAGE_AWAITING_FOLLOW, $participant->stage);
+        $this->assertNull($participant->delivered_at);
+        $this->assertSame(1, $participant->nudge_count);
+
+        $reAsk = (string) (Http::recorded()[1][0]['message']['text'] ?? '');
+        $this->assertStringContainsString('follow our account', $reAsk);
+        Http::assertSentCount(2);
+    }
+
     public function test_follow_check_can_be_disabled_via_config(): void
     {
         config(['instagram.follow_check' => false]);
