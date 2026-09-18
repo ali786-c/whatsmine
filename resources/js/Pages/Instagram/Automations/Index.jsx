@@ -3,7 +3,7 @@ import ClientLayout from '@/Layouts/ClientLayout';
 import Card from '@/Components/ui/Card';
 import Button from '@/Components/ui/Button';
 import Badge from '@/Components/ui/Badge';
-import { Instagram, Plus, Pencil, Trash2, Zap, BarChart2, Link2, FileDown } from 'lucide-react';
+import { Instagram, Plus, Pencil, Trash2, Zap, BarChart2, Link2, FileDown, Workflow } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 const TRIGGER_LABELS = {
@@ -75,8 +75,11 @@ export default function InstagramAutomationsIndex({ automations = [], accountsCo
                         <Link href={route('client.instagram.setup')}>
                             <Button variant="outline"><Instagram className="h-4 w-4" /> Setup</Button>
                         </Link>
+                        <Link href={route('client.instagram.flows.index')}>
+                            <Button variant="outline"><Workflow className="h-4 w-4" /> DM Flows</Button>
+                        </Link>
                         <Link href={route('client.instagram.logs.index')}>
-                            <Button variant="outline"><BarChart2 className="h-4 w-4" /> Logs</Button>
+                            <Button variant="outline"><BarChart2 className="h-4 w-4" /> Funnel Logs</Button>
                         </Link>
                         <Link href={route('client.instagram.automations.create')}>
                             <Button><Plus className="h-4 w-4" /> New automation</Button>
