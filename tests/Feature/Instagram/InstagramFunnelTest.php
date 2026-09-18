@@ -317,8 +317,11 @@ class InstagramFunnelTest extends TestCase
         Http::fake([
             'graph.facebook.com/*/17841400000001/messages' => Http::sequence()
                 ->push(['message_id' => 'msg-1'], 200)   // private reply (follow ask)
-                ->push(['message_id' => 'msg-2'], 200)   // NO → re-ask (follow-up 1)
-                ->push(['message_id' => 'msg-3'], 200),  // NO → re-ask (follow-up 2)
+                ->push(['message_id' => 'msg-2'], 200)   // NO → re-ask 1
+                ->push(['message_id' => 'msg-3'], 200)   // NO → re-ask 2
+                ->push(['message_id' => 'msg-4'], 200)   // NO → re-ask 3
+                ->push(['message_id' => 'msg-5'], 200)   // NO → re-ask 4
+                ->push(['message_id' => 'msg-6'], 200),  // NO → final handoff message
             'graph.facebook.com/*/igsid-customer*' => Http::response(['is_user_follow_business' => true], 200),
         ]);
 
@@ -340,15 +343,19 @@ class InstagramFunnelTest extends TestCase
             'message' => ['mid' => $mid, 'text' => 'no'],
         ];
 
-        $this->assertTrue($funnel->handleDmReply('17841400000001', $noEvent('dm-1')));
-        $this->assertTrue($funnel->handleDmReply('17841400000001', $noEvent('dm-2')));
-        $this->assertSame(2, $participant->fresh()->nudge_count);
-        $this->assertSame(FunnelParticipant::STAGE_AWAITING_FOLLOW, $participant->fresh()->stage);
+        foreach (['dm-1', 'dm-2', 'dm-3', 'dm-4'] as $i => $mid) {
+            $this->assertTrue($funnel->handleDmReply('17841400000001', $noEvent($mid)));
+            $this->assertSame($i + 1, $participant->fresh()->nudge_count);
+            $this->assertSame(FunnelParticipant::STAGE_AWAITING_FOLLOW, $participant->fresh()->stage);
+        }
 
-        // Third NO: budget exhausted → closed for agent handoff, no further sends.
-        $this->assertTrue($funnel->handleDmReply('17841400000001', $noEvent('dm-3')));
-        $this->assertSame(FunnelParticipant::STAGE_CLOSED, $participant->fresh()->stage);
-        Http::assertSentCount(3); // private reply + 2 re-asks — the third NO sent nothing
+        // Fifth NO: budget exhausted → ONE final handoff message (never silence),
+        // then closed for agent takeover.
+        $this->assertTrue($funnel->handleDmReply('17841400000001', $noEvent('dm-5')));
+        $participant = $participant->fresh();
+        $this->assertSame(FunnelParticipant::STAGE_CLOSED, $participant->stage);
+        $this->assertStringContainsString('our team', (string) (Http::recorded()[5][0]['message']['text'] ?? ''));
+        Http::assertSentCount(6); // private reply + 4 re-asks + final handoff message
     }
 
     public function test_gate_yes_reply_reminds_keyword_then_keyword_delivers(): void

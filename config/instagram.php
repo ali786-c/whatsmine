@@ -41,10 +41,16 @@ return [
     'follow_check' => env('INSTAGRAM_FOLLOW_CHECK', true),
 
     // Follow-up sends to a commenter who replied without the follow-gate
-    // keyword. This budget also bounds the conversational gate loop ("no" →
-    // re-ask, "yes" → keyword reminder); when it runs out the funnel closes and
-    // the thread is handed to a human agent in the Inbox. Meta allows follow-ups
-    // only within the 24h window opened by the user's reply.
+    // keyword ("haha", questions, gibberish). When it runs out the funnel
+    // closes and the thread is handed to a human agent in the Inbox. Meta
+    // allows follow-ups only within the 24h window opened by the user's reply.
     'max_nudges' => (int) env('INSTAGRAM_MAX_NUDGES', 2),
+
+    // Budget for the follow-gate loop specifically ("I followed" taps by
+    // unverified users, "no"/"Not yet" answers). These are deliberate user
+    // actions, so they get more chances than generic keyword nudges. On
+    // exhaustion one final handoff message is sent (never silence), then the
+    // thread closes for a human agent.
+    'gate_max_nudges' => (int) env('INSTAGRAM_GATE_MAX_NUDGES', 4),
 
 ];

@@ -327,9 +327,9 @@ class CommentFunnelService
 
         if ($follows === false) {
             // The API VERIFIED they do not follow — they cannot pass the gate by
-            // saying "yes" or "DONE". Repeat the ask (bounded by the same nudge
-            // budget) so the loop can never be driven forever.
-            $maxNudges = max(0, (int) config('instagram.max_nudges', 2));
+            // saying "yes" or "DONE". Repeat the ask (bounded by the gate budget)
+            // so the loop can never be driven forever.
+            $maxNudges = max(0, (int) config('instagram.gate_max_nudges', 4));
             if ($participant->nudge_count < $maxNudges) {
                 $participant->increment('nudge_count');
                 $nudge = 'It seems you are not following us yet! Follow our account, then reply '.$keyword.' and I\'ll send it right over! 😊';
@@ -339,12 +339,7 @@ class CommentFunnelService
                 return true;
             }
 
-            // Budget exhausted — hand the stalled conversation to a human. The
-            // Inbox thread already holds the full history (mirrored above), so
-            // an agent can pick it up; Meta keeps a fresh 24h send window open.
-            $participant->forceFill(['stage' => FunnelParticipant::STAGE_CLOSED, 'closed_at' => now()])->save();
-            $this->log($account, $automation, $participant->comment_id, CommentAutomationLog::ACTION_SKIPPED, $event, $participant, 'gate loop budget exhausted (follow not verified)');
-            InstagramLog::dm('info', 'gate: nudge budget exhausted without a verified follow — closed for agent handoff', ['participant_id' => $participant->id]);
+            $this->handOffGateLoop($account, $automation, $participant, $senderId, $event, 'follow not verified');
 
             return true;
         }
@@ -356,7 +351,7 @@ class CommentFunnelService
             // answered with "just reply DONE" when they told us they haven't
             // followed yet. Same bounded loop — budget exhausted hands the
             // thread to a human agent instead of nagging forever.
-            $maxNudges = max(0, (int) config('instagram.max_nudges', 2));
+            $maxNudges = max(0, (int) config('instagram.gate_max_nudges', 4));
             if ($participant->nudge_count < $maxNudges) {
                 $participant->increment('nudge_count');
                 $nudge = 'No problem! Just follow our account, then reply '.$keyword.' and I\'ll send it right over! 😊';
@@ -366,9 +361,7 @@ class CommentFunnelService
                 return true;
             }
 
-            $participant->forceFill(['stage' => FunnelParticipant::STAGE_CLOSED, 'closed_at' => now()])->save();
-            $this->log($account, $automation, $participant->comment_id, CommentAutomationLog::ACTION_SKIPPED, $event, $participant, 'gate loop budget exhausted (user keeps saying no)');
-            InstagramLog::dm('info', 'gate: user keeps saying no — closed for agent handoff', ['participant_id' => $participant->id]);
+            $this->handOffGateLoop($account, $automation, $participant, $senderId, $event, 'user keeps saying no');
 
             return true;
         }
@@ -387,6 +380,28 @@ class CommentFunnelService
         $this->log($account, $automation, $participant->comment_id, CommentAutomationLog::ACTION_SKIPPED, $event, $participant, 'nudge limit reached; keyword not matched');
 
         return true;
+    }
+
+    /**
+     * The gate loop ran out of chances without a verified follow: send ONE
+     * final message (never leave the user hanging on silence), then close the
+     * funnel — the mirrored Inbox thread hands the conversation to a human
+     * agent who can take over while Meta keeps a fresh 24h window open.
+     */
+    private function handOffGateLoop(
+        InstagramAccount $account,
+        ?CommentAutomation $automation,
+        FunnelParticipant $participant,
+        string $senderId,
+        array $event,
+        string $reason,
+    ): void {
+        $final = 'It seems we could not verify your follow. No worries — our team is here to help you personally from here! 😊';
+        $this->sendFollowUp($account, $participant, $automation, $senderId, $final, $event);
+
+        $participant->forceFill(['stage' => FunnelParticipant::STAGE_CLOSED, 'closed_at' => now()])->save();
+        $this->log($account, $automation, $participant->comment_id, CommentAutomationLog::ACTION_SKIPPED, $event, $participant, 'gate loop budget exhausted ('.$reason.')');
+        InstagramLog::dm('info', 'gate: budget exhausted — final handoff message sent, closed for agent takeover', ['participant_id' => $participant->id, 'reason' => $reason]);
     }
 
     /**
