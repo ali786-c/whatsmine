@@ -46,13 +46,17 @@ const DELIVERY_CHOICES = [
     { value: 'flow', label: 'A DM flow', hint: 'Run one of your visual DM flows (Instagram → DM Flows) — multi-step chats with buttons and questions. Needs the follow ask on step 2.' },
 ];
 
-function StepControls({ step, maxStep, errors, saving, onBack, onNext }) {
-    const errorTexts = Object.values(errors ?? {});
+function StepControls({ step, errors, saving, currentError, onBack, onNext }) {
+    // The frontend per-step error takes priority; otherwise surface the first
+    // backend error (when the server rejected a submit). The Next button stays
+    // clickable so the user always SEES why they cannot advance — a disabled
+    // button with no explanation is exactly the bug this fixes.
+    const shownError = currentError ?? Object.values(errors ?? {})[0] ?? null;
     return (
         <div className="flex flex-wrap items-center justify-between gap-3">
-            {errorTexts.length > 0 ? (
-                <p className="flex items-center gap-1.5 text-sm text-red-500">
-                    <AlertCircle className="h-4 w-4" /> {errorTexts[0]}
+            {shownError ? (
+                <p className="flex items-start gap-1.5 text-sm text-red-500" role="alert">
+                    <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" /> {shownError}
                 </p>
             ) : (
                 <p className="text-sm text-neutral-500 dark:text-neutral-400">
@@ -66,11 +70,11 @@ function StepControls({ step, maxStep, errors, saving, onBack, onNext }) {
                     </Button>
                 )}
                 {step < STEPS.length - 1 ? (
-                    <Button type="button" onClick={onNext} disabled={Object.keys(errors ?? {}).length > 0}>
+                    <Button type="button" onClick={onNext}>
                         Next <ChevronRight className="h-4 w-4" />
                     </Button>
                 ) : (
-                    <Button type="submit" disabled={saving || Object.keys(errors ?? {}).length > 0}>{saving ? 'Saving…' : 'Save automation'}</Button>
+                    <Button type="submit" disabled={saving || Boolean(currentError)}>{saving ? 'Saving…' : 'Save automation'}</Button>
                 )}
             </div>
         </div>
@@ -97,9 +101,9 @@ export default function InstagramAutomationEdit({ automation = null, accounts = 
     const [errors, setErrors] = useState({});
     const [saving, setSaving] = useState(false);
     const [step, setStep] = useState(0);
-    const [showAdvanced, setShowAdvanced] = useState(
-        editing && ((automation.media_ids?.length ?? 0) > 0 || (automation.media_filter?.length ?? 0) > 0 || automation.match_mode !== 'contains'),
-    );
+    // True after the user clicks Next with an invalid step — gates the
+    // per-field red hints so a fresh form doesn't shout errors immediately.
+    const [attempted, setAttempted] = useState(false);
     const [posts, setPosts] = useState([]);
     const [loadingPosts, setLoadingPosts] = useState(false);
     const [postsError, setPostsError] = useState(null);
@@ -139,8 +143,10 @@ export default function InstagramAutomationEdit({ automation = null, accounts = 
     const currentError = stepValid(step, form);
 
     const goto = (next) => {
+        setAttempted(true);
         if (currentError) return;
         setStep(next);
+        setAttempted(false);
     };
 
     const loadPosts = () => {
@@ -249,11 +255,17 @@ export default function InstagramAutomationEdit({ automation = null, accounts = 
                                     placeholder="Select account…"
                                 />
                                 {errors.instagram_account_id && <p className="mt-1 text-xs text-red-500">{errors.instagram_account_id}</p>}
+                                {attempted && !form.instagram_account_id && !errors.instagram_account_id && (
+                                    <p className="mt-1 text-xs text-red-500">Select your Instagram account first.</p>
+                                )}
                             </div>
                             <div>
                                 <label className="mb-1.5 block text-sm font-medium">Name (just for you)</label>
                                 <Input value={form.name} onChange={(e) => set('name', e.target.value)} placeholder="Reel drop — send link" />
                                 {errors.name && <p className="mt-1 text-xs text-red-500">{errors.name}</p>}
+                                {attempted && !form.name.trim() && !errors.name && (
+                                    <p className="mt-1 text-xs text-red-500">Give this automation a name.</p>
+                                )}
                             </div>
                         </div>
 
@@ -300,26 +312,21 @@ export default function InstagramAutomationEdit({ automation = null, accounts = 
                                         </button>
                                     ))}
                                 </div>
+                                {attempted && form.keywords.length === 0 && (
+                                    <p className="mt-2 text-xs text-red-500">Add at least one keyword — e.g. “price”.</p>
+                                )}
                             </div>
-                        )}
+                        )}                        {/* Advanced options are always visible — hiding them behind
+                            a toggle made match-mode and post-limiting
+                            undiscoverable. The keyword matcher only applies when
+                            the trigger is "comments with keywords". */}
+                        <p className="mt-5 flex items-center gap-1.5 border-t border-neutral-100 pt-4 text-sm font-semibold text-neutral-600 dark:border-neutral-800 dark:text-neutral-300">
+                            <Settings2 className="h-4 w-4" /> Advanced options
+                        </p>
 
-                        <div className="mt-5 flex flex-wrap items-center gap-2 border-t border-neutral-100 pt-4 dark:border-neutral-800">
-                            <button
-                                type="button"
-                                onClick={() => setShowAdvanced((v) => !v)}
-                                className="inline-flex items-center gap-1.5 text-sm font-medium text-neutral-500 hover:text-neutral-800 dark:text-neutral-400 dark:hover:text-neutral-200"
-                            >
-                                <Settings2 className="h-4 w-4" /> Advanced options
-                                {showAdvanced ? ' ▴' : ' ▾'}
-                            </button>
-                            {form.match_mode !== 'contains' && <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-xs dark:bg-neutral-800">match: {form.match_mode.replaceAll('_', ' ')}</span>}
-                            {form.media_filter.length > 0 && <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-xs dark:bg-neutral-800">{form.media_filter.join(', ').toLowerCase()} only</span>}
-                            {form.media_ids.length > 0 && <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-xs dark:bg-neutral-800">{form.media_ids.length} post(s)</span>}
-                        </div>
-
-                        {showAdvanced && (
-                            <div className="mt-4 space-y-4 rounded-lg bg-neutral-50 p-4 dark:bg-neutral-800/60">
+                        <div className="mt-3 space-y-4 rounded-lg bg-neutral-50 p-4 dark:bg-neutral-800/60">
                                 <div className="grid gap-4 md:grid-cols-2">
+                                    {form.trigger_type === 'keyword' && (
                                     <div>
                                         <label className="mb-1.5 block text-sm font-medium">How to match keywords</label>
                                         <Select
@@ -333,6 +340,7 @@ export default function InstagramAutomationEdit({ automation = null, accounts = 
                                             ]}
                                         />
                                     </div>
+                                    )}
                                     <div>
                                         <label className="mb-1.5 block text-sm font-medium">Only on media type (optional)</label>
                                         <div className="flex gap-3 text-sm">
@@ -395,10 +403,9 @@ export default function InstagramAutomationEdit({ automation = null, accounts = 
                                     )}
                                 </div>
                             </div>
-                        )}
 
                         <div className="mt-5">
-                            <StepControls step={step} maxStep={!currentError} errors={errors} saving={saving} onBack={() => {}} onNext={() => goto(1)} />
+                            <StepControls step={step} errors={errors} saving={saving} currentError={currentError} onBack={() => {}} onNext={() => goto(1)} />
                         </div>
                     </Card>
                 )}
@@ -463,7 +470,7 @@ export default function InstagramAutomationEdit({ automation = null, accounts = 
                         </div>
 
                         <div className="mt-5">
-                            <StepControls step={step} maxStep={!currentError} errors={errors} saving={saving} onBack={() => setStep(0)} onNext={() => goto(2)} />
+                            <StepControls step={step} errors={errors} saving={saving} currentError={currentError} onBack={() => setStep(0)} onNext={() => goto(2)} />
                         </div>
                     </Card>
                 )}
@@ -562,7 +569,7 @@ export default function InstagramAutomationEdit({ automation = null, accounts = 
                         </div>
 
                         <div className="mt-5">
-                            <StepControls step={step} maxStep={!currentError} errors={errors} saving={saving} onBack={() => setStep(1)} onNext={() => {}} />
+                            <StepControls step={step} errors={errors} saving={saving} currentError={currentError} onBack={() => setStep(1)} onNext={() => {}} />
                         </div>
                     </Card>
                 )}
