@@ -26,9 +26,42 @@ class PrivateReplyService
     ) {}
 
     /**
+     * Send the ONE private reply allowed per comment. Gated automations pass
+     * quick replies so the very first message already carries the
+     * "✅ I followed" / "Not yet" buttons.
+     *
+     * @param  array<int, array{content_type: string, title: string, payload: string}>  $quickReplies
      * @return array{ok: bool, message_id: ?string, error: ?string}
      */
-    public function send(FunnelParticipant $participant, string $text): array
+    public function send(FunnelParticipant $participant, string $text, array $quickReplies = []): array
+    {
+        $result = $this->attemptSend($participant, $text, $quickReplies);
+
+        // Meta's private-reply docs specify a plain-text message; quick replies
+        // on the private-reply path are an undocumented extra. If Graph rejects
+        // the buttons, retry ONCE as plain text — the rejected attempt delivered
+        // nothing, so the one-reply-per-comment budget is untouched.
+        if (! $result['ok'] && $quickReplies !== []) {
+            InstagramLog::send('warning', 'quick replies rejected on private reply — falling back to plain text', [
+                'participant_id' => $participant->id,
+                'comment_id' => $participant->comment_id,
+                'error' => $result['error'],
+            ]);
+
+            $result = $this->attemptSend($participant, $text, []);
+        }
+
+        return $result;
+    }
+
+    /**
+     * One Graph attempt. Stage/window guards and rate limiting live here so the
+     * plain-text fallback reuses the exact same safety rails.
+     *
+     * @param  array<int, array{content_type: string, title: string, payload: string}>  $quickReplies
+     * @return array{ok: bool, message_id: ?string, error: ?string}
+     */
+    private function attemptSend(FunnelParticipant $participant, string $text, array $quickReplies): array
     {
         $account = $participant->account;
         $log = fn (string $action, array $extra = []) => CommentAutomationLog::create(array_merge([
@@ -66,7 +99,7 @@ class PrivateReplyService
         InstagramLog::send('info', 'sending private reply via Graph', ['participant_id' => $participant->id, 'comment_id' => $participant->comment_id, 'account_id' => $account->id, 'text_preview' => mb_substr($text, 0, 120)]);
 
         try {
-            $res = $this->client->sendPrivateReply($account, $participant->comment_id, $text);
+            $res = $this->client->sendPrivateReply($account, $participant->comment_id, $text, $quickReplies);
 
             $participant->forceFill([
                 'stage' => FunnelParticipant::STAGE_DM_SENT,

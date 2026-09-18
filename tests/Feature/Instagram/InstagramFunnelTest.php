@@ -475,6 +475,58 @@ class InstagramFunnelTest extends TestCase
         $this->assertNotNull($participant->delivered_at);
     }
 
+    public function test_gated_private_reply_carries_i_followed_buttons_from_the_start(): void
+    {
+        Http::fake([
+            'graph.facebook.com/*/17841400000001/messages' => Http::response(['recipient_id' => 'igsid-customer', 'message_id' => 'msg-1'], 200),
+        ]);
+
+        $this->automation([
+            'follow_gate' => true,
+            'reply_keyword' => 'DONE',
+            'delivery' => ['type' => 'text', 'text' => 'Here is your file!'],
+        ]);
+
+        app(CommentFunnelService::class)->handleComment('17841400000001', $this->commentValue());
+
+        // The FIRST message already carries the quick-reply buttons.
+        $first = Http::recorded()[0][0]['message'];
+        $this->assertSame([
+            ['content_type' => 'text', 'title' => '✅ I followed', 'payload' => 'DONE'],
+            ['content_type' => 'text', 'title' => 'Not yet', 'payload' => 'no'],
+        ], $first['quick_replies']);
+
+        $participant = FunnelParticipant::where('comment_id', 'comment-123')->firstOrFail();
+        $this->assertSame(FunnelParticipant::STAGE_AWAITING_FOLLOW, $participant->stage);
+    }
+
+    public function test_gated_private_reply_falls_back_to_plain_text_when_buttons_rejected(): void
+    {
+        Http::fake([
+            'graph.facebook.com/*/17841400000001/messages' => Http::sequence()
+                ->push(['error' => ['message' => 'quick_replies not allowed on private replies', 'code' => 100]], 400)
+                ->push(['recipient_id' => 'igsid-customer', 'message_id' => 'msg-1'], 200),
+        ]);
+
+        $this->automation([
+            'follow_gate' => true,
+            'reply_keyword' => 'DONE',
+            'delivery' => ['type' => 'text', 'text' => 'Here is your file!'],
+        ]);
+
+        app(CommentFunnelService::class)->handleComment('17841400000001', $this->commentValue());
+
+        // Attempt 1 had buttons and was rejected; attempt 2 is plain text.
+        $this->assertCount(2, Http::recorded());
+        $this->assertArrayHasKey('quick_replies', Http::recorded()[0][0]['message']);
+        $this->assertArrayNotHasKey('quick_replies', Http::recorded()[1][0]['message']);
+
+        // The funnel still advanced — the fallback message went out.
+        $participant = FunnelParticipant::where('comment_id', 'comment-123')->firstOrFail();
+        $this->assertSame(FunnelParticipant::STAGE_AWAITING_FOLLOW, $participant->stage);
+        $this->assertSame('msg-1', $participant->private_reply_message_id);
+    }
+
     public function test_no_reply_gets_follow_re_ask_not_generic_nudge(): void
     {
         // Profile check inconclusive (fail-open) + user explicitly says "no" —

@@ -167,7 +167,14 @@ class CommentFunnelService
             'follow_gate' => (bool) $automation->follow_gate,
         ]);
 
-        $sent = $this->privateReplies->send($participant, $replyText);
+        // Gated automations put the "✅ I followed" / "Not yet" buttons on the
+        // FIRST message itself; ungated ones send plain text. On any Graph
+        // rejection the service falls back to plain text automatically.
+        $sent = $this->privateReplies->send(
+            $participant,
+            $replyText,
+            $this->followGateQuickReplies($automation),
+        );
         if (! $sent['ok']) {
             // Permanent (non-retryable) Graph rejection — close the funnel so it
             // does not sit as a phantom "commented" row until the 7-day sweep.

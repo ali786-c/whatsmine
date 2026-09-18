@@ -50,11 +50,17 @@ class InstagramGraphClient
      *
      * @throws InstagramGraphException
      */
-    public function sendPrivateReply(InstagramAccount $account, string $commentId, string $text): array
+    public function sendPrivateReply(InstagramAccount $account, string $commentId, string $text, array $quickReplies = []): array
     {
+        $message = ['text' => $this->limitText($text, 'private reply')];
+
+        if ($quickReplies !== []) {
+            $message['quick_replies'] = $quickReplies;
+        }
+
         return $this->post($account, "{$account->ig_user_id}/messages", [
             'recipient' => ['comment_id' => $commentId],
-            'message' => ['text' => $this->limitText($text, 'private reply')],
+            'message' => $message,
         ]);
     }
 
