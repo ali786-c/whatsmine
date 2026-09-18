@@ -477,18 +477,25 @@ use Illuminate\Database\QueryException;
         $confirmLabel = trim((string) ($automation?->confirm_follow_label ?? '')) ?: "I'm following ✅";
 
         try {
-            $this->client->sendButtonTemplate($account, $toIgsid, $gateText, [
-                [
+            // The profile button is fully automatic: the URL is built from the
+            // connected account's username (captured at OAuth connect time) —
+            // the user never pastes a link. If the username is somehow missing,
+            // skip the button rather than send a broken link.
+            $buttons = [];
+            if (filled($account->username)) {
+                $buttons[] = [
                     'type' => 'web_url',
                     'url' => 'https://instagram.com/'.$account->username,
                     'title' => $visitLabel,
-                ],
-                [
-                    'type' => 'postback',
-                    'title' => $confirmLabel,
-                    'payload' => $keyword,
-                ],
-            ]);
+                ];
+            }
+            $buttons[] = [
+                'type' => 'postback',
+                'title' => $confirmLabel,
+                'payload' => $keyword,
+            ];
+
+            $this->client->sendButtonTemplate($account, $toIgsid, $gateText, $buttons);
 
             $this->mirror->mirrorOutbound($participant, $gateText);
             $participant->forceFill(['stage' => FunnelParticipant::STAGE_AWAITING_FOLLOW])->save();
