@@ -86,11 +86,16 @@ class AutomationController extends Controller
     /**
      * Recent posts/reels of one of the workspace's connected IG accounts —
      * powers the per-post picker in the automation builder.
+     *
+     * Cursor-paginated: pass ?cursor= from the previous response (next_cursor)
+     * to fetch the next page, so accounts with 1000+ posts can walk their feed.
      */
     public function recentPosts(Request $request): JsonResponse
     {
         $validated = $request->validate([
             'account_id' => ['required', 'integer'],
+            'cursor' => ['nullable', 'string', 'max:512'],
+            'limit' => ['nullable', 'integer', 'min:1', 'max:25'],
         ]);
 
         $account = InstagramAccount::where('workspace_id', $this->workspaceId($request))
@@ -99,19 +104,25 @@ class AutomationController extends Controller
             ->firstOrFail();
 
         try {
-            $media = app(InstagramGraphClient::class)->getRecentMedia($account, 12);
+            $result = app(InstagramGraphClient::class)->getRecentMedia(
+                $account,
+                (int) ($validated['limit'] ?? 12),
+                isset($validated['cursor']) ? (string) $validated['cursor'] : null,
+            );
         } catch (\Throwable $e) {
             return response()->json(['message' => 'Could not fetch posts: '.$e->getMessage()], 502);
         }
 
         return response()->json([
-            'posts' => collect($media)->map(fn ($m) => [
+            'posts' => collect($result['media'])->map(fn ($m) => [
                 'id' => (string) ($m['id'] ?? ''),
                 'caption' => mb_substr((string) ($m['caption'] ?? ''), 0, 90),
                 'type' => (string) ($m['media_product_type'] ?? ''),
                 'thumbnail' => $m['thumbnail_url'] ?? $m['media_url'] ?? null,
                 'permalink' => (string) ($m['permalink'] ?? ''),
+                'timestamp' => (string) ($m['timestamp'] ?? ''),
             ])->values(),
+            'next_cursor' => $result['next_cursor'],
         ]);
     }
 
@@ -184,7 +195,7 @@ class AutomationController extends Controller
             'delivery.filename' => ['nullable', 'string', 'max:120'],
             'media_filter' => ['nullable', 'array'],
             'media_filter.*' => [Rule::in(['POST', 'REEL', 'STORY', 'AD'])],
-            'media_ids' => ['nullable', 'array', 'max:50'],
+            'media_ids' => ['nullable', 'array', 'max:100'],
             'media_ids.*' => ['string', 'max:64'],
             'is_active' => ['boolean'],
             'priority' => ['nullable', 'integer', 'min:1', 'max:1000'],

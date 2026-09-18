@@ -200,22 +200,33 @@ class InstagramGraphClient
      * Recent posts/reels of the account — powers the automation builder's
      * post picker (per-post scoping via comment webhook media.id).
      *
-     * @return array<int, array<string, mixed>>
+     * Graph paginates the /media edge with cursors: pass a previous call's
+     * next_cursor back as $after to walk further back in the feed, so accounts
+     * with 1000+ posts are not stuck on the first page.
+     *
+     * @param  string|null  $after  Graph paging cursor from a previous response's next_cursor
+     * @return array{media: array<int, array<string, mixed>>, next_cursor: string|null}
      *
      * @throws InstagramGraphException
      */
-    public function getRecentMedia(InstagramAccount $account, int $limit = 12): array
+    public function getRecentMedia(InstagramAccount $account, int $limit = 12, ?string $after = null): array
     {
         $url = "https://{$this->graphHost($account)}/{$this->apiVersion()}/{$account->ig_user_id}/media";
+
+        $query = [
+            'fields' => 'id,caption,media_product_type,media_url,thumbnail_url,permalink,timestamp',
+            'limit' => min(25, max(1, $limit)),
+        ];
+
+        if ($after !== null && $after !== '') {
+            $query['after'] = $after;
+        }
 
         try {
             $res = Http::withToken($account->page_token)
                 ->acceptJson()
                 ->timeout(30)
-                ->get($url, [
-                    'fields' => 'id,caption,media_product_type,media_url,thumbnail_url,permalink,timestamp',
-                    'limit' => min(25, max(1, $limit)),
-                ]);
+                ->get($url, $query);
         } catch (\Throwable $e) {
             throw new InstagramGraphException('Network error talking to Graph: '.$e->getMessage(), httpStatus: 0);
         }
@@ -230,7 +241,10 @@ class InstagramGraphClient
             );
         }
 
-        return (array) $res->json('data', []);
+        return [
+            'media' => (array) $res->json('data', []),
+            'next_cursor' => $res->json('paging.cursors.after'),
+        ];
     }
 
     /**

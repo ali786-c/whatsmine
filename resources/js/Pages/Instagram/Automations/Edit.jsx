@@ -106,10 +106,21 @@ export default function InstagramAutomationEdit({ automation = null, accounts = 
     const [attempted, setAttempted] = useState(false);
     const [posts, setPosts] = useState([]);
     const [loadingPosts, setLoadingPosts] = useState(false);
+    const [loadingMore, setLoadingMore] = useState(false);
     const [postsError, setPostsError] = useState(null);
     const [showPostPicker, setShowPostPicker] = useState(false);
+    const [nextCursor, setNextCursor] = useState(null);
 
     const set = (key, value) => setForm((f) => ({ ...f, [key]: value }));
+
+    // Account switched → the old feed/pagination state is stale; reset the picker.
+    const changeAccount = (value) => {
+        set('instagram_account_id', value);
+        setPosts([]);
+        setNextCursor(null);
+        setShowPostPicker(false);
+        setPostsError(null);
+    };
     const setDelivery = (key, value) => setForm((f) => ({ ...f, delivery: { ...f.delivery, [key]: value } }));
 
     // ---- per-step validation (mirrors backend rules) ----
@@ -149,18 +160,30 @@ export default function InstagramAutomationEdit({ automation = null, accounts = 
         setAttempted(false);
     };
 
-    const loadPosts = () => {
+    const loadPosts = (cursor = null, append = false) => {
         if (!form.instagram_account_id) {
             setPostsError('Select an Instagram account first.');
             return;
         }
-        setLoadingPosts(true);
+        if (append) {
+            setLoadingMore(true);
+        } else {
+            setLoadingPosts(true);
+        }
         setPostsError(null);
         setShowPostPicker(true);
-        axios.get(route('client.instagram.automations.recent-posts'), { params: { account_id: form.instagram_account_id } })
-            .then((res) => setPosts(res.data.posts ?? []))
+        const params = { account_id: form.instagram_account_id };
+        if (cursor) params.cursor = cursor;
+        axios.get(route('client.instagram.automations.recent-posts'), { params })
+            .then((res) => {
+                const newPosts = res.data.posts ?? [];
+                setPosts((prev) => (append
+                    ? [...prev, ...newPosts.filter((p) => !prev.some((q) => q.id === p.id))]
+                    : newPosts));
+                setNextCursor(res.data.next_cursor ?? null);
+            })
             .catch((e) => setPostsError(e?.response?.data?.message ?? 'Could not load posts.'))
-            .finally(() => setLoadingPosts(false));
+            .finally(() => { setLoadingPosts(false); setLoadingMore(false); });
     };
 
     const togglePost = (id) => {
@@ -247,10 +270,7 @@ export default function InstagramAutomationEdit({ automation = null, accounts = 
                         </p>
                         <div className="grid gap-4 md:grid-cols-2">
                             <div>
-                                <label className="mb-1.5 block text-sm font-medium">Instagram account</label>
-                                <Select
-                                    value={form.instagram_account_id}
-                                    onChange={(e) => set('instagram_account_id', e.target.value)}
+                                <label className="mb-1.5 block text-sm font-medium">Instagram account</label>                    <Select value={form.instagram_account_id} onChange={(e) => changeAccount(e.target.value)}
                                     options={accounts.map((a) => ({ value: a.id, label: `@${a.username ?? a.ig_user_id}` }))}
                                     placeholder="Select account…"
                                 />
@@ -364,7 +384,7 @@ export default function InstagramAutomationEdit({ automation = null, accounts = 
                                                 Empty = runs on ALL posts. Post-specific automations always override general ones.
                                             </p>
                                         </div>
-                                        <Button type="button" variant="secondary" size="sm" onClick={loadPosts} disabled={loadingPosts}>
+                                        <Button type="button" variant="secondary" size="sm" onClick={() => loadPosts()} disabled={loadingPosts || loadingMore}>
                                             {loadingPosts ? 'Loading…' : (showPostPicker ? 'Refresh posts' : 'Pick posts')}
                                         </Button>
                                     </div>
@@ -393,11 +413,27 @@ export default function InstagramAutomationEdit({ automation = null, accounts = 
                                                             <span className="absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-brand-500 text-[10px] font-bold text-white">✓</span>
                                                         )}
                                                         <p className="truncate px-1 py-0.5 text-[10px] text-neutral-500 dark:text-neutral-400">{p.caption || p.id}</p>
+                                                        {p.timestamp && (
+                                                            <p className="px-1 pb-0.5 text-[9px] text-neutral-400 dark:text-neutral-500">{new Date(p.timestamp).toLocaleDateString()}</p>
+                                                        )}
                                                     </button>
                                                 );
                                             })}
                                             {posts.length === 0 && !loadingPosts && (
                                                 <p className="col-span-full py-2 text-xs text-neutral-500 dark:text-neutral-400">No posts returned — the account may have no posts yet.</p>
+                                            )}
+                                            {posts.length > 0 && (
+                                                <div className="col-span-full flex items-center justify-center gap-3 py-2">
+                                                    <p className="text-xs text-neutral-500 dark:text-neutral-400">{posts.length} post(s) loaded</p>
+                                                    {nextCursor && (
+                                                        <Button type="button" variant="secondary" size="sm" onClick={() => loadPosts(nextCursor, true)} disabled={loadingMore || loadingPosts}>
+                                                            {loadingMore ? 'Loading…' : 'Load more'}
+                                                        </Button>
+                                                    )}
+                                                    {!nextCursor && (
+                                                        <p className="text-xs text-neutral-400 dark:text-neutral-500">All posts loaded</p>
+                                                    )}
+                                                </div>
                                             )}
                                         </div>
                                     )}
