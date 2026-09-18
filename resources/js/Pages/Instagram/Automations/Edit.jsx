@@ -20,11 +20,11 @@ const EMPTY = {
     follow_gate: false,
     follow_prompt_message: '',
     reply_keyword: 'DONE',
-    cta_message: '',
-    cta_button_label: '',
-    gate_message: '',
-    visit_profile_label: '',
-    confirm_follow_label: '',
+    cta_message: "Hey there! Thanks for your interest. Click below and I'll send the details.",
+    cta_button_label: 'Send me the link',
+    gate_message: 'Follow us on Instagram to unlock this!',
+    visit_profile_label: 'Visit profile',
+    confirm_follow_label: "I'm following ✅",
     delivery: { type: 'link', text: 'Here it is as promised:', url: '', filename: '', flow_id: null },
     media_filter: [],
     media_ids: [],
@@ -97,6 +97,13 @@ export default function InstagramAutomationEdit({ automation = null, accounts = 
         return {
             ...EMPTY,
             ...automation,
+            // Older records predate the button-funnel fields — nulls would break
+            // the controlled inputs, so fall back to the premade defaults.
+            cta_message: automation.cta_message ?? EMPTY.cta_message,
+            cta_button_label: automation.cta_button_label ?? EMPTY.cta_button_label,
+            gate_message: automation.gate_message ?? EMPTY.gate_message,
+            visit_profile_label: automation.visit_profile_label ?? EMPTY.visit_profile_label,
+            confirm_follow_label: automation.confirm_follow_label ?? EMPTY.confirm_follow_label,
             keywords: automation.keywords ?? [],
             media_filter: automation.media_filter ?? [],
             delivery: { ...EMPTY.delivery, ...(automation.delivery ?? {}), flow_id: automation.delivery?.flow_id ?? null },
@@ -205,11 +212,19 @@ export default function InstagramAutomationEdit({ automation = null, accounts = 
         setKeywordInput('');
     };
 
+    // Backend defaulting, mirrored for the preview — an empty stored field
+    // means "use the premade wording", both in the DM and here.
+    const shown = {
+        ctaMessage: form.cta_message?.trim() || "Click the button below and I'll send it over.",
+        ctaButton: form.cta_button_label?.trim() || 'Send me the link',
+        gateMessage: form.gate_message?.trim() || 'Follow us on Instagram to unlock this!',
+        visitProfile: form.visit_profile_label?.trim() || 'Visit profile',
+        confirmFollow: form.confirm_follow_label?.trim() || "I'm following ✅",
+    };
+
     const preview = [
         form.reply_message,
-        form.follow_gate
-            ? `\n\n${form.cta_message?.trim() || `Click the button below and I'll send it over.`}`
-            : (form.delivery.type === 'link' && form.delivery.url ? `\n\n${form.delivery.text || ''}\n${form.delivery.url}` : null),
+        form.follow_gate ? `\n\n${shown.ctaMessage}` : (form.delivery.type === 'link' && form.delivery.url ? `\n\n${form.delivery.text || ''}\n${form.delivery.url}` : null),
     ].filter(Boolean).join('');
 
     const submit = (e) => {
@@ -548,9 +563,33 @@ export default function InstagramAutomationEdit({ automation = null, accounts = 
                             <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-neutral-500">
                                 <MessageCircle className="h-3.5 w-3.5" /> DM preview
                             </p>
-                            <div className="max-w-md whitespace-pre-wrap rounded-2xl rounded-bl-sm bg-white px-4 py-2.5 text-sm shadow dark:bg-neutral-900">
-                                {preview || <span className="text-neutral-400">Start typing to see the DM…</span>}
+                            <div className="max-w-md space-y-2">
+                                <div className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-bl-sm bg-white px-4 py-2.5 text-sm shadow dark:bg-neutral-900">
+                                    {preview || <span className="text-neutral-400">Start typing to see the DM…</span>}
+                                    {form.follow_gate && (
+                                        <div className="mt-2 flex flex-wrap gap-1.5">
+                                            <span className="rounded-full border border-neutral-300 bg-neutral-100 px-3 py-1 text-xs font-medium text-neutral-700 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-200">{shown.ctaButton}</span>
+                                        </div>
+                                    )}
+                                </div>
+                                {form.follow_gate && (
+                                    <>
+                                        <div className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-bl-sm bg-white px-4 py-2.5 text-sm shadow dark:bg-neutral-900">
+                                            {shown.gateMessage}
+                                            <div className="mt-2 flex flex-col gap-1.5">
+                                                <span className="rounded-full border border-neutral-300 bg-neutral-100 px-3 py-1 text-center text-xs font-medium text-neutral-700 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-200">🔗 {shown.visitProfile}</span>
+                                                <span className="rounded-full border border-neutral-300 bg-neutral-100 px-3 py-1 text-center text-xs font-medium text-neutral-700 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-200">{shown.confirmFollow}</span>
+                                            </div>
+                                        </div>
+                                        <div className="ml-auto max-w-[60%] rounded-2xl rounded-br-sm bg-brand-500 px-4 py-2.5 text-sm text-white shadow">
+                                            {shown.confirmFollow}
+                                        </div>
+                                    </>
+                                )}
                             </div>
+                            {form.follow_gate && (
+                                <p className="mt-2 text-xs text-neutral-500 dark:text-neutral-400">Step 1 = hook + button · tap → follow gate · confirm → verified &amp; delivered.</p>
+                            )}
                         </div>
 
                         <div className="mt-5">
