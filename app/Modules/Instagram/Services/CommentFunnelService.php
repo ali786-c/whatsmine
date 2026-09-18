@@ -18,9 +18,11 @@ use Illuminate\Database\QueryException;
  *  - Follow-ups only after the user replies and within the 24h window.
  *  - The gated loop ("no" → re-ask, "yes" → keyword reminder) stays inside the
  *    bounded nudge budget; an exhausted budget closes the funnel for agent handoff.
- */
-class CommentFunnelService
+ */class CommentFunnelService
 {
+    /** Reserved quick-reply payload marking the step-1 CTA button tap. */
+    private const CTA_PAYLOAD = '__CTA_TAP__';
+
     public function __construct(
         private readonly PrivateReplyService $privateReplies,
         private readonly LeadDeliveryService $deliveries,
@@ -167,13 +169,13 @@ class CommentFunnelService
             'follow_gate' => (bool) $automation->follow_gate,
         ]);
 
-        // Gated automations put the "✅ I followed" / "Not yet" buttons on the
-        // FIRST message itself; ungated ones send plain text. On any Graph
-        // rejection the service falls back to plain text automatically.
+        // Gated automations: step 1 of the button funnel — hook text + ONE CTA
+        // button ("Send me the link"). Ungated ones send plain text. On any
+        // Graph rejection the service falls back to plain text automatically.
         $sent = $this->privateReplies->send(
             $participant,
             $replyText,
-            $this->followGateQuickReplies($automation),
+            $automation->follow_gate ? [$this->ctaQuickReply($automation)] : [],
         );
         if (! $sent['ok']) {
             // Permanent (non-retryable) Graph rejection — close the funnel so it
@@ -188,9 +190,9 @@ class CommentFunnelService
         }
 
         if ($automation->follow_gate) {
-            $participant->forceFill(['stage' => FunnelParticipant::STAGE_AWAITING_FOLLOW])->save();
+            $participant->forceFill(['stage' => FunnelParticipant::STAGE_AWAITING_CTA])->save();
             $this->log($participant->account, $automation, $participant->comment_id, CommentAutomationLog::ACTION_AWAITING_FOLLOW, [], $participant);
-            InstagramLog::funnel('info', 'stage → awaiting_follow (private reply sent, gate on)', ['participant_id' => $participant->id, 'comment_id' => $participant->comment_id]);
+            InstagramLog::funnel('info', 'stage → awaiting_cta (hook + CTA button sent)', ['participant_id' => $participant->id, 'comment_id' => $participant->comment_id]);
         } else {
             // No gate: the delivery was embedded in the private reply — mark done.
             $participant->forceFill([
@@ -214,10 +216,18 @@ class CommentFunnelService
         $mid = data_get($event, 'message.mid');
         // A tapped quick reply arrives as quick_reply.payload with the button
         // TITLE in text — the payload ("DONE" / "no") is what the funnel logic
-        // expects, so it wins whenever present.
-        $text = (string) (data_get($event, 'message.quick_reply.payload') ?: data_get($event, 'message.text', ''));
+        // expects, so it wins whenever present. A button-template tap arrives
+        // as a messaging_postbacks event instead of a message.
+        $postbackPayload = (string) data_get($event, 'postback.payload', '');
+        $text = (string) (
+            data_get($event, 'message.quick_reply.payload')
+            ?: ($postbackPayload !== '' ? $postbackPayload : data_get($event, 'message.text', ''))
+        );
 
-        if ($senderId === '' || data_get($event, 'message.is_echo') || ! isset($event['message'])) {
+        $isMessageEvent = isset($event['message']) && ! data_get($event, 'message.is_echo');
+        $isPostbackEvent = isset($event['postback']) && $postbackPayload !== '';
+
+        if ($senderId === '' || (! $isMessageEvent && ! $isPostbackEvent)) {
             return false; // echoes / reads / deliveries are not replies
         }
 
@@ -232,7 +242,7 @@ class CommentFunnelService
             ? null
             : FunnelParticipant::where('commenter_igsid', $senderId)
                 ->where('instagram_account_id', $accountId)
-                ->where('stage', FunnelParticipant::STAGE_AWAITING_FOLLOW)
+                ->whereIn('stage', [FunnelParticipant::STAGE_AWAITING_CTA, FunnelParticipant::STAGE_AWAITING_FOLLOW])
                 ->orderByDesc('created_at')
                 ->first();
 
@@ -290,6 +300,27 @@ class CommentFunnelService
         // Treating an empty keyword as match-anything made ANY reply ("hello",
         // "thanks") trigger the delivery, contradicting the instructions sent.
         $keyword = trim((string) ($automation?->reply_keyword ?? '')) ?: 'DONE';
+
+        // Step 1 → step 2 of the button funnel: the CTA tap (payload = CTA
+        // marker) or the user's FIRST typed reply opens the follow gate. The
+        // gate message + Visit profile + "I'm following" template goes out
+        // here — exactly the competitor UX from the reference screenshots.
+        if ($participant->stage === FunnelParticipant::STAGE_AWAITING_CTA) {
+            InstagramLog::dm('info', 'gate: CTA pressed (or first typed reply) — sending follow gate template', ['participant_id' => $participant->id, 'text' => mb_substr($text, 0, 120)]);
+            $this->sendGateTemplate($account, $participant, $automation, $senderId, $event);
+
+            return true;
+        }
+
+        // Gate-step CTA marker taps (template re-sent after a failed follow
+        // check) must not be treated as the delivery keyword.
+        $isCtaTap = $text === self::CTA_PAYLOAD;
+        if ($isCtaTap) {
+            $this->sendGateTemplate($account, $participant, $automation, $senderId, $event);
+
+            return true;
+        }
+
         $saidNo = KeywordMatcher::matches(['no', 'nope', 'nahi', 'nahin', 'nai', 'not yet', 'abhi nahi'], 'exact', $text);
         $saidYes = ! $saidNo && KeywordMatcher::matches(['yes', 'yess', 'haan', 'han', 'ho gaya', 'done'], 'exact', $text);
 
@@ -427,10 +458,68 @@ class CommentFunnelService
     }
 
     /**
-     * Tappable YES/NO quick replies for gated automations (Instagram Login
-     * supports quick replies on graph.instagram.com). The payload mirrors what
-     * the user would type, so messaging_postbacks are handled by the same
-     * keyword matcher. Ungated automations send plain text.
+     * Button-template follow gate: the gate text + [Visit profile] (opens the
+     * creator's profile so the user can follow) + ["I'm following ✅"] (a
+     * postback that re-enters this funnel for verification). Sent as a normal
+     * DM inside the 24h window the CTA tap opened.
+     */
+    private function sendGateTemplate(
+        InstagramAccount $account,
+        FunnelParticipant $participant,
+        ?CommentAutomation $automation,
+        string $toIgsid,
+        array $event,
+    ): void {
+        $keyword = trim((string) ($automation?->reply_keyword ?? '')) ?: 'DONE';
+        $gateText = trim((string) ($automation?->gate_message ?? ''))
+            ?: 'Follow us on Instagram to unlock this!';
+        $visitLabel = trim((string) ($automation?->visit_profile_label ?? '')) ?: 'Visit profile';
+        $confirmLabel = trim((string) ($automation?->confirm_follow_label ?? '')) ?: "I'm following ✅";
+
+        try {
+            $this->client->sendButtonTemplate($account, $toIgsid, $gateText, [
+                [
+                    'type' => 'web_url',
+                    'url' => 'https://instagram.com/'.$account->username,
+                    'title' => $visitLabel,
+                ],
+                [
+                    'type' => 'postback',
+                    'title' => $confirmLabel,
+                    'payload' => $keyword,
+                ],
+            ]);
+
+            $this->mirror->mirrorOutbound($participant, $gateText);
+            $participant->forceFill(['stage' => FunnelParticipant::STAGE_AWAITING_FOLLOW])->save();
+            $this->log($account, $automation, $participant->comment_id, CommentAutomationLog::ACTION_NUDGED, $event, $participant);
+            InstagramLog::dm('info', 'gate: button template sent (Visit profile + confirm)', ['participant_id' => $participant->id]);
+        } catch (\Throwable $e) {
+            // Button template failed (likely plain-DM window edge case) — fall
+            // back to the classic typed-keyword ask so the user is never stuck.
+            InstagramLog::dm('warning', 'gate: button template failed — falling back to typed ask', ['participant_id' => $participant->id, 'error' => $e->getMessage()]);
+
+            $ask = trim((string) ($automation?->follow_prompt_message ?? ''))
+                ?: "Make sure you're following us, then reply {$keyword} and I'll send it over!";
+            $this->sendFollowUp($account, $participant, $automation, $toIgsid, $ask, $event);
+            $participant->forceFill(['stage' => FunnelParticipant::STAGE_AWAITING_FOLLOW])->save();
+        }
+    }
+
+    /**
+     * Step-1 CTA button: a quick reply on the first message whose payload is a
+     * reserved marker (never a real keyword) — the tap means "open the gate".
+     */
+    private function ctaQuickReply(CommentAutomation $automation): array
+    {
+        $label = trim((string) ($automation->cta_button_label ?? '')) ?: 'Send me the link';
+
+        return ['content_type' => 'text', 'title' => $label, 'payload' => self::CTA_PAYLOAD];
+    }
+
+    /**
+     * YES/NO quick replies attached to gate follow-ups (the typed-ask path and
+     * re-asks) so a tap behaves exactly like typing the keyword or "no".
      *
      * @return array<int, array{content_type: string, title: string, payload: string}>
      */
@@ -514,13 +603,16 @@ class CommentFunnelService
         $text = (string) $automation->reply_message;
 
         if ($automation->follow_gate) {
-            // Same default the reply matcher uses — an empty stored keyword must
-            // not render as "reply with  and I'll send it over!".
-            $keyword = trim((string) ($automation->reply_keyword ?? '')) ?: 'DONE';
-            $ask = trim((string) ($automation->follow_prompt_message ?? ''))
-                ?: "Make sure you're following us, then reply with {$keyword} and I'll send it over!";
+            // Step-1 hook message. The editable CTA text carries the ask; the
+            // gate itself lives in step 2 (sendGateTemplate). The classic typed
+            // keyword path stays available as a fallback.
+            $ctaText = trim((string) ($automation->cta_message ?? ''))
+                ?: "Click the button below and I'll send it over.";
+            $text = rtrim($text)."\n\n".$ctaText;
 
-            $text = rtrim($text)."\n\n".$ask;
+            if (trim((string) ($automation->follow_prompt_message ?? '')) !== '') {
+                $text .= "\n".trim((string) $automation->follow_prompt_message);
+            }
         } else {
             $text .= $this->deliveries->renderForPrivateReply((array) ($automation->delivery ?? []));
         }

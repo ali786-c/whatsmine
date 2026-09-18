@@ -96,7 +96,7 @@ class FunnelTimeoutService
     private function expireUnsentPrivateReplies(): int
     {
         $stale = FunnelParticipant::query()
-            ->whereIn('stage', [FunnelParticipant::STAGE_COMMENTED, FunnelParticipant::STAGE_DM_SENT])
+            ->whereIn('stage', [FunnelParticipant::STAGE_COMMENTED, FunnelParticipant::STAGE_DM_SENT, FunnelParticipant::STAGE_AWAITING_CTA])
             ->where('expires_at', '<', now())
             ->get();
 

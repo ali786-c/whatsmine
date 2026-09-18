@@ -10,6 +10,7 @@ class FunnelParticipant extends Model
 {
     public const STAGE_COMMENTED = 'commented';
     public const STAGE_DM_SENT = 'dm_sent';
+    public const STAGE_AWAITING_CTA = 'awaiting_cta';
     public const STAGE_AWAITING_FOLLOW = 'awaiting_follow';
     public const STAGE_REPLIED = 'replied';
     public const STAGE_DELIVERED = 'delivered';

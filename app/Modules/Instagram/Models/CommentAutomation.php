@@ -14,6 +14,8 @@ class CommentAutomation extends Model
         'keywords', 'match_mode', 'reply_message', 'follow_gate',
         'follow_prompt_message', 'reply_keyword', 'delivery', 'media_filter',
         'media_ids', 'is_active', 'priority',
+        'cta_message', 'cta_button_label', 'gate_message',
+        'visit_profile_label', 'confirm_follow_label',
     ];
 
     protected function casts(): array

@@ -155,8 +155,9 @@ class InstagramFunnelTest extends TestCase
     {
         Http::fake([
             'graph.facebook.com/*/17841400000001/messages' => Http::sequence()
-                ->push(['message_id' => 'msg-1'], 200)   // private reply
-                ->push(['message_id' => 'msg-2'], 200),  // lead delivery after reply
+                ->push(['message_id' => 'msg-1'], 200)   // private reply (hook + CTA)
+                ->push(['message_id' => 'msg-2'], 200)   // gate button template
+                ->push(['message_id' => 'msg-3'], 200),  // lead delivery
             'graph.facebook.com/*/igsid-customer*' => Http::response(['is_user_follow_business' => true], 200),
         ]);
 
@@ -170,20 +171,23 @@ class InstagramFunnelTest extends TestCase
         $funnel->handleComment('17841400000001', $this->commentValue());
 
         $participant = FunnelParticipant::where('comment_id', 'comment-123')->firstOrFail();
-        $this->assertSame(FunnelParticipant::STAGE_AWAITING_FOLLOW, $participant->stage);
+        $this->assertSame(FunnelParticipant::STAGE_AWAITING_CTA, $participant->stage);
 
-        // The ONE private reply must already contain the follow ask + keyword.
-        $replyText = (string) (Http::recorded()[0][0]['message']['text'] ?? '');
-        $this->assertStringContainsString('DONE', $replyText);
-
-        // User replies with the keyword → 24h window opens → delivery.
-        $handled = $funnel->handleDmReply('17841400000001', [
+        // The user types the keyword right away (no CTA tap) → the gate
+        // template goes first, then the typed keyword verifies + delivers.
+        $this->assertTrue($funnel->handleDmReply('17841400000001', [
             'sender' => ['id' => 'igsid-customer'],
             'recipient' => ['id' => '17841400000001'],
             'message' => ['mid' => 'dm-1', 'text' => 'I followed! DONE'],
-        ]);
+        ]));
+        $this->assertSame(FunnelParticipant::STAGE_AWAITING_FOLLOW, $participant->fresh()->stage);
 
-        $this->assertTrue($handled);
+        $this->assertTrue($funnel->handleDmReply('17841400000001', [
+            'sender' => ['id' => 'igsid-customer'],
+            'recipient' => ['id' => '17841400000001'],
+            'message' => ['mid' => 'dm-2', 'text' => 'DONE'],
+        ]));
+
         $participant = $participant->fresh();
         $this->assertSame(FunnelParticipant::STAGE_DELIVERED, $participant->stage);
         $this->assertNotNull($participant->dm_thread_opened_at);
@@ -316,12 +320,13 @@ class InstagramFunnelTest extends TestCase
     {
         Http::fake([
             'graph.facebook.com/*/17841400000001/messages' => Http::sequence()
-                ->push(['message_id' => 'msg-1'], 200)   // private reply (follow ask)
-                ->push(['message_id' => 'msg-2'], 200)   // NO → re-ask 1
-                ->push(['message_id' => 'msg-3'], 200)   // NO → re-ask 2
-                ->push(['message_id' => 'msg-4'], 200)   // NO → re-ask 3
-                ->push(['message_id' => 'msg-5'], 200)   // NO → re-ask 4
-                ->push(['message_id' => 'msg-6'], 200),  // NO → final handoff message
+                ->push(['message_id' => 'msg-1'], 200)   // private reply (hook + CTA)
+                ->push(['message_id' => 'msg-2'], 200)   // first "no" → gate template
+                ->push(['message_id' => 'msg-3'], 200)   // NO → re-ask 1
+                ->push(['message_id' => 'msg-4'], 200)   // NO → re-ask 2
+                ->push(['message_id' => 'msg-5'], 200)   // NO → re-ask 3
+                ->push(['message_id' => 'msg-6'], 200)   // NO → re-ask 4
+                ->push(['message_id' => 'msg-7'], 200),  // NO → final handoff message
             'graph.facebook.com/*/igsid-customer*' => Http::response(['is_user_follow_business' => true], 200),
         ]);
 
@@ -334,37 +339,42 @@ class InstagramFunnelTest extends TestCase
         $funnel = app(CommentFunnelService::class);
         $funnel->handleComment('17841400000001', $this->commentValue());
 
-        $participant = FunnelParticipant::where('comment_id', 'comment-123')->firstOrFail();
-        $this->assertSame(FunnelParticipant::STAGE_AWAITING_FOLLOW, $participant->stage);
-
         $noEvent = fn (string $mid) => [
             'sender' => ['id' => 'igsid-customer'],
             'recipient' => ['id' => '17841400000001'],
             'message' => ['mid' => $mid, 'text' => 'no'],
         ];
 
-        foreach (['dm-1', 'dm-2', 'dm-3', 'dm-4'] as $i => $mid) {
-            $this->assertTrue($funnel->handleDmReply('17841400000001', $noEvent($mid)));
-            $this->assertSame($i + 1, $participant->fresh()->nudge_count);
+        // First typed reply only opens the gate (step 2).
+        $this->assertTrue($funnel->handleDmReply('17841400000001', $noEvent('dm-0')));
+        $participant = FunnelParticipant::where('comment_id', 'comment-123')->firstOrFail();
+        $this->assertSame(FunnelParticipant::STAGE_AWAITING_FOLLOW, $participant->stage);
+        $this->assertSame(0, $participant->nudge_count);
+
+        // Four gate re-asks within the gate budget.
+        foreach ([1, 2, 3, 4] as $nudge) {
+            $this->assertTrue($funnel->handleDmReply('17841400000001', $noEvent('dm-'.$nudge)));
+            $this->assertSame($nudge, $participant->fresh()->nudge_count);
             $this->assertSame(FunnelParticipant::STAGE_AWAITING_FOLLOW, $participant->fresh()->stage);
         }
 
-        // Fifth NO: budget exhausted → ONE final handoff message (never silence),
-        // then closed for agent takeover.
+        // Fifth NO after the gate: budget exhausted → ONE final handoff message
+        // (never silence), then closed for agent takeover.
         $this->assertTrue($funnel->handleDmReply('17841400000001', $noEvent('dm-5')));
         $participant = $participant->fresh();
         $this->assertSame(FunnelParticipant::STAGE_CLOSED, $participant->stage);
-        $this->assertStringContainsString('our team', (string) (Http::recorded()[5][0]['message']['text'] ?? ''));
-        Http::assertSentCount(6); // private reply + 4 re-asks + final handoff message
+        $this->assertStringContainsString('our team', (string) (Http::recorded()[6][0]['message']['text'] ?? ''));
+        Http::assertSentCount(7); // reply + gate + 4 re-asks + final handoff message
     }
 
     public function test_gate_yes_reply_reminds_keyword_then_keyword_delivers(): void
     {
         Http::fake([
             'graph.facebook.com/*/17841400000001/messages' => Http::sequence()
-                ->push(['message_id' => 'msg-1'], 200)   // private reply (follow ask)
-                ->push(['message_id' => 'msg-2'], 200)   // YES → keyword reminder
-                ->push(['message_id' => 'msg-3'], 200),  // DONE → delivery
+                ->push(['message_id' => 'msg-1'], 200)   // private reply (hook + CTA)
+                ->push(['message_id' => 'msg-2'], 200)   // first YES → gate template
+                ->push(['message_id' => 'msg-3'], 200)   // YES → keyword reminder
+                ->push(['message_id' => 'msg-4'], 200),  // DONE → delivery
         ]);
 
         $this->automation([
@@ -376,6 +386,7 @@ class InstagramFunnelTest extends TestCase
         $funnel = app(CommentFunnelService::class);
         $funnel->handleComment('17841400000001', $this->commentValue());
 
+        // First YES (still awaiting CTA) → opens the gate (button template).
         $this->assertTrue($funnel->handleDmReply('17841400000001', [
             'sender' => ['id' => 'igsid-customer'],
             'recipient' => ['id' => '17841400000001'],
@@ -384,10 +395,17 @@ class InstagramFunnelTest extends TestCase
 
         $participant = FunnelParticipant::where('comment_id', 'comment-123')->firstOrFail();
         $this->assertSame(FunnelParticipant::STAGE_AWAITING_FOLLOW, $participant->stage);
-        $this->assertSame(1, $participant->nudge_count);
+
+        // Second YES (now at the gate) → keyword reminder.
+        $this->assertTrue($funnel->handleDmReply('17841400000001', [
+            'sender' => ['id' => 'igsid-customer'],
+            'recipient' => ['id' => '17841400000001'],
+            'message' => ['mid' => 'dm-yes-2', 'text' => 'yes'],
+        ]));
+        $this->assertSame(1, $participant->fresh()->nudge_count);
 
         // The reminder must contain the exact keyword.
-        $reminder = (string) (Http::recorded()[1][0]['message']['text'] ?? '');
+        $reminder = (string) (Http::recorded()[2][0]['message']['text'] ?? '');
         $this->assertStringContainsString('DONE', $reminder);
 
         // Now the real keyword (case-insensitive "done") → delivery.
@@ -397,7 +415,7 @@ class InstagramFunnelTest extends TestCase
             'message' => ['mid' => 'dm-done', 'text' => 'done'],
         ]));
         $this->assertSame(FunnelParticipant::STAGE_DELIVERED, $participant->fresh()->stage);
-        Http::assertSentCount(3);
+        Http::assertSentCount(4);
     }
 
     public function test_ungated_automation_does_not_intercept_yes_no_replies(): void
@@ -424,8 +442,9 @@ class InstagramFunnelTest extends TestCase
     {
         Http::fake([
             'graph.facebook.com/*/17841400000001/messages' => Http::sequence()
-                ->push(['message_id' => 'msg-1'], 200)   // private reply (follow ask)
-                ->push(['message_id' => 'msg-2'], 200),  // re-ask — NOT the delivery
+                ->push(['message_id' => 'msg-1'], 200)   // private reply (hook + CTA)
+                ->push(['message_id' => 'msg-2'], 200)   // first typed DONE → gate template
+                ->push(['message_id' => 'msg-3'], 200),  // re-ask — NOT the delivery
             'graph.facebook.com/*/igsid-customer*' => Http::response(['is_user_follow_business' => false], 200),
         ]);
 
@@ -438,6 +457,13 @@ class InstagramFunnelTest extends TestCase
         $funnel = app(CommentFunnelService::class);
         $funnel->handleComment('17841400000001', $this->commentValue());
 
+        // First reply opens the gate; second DONE hits the liar check.
+        $this->assertTrue($funnel->handleDmReply('17841400000001', [
+            'sender' => ['id' => 'igsid-customer'],
+            'recipient' => ['id' => '17841400000001'],
+            'message' => ['mid' => 'dm-0', 'text' => 'hi'],
+        ]));
+
         // They claim they followed with the exact keyword — but the API says otherwise.
         $this->assertTrue($funnel->handleDmReply('17841400000001', [
             'sender' => ['id' => 'igsid-customer'],
@@ -449,15 +475,16 @@ class InstagramFunnelTest extends TestCase
         $this->assertSame(FunnelParticipant::STAGE_AWAITING_FOLLOW, $participant->stage);
         $this->assertNull($participant->delivered_at);
         $this->assertSame(1, $participant->nudge_count);
-        Http::assertSentCount(2); // private reply + re-ask only — no delivery text
+        Http::assertSentCount(3); // private reply + gate + re-ask only — no delivery text
     }
 
     public function test_unverified_follow_check_fails_open_and_delivers(): void
     {
         Http::fake([
             'graph.facebook.com/*/17841400000001/messages' => Http::sequence()
-                ->push(['message_id' => 'msg-1'], 200)   // private reply
-                ->push(['message_id' => 'msg-2'], 200),  // delivery
+                ->push(['message_id' => 'msg-1'], 200)   // private reply (hook + CTA)
+                ->push(['message_id' => 'msg-2'], 200)   // first typed DONE → gate template
+                ->push(['message_id' => 'msg-3'], 200),  // delivery (fail-open)
             'graph.facebook.com/*/igsid-customer*' => Http::response(['error' => ['message' => 'User consent is required to access user profile.', 'code' => 10]], 403),
         ]);
 
@@ -469,6 +496,12 @@ class InstagramFunnelTest extends TestCase
 
         $funnel = app(CommentFunnelService::class);
         $funnel->handleComment('17841400000001', $this->commentValue());
+
+        $this->assertTrue($funnel->handleDmReply('17841400000001', [
+            'sender' => ['id' => 'igsid-customer'],
+            'recipient' => ['id' => '17841400000001'],
+            'message' => ['mid' => 'dm-0', 'text' => 'hi'],
+        ]));
 
         // Unknown follow status must NOT block a real lead (fail-open).
         $this->assertTrue($funnel->handleDmReply('17841400000001', [
@@ -499,12 +532,11 @@ class InstagramFunnelTest extends TestCase
         // The FIRST message already carries the quick-reply buttons.
         $first = Http::recorded()[0][0]['message'];
         $this->assertSame([
-            ['content_type' => 'text', 'title' => '✅ I followed', 'payload' => 'DONE'],
-            ['content_type' => 'text', 'title' => 'Not yet', 'payload' => 'no'],
+            ['content_type' => 'text', 'title' => 'Send me the link', 'payload' => '__CTA_TAP__'],
         ], $first['quick_replies']);
 
         $participant = FunnelParticipant::where('comment_id', 'comment-123')->firstOrFail();
-        $this->assertSame(FunnelParticipant::STAGE_AWAITING_FOLLOW, $participant->stage);
+        $this->assertSame(FunnelParticipant::STAGE_AWAITING_CTA, $participant->stage);
     }
 
     public function test_gated_private_reply_falls_back_to_plain_text_when_buttons_rejected(): void
@@ -540,8 +572,9 @@ class InstagramFunnelTest extends TestCase
         // the reply must repeat the FOLLOW ask, never the generic "reply DONE" nudge.
         Http::fake([
             'graph.facebook.com/*/17841400000001/messages' => Http::sequence()
-                ->push(['message_id' => 'msg-1'], 200)   // private reply (follow ask)
-                ->push(['message_id' => 'msg-2'], 200),  // re-ask — still the follow ask
+                ->push(['message_id' => 'msg-1'], 200)   // private reply (hook + CTA)
+                ->push(['message_id' => 'msg-2'], 200)   // "no" typed first → gate template
+                ->push(['message_id' => 'msg-3'], 200),  // re-ask — still the follow ask
             'graph.facebook.com/*/igsid-customer*' => Http::response(['error' => ['message' => 'User consent is required to access user profile.', 'code' => 10]], 403),
         ]);
 
@@ -554,6 +587,14 @@ class InstagramFunnelTest extends TestCase
         $funnel = app(CommentFunnelService::class);
         $funnel->handleComment('17841400000001', $this->commentValue());
 
+        // First typed reply (from awaiting_cta) only opens the gate.
+        $this->assertTrue($funnel->handleDmReply('17841400000001', [
+            'sender' => ['id' => 'igsid-customer'],
+            'recipient' => ['id' => '17841400000001'],
+            'message' => ['mid' => 'dm-0', 'text' => 'no'],
+        ]));
+        $this->assertSame(FunnelParticipant::STAGE_AWAITING_FOLLOW, FunnelParticipant::where('comment_id', 'comment-123')->firstOrFail()->stage);
+
         $this->assertTrue($funnel->handleDmReply('17841400000001', [
             'sender' => ['id' => 'igsid-customer'],
             'recipient' => ['id' => '17841400000001'],
@@ -565,19 +606,67 @@ class InstagramFunnelTest extends TestCase
         $this->assertNull($participant->delivered_at);
         $this->assertSame(1, $participant->nudge_count);
 
-        $reAsk = (string) (Http::recorded()[1][0]['message']['text'] ?? '');
+        $reAsk = (string) (Http::recorded()[2][0]['message']['text'] ?? '');
         $this->assertStringContainsString('follow our account', $reAsk);
-        Http::assertSentCount(2);
+        Http::assertSentCount(3);
     }
 
-    public function test_follow_check_can_be_disabled_via_config(): void
+    public function test_cta_tap_sends_gate_template_with_visit_profile_button(): void
     {
-        config(['instagram.follow_check' => false]);
-
         Http::fake([
             'graph.facebook.com/*/17841400000001/messages' => Http::sequence()
-                ->push(['message_id' => 'msg-1'], 200)   // private reply
-                ->push(['message_id' => 'msg-2'], 200),  // delivery
+                ->push(['message_id' => 'msg-1'], 200)   // private reply (hook + CTA)
+                ->push(['message_id' => 'msg-2'], 200),  // gate button template
+        ]);
+
+        $this->automation([
+            'follow_gate' => true,
+            'reply_keyword' => 'DONE',
+            'cta_message' => 'Thanks for your interest! Click below.',
+            'cta_button_label' => 'Send me the link',
+            'gate_message' => 'Follow us on Instagram to unlock this!',
+            'visit_profile_label' => 'Follow on Instagram',
+            'confirm_follow_label' => "I'm following ✅",
+            'delivery' => ['type' => 'text', 'text' => 'Here is your file!'],
+        ]);
+
+        $funnel = app(CommentFunnelService::class);
+        $funnel->handleComment('17841400000001', $this->commentValue());
+
+        // User taps the CTA button — quick_reply payload is the reserved marker.
+        $this->assertTrue($funnel->handleDmReply('17841400000001', [
+            'sender' => ['id' => 'igsid-customer'],
+            'recipient' => ['id' => '17841400000001'],
+            'message' => ['mid' => 'dm-cta', 'quick_reply' => ['payload' => '__CTA_TAP__'], 'text' => 'Send me the link'],
+        ]));
+
+        $participant = FunnelParticipant::where('comment_id', 'comment-123')->firstOrFail();
+        $this->assertSame(FunnelParticipant::STAGE_AWAITING_FOLLOW, $participant->stage);
+        $this->assertNotNull($participant->dm_thread_opened_at);
+
+        // The second send must be the BUTTON TEMPLATE with editable labels
+        // and a web_url button pointing at the creator's profile.
+        $template = Http::recorded()[1][0];
+        $this->assertSame('template', $template['message']['attachment']['type']);
+        $this->assertSame('button', $template['message']['attachment']['payload']['template_type']);
+        $this->assertSame('Follow us on Instagram to unlock this!', $template['message']['attachment']['payload']['text']);
+        $buttons = $template['message']['attachment']['payload']['buttons'];
+        $this->assertSame('web_url', $buttons[0]['type']);
+        $this->assertSame('Follow on Instagram', $buttons[0]['title']);
+        $this->assertSame('https://instagram.com/myshop', $buttons[0]['url']);
+        $this->assertSame('postback', $buttons[1]['type']);
+        $this->assertSame("I'm following ✅", $buttons[1]['title']);
+        $this->assertSame('DONE', $buttons[1]['payload']);
+    }
+
+    public function test_gate_confirm_postback_verifies_and_delivers(): void
+    {
+        Http::fake([
+            'graph.facebook.com/*/17841400000001/messages' => Http::sequence()
+                ->push(['message_id' => 'msg-1'], 200)   // private reply (hook + CTA)
+                ->push(['message_id' => 'msg-2'], 200)   // gate button template
+                ->push(['message_id' => 'msg-3'], 200),  // delivery
+            'graph.facebook.com/*/igsid-customer*' => Http::response(['is_user_follow_business' => true], 200),
         ]);
 
         $this->automation([
@@ -589,6 +678,51 @@ class InstagramFunnelTest extends TestCase
         $funnel = app(CommentFunnelService::class);
         $funnel->handleComment('17841400000001', $this->commentValue());
 
+        // CTA tap → gate template.
+        $this->assertTrue($funnel->handleDmReply('17841400000001', [
+            'sender' => ['id' => 'igsid-customer'],
+            'recipient' => ['id' => '17841400000001'],
+            'message' => ['mid' => 'dm-cta', 'quick_reply' => ['payload' => '__CTA_TAP__'], 'text' => 'Send me the link'],
+        ]));
+
+        // "I'm following ✅" postback tap → verification → delivery.
+        $this->assertTrue($funnel->handleDmReply('17841400000001', [
+            'sender' => ['id' => 'igsid-customer'],
+            'recipient' => ['id' => '17841400000001'],
+            'postback' => ['payload' => 'DONE', 'title' => "I'm following ✅"],
+        ]));
+
+        $participant = FunnelParticipant::where('comment_id', 'comment-123')->firstOrFail();
+        $this->assertSame(FunnelParticipant::STAGE_DELIVERED, $participant->stage);
+        Http::assertSentCount(3);
+    }
+
+    public function test_follow_check_can_be_disabled_via_config(): void
+    {
+        config(['instagram.follow_check' => false]);
+
+        Http::fake([
+            'graph.facebook.com/*/17841400000001/messages' => Http::sequence()
+                ->push(['message_id' => 'msg-1'], 200)   // private reply (hook + CTA)
+                ->push(['message_id' => 'msg-2'], 200)   // first typed DONE → gate template
+                ->push(['message_id' => 'msg-3'], 200),  // delivery (trust mode)
+        ]);
+
+        $this->automation([
+            'follow_gate' => true,
+            'reply_keyword' => 'DONE',
+            'delivery' => ['type' => 'text', 'text' => 'Here is your file!'],
+        ]);
+
+        $funnel = app(CommentFunnelService::class);
+        $funnel->handleComment('17841400000001', $this->commentValue());
+
+        $this->assertTrue($funnel->handleDmReply('17841400000001', [
+            'sender' => ['id' => 'igsid-customer'],
+            'recipient' => ['id' => '17841400000001'],
+            'message' => ['mid' => 'dm-0', 'text' => 'hi'],
+        ]));
+
         // Trust mode: the user's DONE delivers without any profile lookup.
         $this->assertTrue($funnel->handleDmReply('17841400000001', [
             'sender' => ['id' => 'igsid-customer'],
@@ -598,6 +732,6 @@ class InstagramFunnelTest extends TestCase
 
         $participant = FunnelParticipant::where('comment_id', 'comment-123')->firstOrFail();
         $this->assertSame(FunnelParticipant::STAGE_DELIVERED, $participant->stage);
-        Http::assertSentCount(2); // no profile GET happened at all
+        Http::assertSentCount(3); // no profile GET happened at all
     }
 }

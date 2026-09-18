@@ -20,6 +20,11 @@ const EMPTY = {
     follow_gate: false,
     follow_prompt_message: '',
     reply_keyword: 'DONE',
+    cta_message: '',
+    cta_button_label: '',
+    gate_message: '',
+    visit_profile_label: '',
+    confirm_follow_label: '',
     delivery: { type: 'link', text: 'Here it is as promised:', url: '', filename: '', flow_id: null },
     media_filter: [],
     media_ids: [],
@@ -203,7 +208,7 @@ export default function InstagramAutomationEdit({ automation = null, accounts = 
     const preview = [
         form.reply_message,
         form.follow_gate
-            ? `\n\n${form.follow_prompt_message?.trim() || `Make sure you're following us, then reply with ${(form.reply_keyword || 'DONE')} and I'll send it over!`}`
+            ? `\n\n${form.cta_message?.trim() || `Click the button below and I'll send it over.`}`
             : (form.delivery.type === 'link' && form.delivery.url ? `\n\n${form.delivery.text || ''}\n${form.delivery.url}` : null),
     ].filter(Boolean).join('');
 
@@ -475,23 +480,66 @@ export default function InstagramAutomationEdit({ automation = null, accounts = 
                                 </p>
                             </div>
                             <Toggle checked={form.follow_gate} onChange={(v) => set('follow_gate', v)} />
-                        </div>
-
-                        {form.follow_gate && (
-                            <div className="mt-3 grid gap-4 md:grid-cols-2">
-                                <div>
-                                    <label className="mb-1.5 block text-sm font-medium">Follow ask (added to the DM)</label>
-                                    <Input
-                                        value={form.follow_prompt_message}
-                                        onChange={(e) => set('follow_prompt_message', e.target.value)}
-                                        placeholder={`Make sure you're following us, then reply with ${form.reply_keyword || 'DONE'}…`}
-                                    />
-                                    <p className="mt-1 text-xs text-neutral-500">Leave empty to use the default wording.</p>
-                                </div>
-                                <div>
-                                    <label className="mb-1.5 block text-sm font-medium">The word they must reply</label>
-                                    <Input value={form.reply_keyword} onChange={(e) => set('reply_keyword', e.target.value)} placeholder="DONE" />
-                                    <p className="mt-1 text-xs text-neutral-500">Keep it short and uppercase — e.g. DONE, YES, GO.</p>
+                        </div>                        {form.follow_gate && (
+                            <div className="mt-3 space-y-4">
+                                <div className="grid gap-4 md:grid-cols-2">
+                                    <div className="md:col-span-2">
+                                        <label className="mb-1.5 block text-sm font-medium">Button text (the first DM&apos;s button)</label>
+                                        <Input
+                                            value={form.cta_button_label}
+                                            onChange={(e) => set('cta_button_label', e.target.value)}
+                                            placeholder="Send me the link"
+                                            maxLength={20}
+                                        />
+                                        <p className="mt-1 text-xs text-neutral-500">The tappable button under your first message. Instagram truncates at 20 characters.</p>
+                                    </div>
+                                    <div className="md:col-span-2">
+                                        <label className="mb-1.5 block text-sm font-medium">Button message (text above the button)</label>
+                                        <textarea
+                                            value={form.cta_message}
+                                            onChange={(e) => set('cta_message', e.target.value)}
+                                            rows={2}
+                                            maxLength={500}
+                                            className="w-full rounded-soft border border-neutral-200 bg-white px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-900"
+                                            placeholder="Hey there! Thanks for your interest. Click below and I'll send details."
+                                        />
+                                        <p className="mt-1 text-xs text-neutral-500">Added under your message above. Leave empty for the default wording.</p>
+                                    </div>
+                                    <div className="md:col-span-2">
+                                        <label className="mb-1.5 block text-sm font-medium">Follow unlock message (sent when they tap the button)</label>
+                                        <Input
+                                            value={form.gate_message}
+                                            onChange={(e) => set('gate_message', e.target.value)}
+                                            placeholder="Follow us on Instagram to unlock this!"
+                                            maxLength={500}
+                                        />
+                                        <p className="mt-1 text-xs text-neutral-500">Shown with two buttons: a profile button and the confirm button below.</p>
+                                    </div>
+                                    <div>
+                                        <label className="mb-1.5 block text-sm font-medium">Profile button label</label>
+                                        <Input
+                                            value={form.visit_profile_label}
+                                            onChange={(e) => set('visit_profile_label', e.target.value)}
+                                            placeholder="Visit profile"
+                                            maxLength={20}
+                                        />
+                                        <p className="mt-1 text-xs text-neutral-500">Opens your Instagram profile so they can follow you.</p>
+                                    </div>
+                                    <div>
+                                        <label className="mb-1.5 block text-sm font-medium">Confirm button label</label>
+                                        <Input
+                                            value={form.confirm_follow_label}
+                                            onChange={(e) => set('confirm_follow_label', e.target.value)}
+                                            placeholder="I'm following ✅"
+                                            maxLength={20}
+                                        />
+                                        <p className="mt-1 text-xs text-neutral-500">They tap this after following — we verify and deliver.</p>
+                                    </div>
+                                    <div>
+                                        <label className="mb-1.5 block text-sm font-medium">The word they can also type</label>
+                                        <Input value={form.reply_keyword} onChange={(e) => set('reply_keyword', e.target.value)} placeholder="DONE" />
+                                        <p className="mt-1 text-xs text-neutral-500">Typed replies with this word also pass the gate.</p>
+                                    </div>
                                 </div>
                             </div>
                         )}
