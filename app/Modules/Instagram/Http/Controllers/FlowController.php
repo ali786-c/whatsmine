@@ -39,6 +39,10 @@ class FlowController extends Controller
 
         return Inertia::render('Instagram/Flows/Index', [
             'flows' => $flows,
+            'accountsCount' => InstagramAccount::query()
+                ->where('workspace_id', $this->workspaceId($request))
+                ->where('status', 'active')
+                ->count(),
         ]);
     }
 

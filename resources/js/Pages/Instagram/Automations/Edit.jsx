@@ -20,7 +20,7 @@ const EMPTY = {
     follow_gate: false,
     follow_prompt_message: '',
     reply_keyword: 'DONE',
-    delivery: { type: 'link', text: 'Here it is as promised:', url: '', filename: '' },
+    delivery: { type: 'link', text: 'Here it is as promised:', url: '', filename: '', flow_id: null },
     media_filter: [],
     media_ids: [],
     is_active: true,
@@ -43,6 +43,7 @@ const DELIVERY_CHOICES = [
     { value: 'link', label: 'A link', hint: 'Send them a URL — product page, Google Drive, anything public.' },
     { value: 'file', label: 'A file', hint: 'Send a downloadable file from a public URL (PDF, ZIP…).' },
     { value: 'text', label: 'Just text', hint: 'Send a plain message — coupon code, instructions, anything.' },
+    { value: 'flow', label: 'A DM flow', hint: 'Run one of your visual DM flows (Instagram → DM Flows) — multi-step chats with buttons and questions. Needs the follow ask on step 2.' },
 ];
 
 function StepControls({ step, maxStep, errors, saving, onBack, onNext }) {
@@ -76,7 +77,7 @@ function StepControls({ step, maxStep, errors, saving, onBack, onNext }) {
     );
 }
 
-export default function InstagramAutomationEdit({ automation = null, accounts = [] }) {
+export default function InstagramAutomationEdit({ automation = null, accounts = [], flows = [], accountsCount = null }) {
     const editing = Boolean(automation?.id);
     const [form, setForm] = useState(() => {
         // `automation` is either an existing record (editing), a template preset
@@ -89,7 +90,7 @@ export default function InstagramAutomationEdit({ automation = null, accounts = 
             ...automation,
             keywords: automation.keywords ?? [],
             media_filter: automation.media_filter ?? [],
-            delivery: { ...EMPTY.delivery, ...(automation.delivery ?? {}) },
+            delivery: { ...EMPTY.delivery, ...(automation.delivery ?? {}), flow_id: automation.delivery?.flow_id ?? null },
         };
     });
     const [keywordInput, setKeywordInput] = useState('');
@@ -125,6 +126,8 @@ export default function InstagramAutomationEdit({ automation = null, accounts = 
             return null;
         }
         if (s === 2) {
+            if (f.delivery.type === 'flow' && !f.follow_gate) return 'A DM flow needs the follow ask turned on (step 2) — the flow starts only after they reply.';
+            if (f.delivery.type === 'flow' && !f.delivery.flow_id) return 'Pick which DM flow should run.';
             if ((f.delivery.url ?? '').length > 2048) return 'The URL is too long (max 2048 characters).';
             if ((f.delivery.text ?? '').length > 900) return 'The delivery text is too long (max 900 characters).';
             if ((f.delivery.filename ?? '').length > 120) return 'The file name is too long (max 120 characters).';
@@ -200,9 +203,11 @@ export default function InstagramAutomationEdit({ automation = null, accounts = 
         ? `"${form.keywords.join('", "')}" comments`
         : TRIGGER_CHOICES.find((t) => t.value === form.trigger_type)?.label?.toLowerCase() ?? 'the trigger';
 
-    const deliveryLabel = form.follow_gate
-        ? `After they reply "${(form.reply_keyword || 'DONE').trim()}" they get ${DELIVERY_CHOICES.find((d) => d.value === form.delivery.type)?.label.toLowerCase() ?? 'the delivery'}`
-        : `${DELIVERY_CHOICES.find((d) => d.value === form.delivery.type)?.label ?? 'Delivery'} goes out inside the first DM`;
+    const deliveryLabel = form.delivery.type === 'flow'
+        ? `After they reply "${(form.reply_keyword || 'DONE').trim()}", your DM flow takes over the conversation`
+        : form.follow_gate
+            ? `After they reply "${(form.reply_keyword || 'DONE').trim()}" they get ${DELIVERY_CHOICES.find((d) => d.value === form.delivery.type)?.label.toLowerCase() ?? 'the delivery'}`
+            : `${DELIVERY_CHOICES.find((d) => d.value === form.delivery.type)?.label ?? 'Delivery'} goes out inside the first DM`;
 
     return (
         <ClientLayout>
@@ -423,6 +428,7 @@ export default function InstagramAutomationEdit({ automation = null, accounts = 
                                 <p className="text-xs text-neutral-500 dark:text-neutral-400">
                                     The DM asks them to follow you and reply with a word like “DONE”. Once they reply, their
                                     link/file is sent automatically. If this is off, everything is sent in the first DM.
+                                    {form.delivery.type === 'flow' && ' A DM flow delivery needs this on: the flow starts only after their reply.'}
                                 </p>
                             </div>
                             <Toggle checked={form.follow_gate} onChange={(v) => set('follow_gate', v)} />
@@ -467,9 +473,11 @@ export default function InstagramAutomationEdit({ automation = null, accounts = 
                     <Card>
                         <p className="mb-1 text-sm font-semibold">What do they receive?</p>
                         <p className="mb-4 text-xs text-neutral-500 dark:text-neutral-400">
-                            {form.follow_gate
-                                ? `After they reply "${(form.reply_keyword || 'DONE').trim()}", we send this.`
-                                : 'This is included in the first DM.'}
+                            {form.delivery.type === 'flow'
+                                ? `After they reply "${(form.reply_keyword || 'DONE').trim()}", the flow takes over.`
+                                : form.follow_gate
+                                    ? `After they reply "${(form.reply_keyword || 'DONE').trim()}", we send this.`
+                                    : 'This is included in the first DM.'}
                         </p>
                         <div className="grid gap-3 md:grid-cols-3">
                             {DELIVERY_CHOICES.map((choice) => (
@@ -489,6 +497,31 @@ export default function InstagramAutomationEdit({ automation = null, accounts = 
                             ))}
                         </div>
 
+                        {form.delivery.type === 'flow' && (
+                            <div className="mt-4 rounded-lg border border-violet-200 bg-violet-50 p-4 dark:border-violet-900 dark:bg-violet-950/30">
+                                <label className="mb-1.5 block text-sm font-medium text-violet-800 dark:text-violet-200">Which DM flow should run?</label>
+                                {flows.length > 0 ? (
+                                    <>
+                                        <Select
+                                            value={form.delivery.flow_id ?? ''}
+                                            onChange={(e) => setDelivery('flow_id', e.target.value ? Number(e.target.value) : null)}
+                                            options={flows.map((f) => ({ value: f.id, label: f.name }))}
+                                            placeholder="Pick a flow…"
+                                        />
+                                        <p className="mt-2 text-xs text-violet-700 dark:text-violet-300">
+                                            After they reply, the flow takes over — its first message goes out with YES/NO-style next steps. Edit or add flows under Instagram → DM Flows.
+                                        </p>
+                                    </>
+                                ) : (
+                                    <p className="text-xs text-violet-700 dark:text-violet-300">
+                                        No flows yet. Create one first under <a href={route('client.instagram.flows.index')} className="font-medium underline">Instagram → DM Flows</a> — it takes a minute — then come back and pick it here.
+                                    </p>
+                                )}
+                                {errors['delivery.flow_id'] && <p className="mt-1 text-xs text-red-500">{errors['delivery.flow_id']}</p>}
+                            </div>
+                        )}
+
+                        {form.delivery.type !== 'flow' && (
                         <div className="mt-4 grid gap-4 md:grid-cols-2">
                             {(form.delivery.type === 'link' || form.delivery.type === 'file') && (
                                 <div className="md:col-span-2">
@@ -513,6 +546,7 @@ export default function InstagramAutomationEdit({ automation = null, accounts = 
                                 {errors['delivery.text'] && <p className="mt-1 text-xs text-red-500">{errors['delivery.text']}</p>}
                             </div>
                         </div>
+                        )}
 
                         <div className="mt-5 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
                             <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-neutral-500">

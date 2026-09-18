@@ -121,6 +121,14 @@ export default function InstagramSetup({ accounts = [], automationsCount = 0, ig
                                     <div>
                                         <div className="flex items-center gap-2">
                                             <span className="font-medium">@{account.username ?? account.ig_user_id}</span>
+                                            {account.status === 'active' && (
+                                                <a
+                                                    href={route('client.instagram.automations.create')}
+                                                    className="inline-flex items-center gap-1 rounded-full bg-brand-50 px-2.5 py-0.5 text-xs font-medium text-brand-600 hover:bg-brand-100 dark:bg-brand-950/40 dark:text-brand-300"
+                                                >
+                                                    + New automation
+                                                </a>
+                                            )}
                                             <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLES[account.status] ?? STATUS_STYLES.disconnected}`}>
                                                 {String(account.status).replaceAll('_', ' ')}
                                             </span>

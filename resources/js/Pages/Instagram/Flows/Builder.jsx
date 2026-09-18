@@ -324,6 +324,13 @@ function BuilderInner({ flow, templates, accounts }) {
                 </div>
             </div>
 
+            {accounts?.length === 0 && (
+                <div className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+                    No Instagram account connected yet — save the flow now and connect your account on the{' '}
+                    <a href={route('client.instagram.setup')} className="font-medium underline">Setup page</a> before activating it.
+                </div>
+            )}
+
             <div className="flex flex-1 overflow-hidden">
                 {/* Canvas */}
                 <div className="relative flex-1">

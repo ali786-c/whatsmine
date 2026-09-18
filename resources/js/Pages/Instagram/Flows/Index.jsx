@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { Plus, Workflow, Trash2, Pencil, Play, Pause } from 'lucide-react';
 import Button from '@/Components/ui/Button';
 
-export default function IgFlowsIndex({ flows }) {
+export default function IgFlowsIndex({ flows, accountsCount = null }) {
     const { t } = useTranslation();
 
     const toggle = (flow) => {
@@ -29,13 +29,28 @@ export default function IgFlowsIndex({ flows }) {
                             {t('instagram_flows.title')}
                         </h1>
                         <p className="mt-1 text-sm text-neutral-500">{t('instagram_flows.subtitle')}</p>
+                    </div>                        <Link href={route('client.instagram.flows.create')}>
+                            <Button size="sm">
+                                <Plus className="h-4 w-4" />
+                                {t('instagram_flows.new')}
+                            </Button>
+                        </Link>
+                </div>
+
+                {accountsCount === 0 && (
+                    <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+                        <strong>Connect Instagram first.</strong> A flow runs on a connected account — connect yours on the{' '}
+                        <a href={route('client.instagram.setup')} className="font-medium underline">Setup page</a>, then come back.
                     </div>
-                    <Link href={route('client.instagram.flows.create')}>
-                        <Button size="sm">
-                            <Plus className="h-4 w-4" />
-                            {t('instagram_flows.new')}
-                        </Button>
-                    </Link>
+                )}
+
+                <div className="mb-5 rounded-xl border border-neutral-200 bg-neutral-50 px-4 py-3 text-sm text-neutral-600 dark:border-neutral-800 dark:bg-neutral-900/60 dark:text-neutral-300">
+                    <p className="font-medium text-neutral-800 dark:text-neutral-100">What is a DM flow?</p>
+                    <p className="mt-1 leading-relaxed">
+                        A flow is a mini chatbot: someone comments → the first DM goes out → the flow waits for their reply and
+                        continues — like asking “Did you follow us?” with Yes / Not-yet buttons and delivering the file only on Yes.
+                        Build it here, then pick <strong>“A DM flow”</strong> as the delivery when creating a comment automation.
+                    </p>
                 </div>
 
                 {flows.length === 0 ? (

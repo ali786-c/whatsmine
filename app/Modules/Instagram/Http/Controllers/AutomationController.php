@@ -5,6 +5,7 @@ namespace App\Modules\Instagram\Http\Controllers;
 use App\Http\Controllers\Controller;
 use App\Modules\Instagram\Models\CommentAutomation;
 use App\Modules\Instagram\Models\CommentAutomationLog;
+use App\Modules\Instagram\Models\Flow;
 use App\Modules\Instagram\Models\InstagramAccount;
 use App\Modules\Instagram\Services\InstagramGraphClient;
 use Illuminate\Http\JsonResponse;
@@ -12,6 +13,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -175,7 +177,8 @@ class AutomationController extends Controller
             'follow_prompt_message' => ['nullable', 'string', 'max:500'],
             'reply_keyword' => ['nullable', 'string', 'max:64'],
             'delivery' => ['nullable', 'array'],
-            'delivery.type' => ['nullable', Rule::in(['text', 'link', 'file'])],
+            'delivery.type' => ['nullable', Rule::in(['text', 'link', 'file', 'flow'])],
+            'delivery.flow_id' => ['nullable', 'integer', Rule::exists('instagram_flows', 'id')->where('workspace_id', $this->workspaceId($request))],
             'delivery.text' => ['nullable', 'string', 'max:900'],
             'delivery.url' => ['nullable', 'url', 'max:2048'],
             'delivery.filename' => ['nullable', 'string', 'max:120'],
@@ -186,11 +189,39 @@ class AutomationController extends Controller
             'is_active' => ['boolean'],
             'priority' => ['nullable', 'integer', 'min:1', 'max:1000'],
         ]);
+
+        // A flow delivery can only ever start AFTER the user replies (the flow
+        // hands off through LeadDeliveryService during the gated loop), so a
+        // flow delivery without the follow ask would silently never fire.
+        if (($data['delivery']['type'] ?? null) === 'flow') {
+            if (! $request->boolean('follow_gate')) {
+                throw ValidationException::withMessages([
+                    'delivery.type' => 'A DM flow needs the follow ask turned on — the flow starts only after they reply.',
+                ]);
+            }
+
+            if (blank($data['delivery']['flow_id'] ?? null)) {
+                throw ValidationException::withMessages([
+                    'delivery.flow_id' => 'Pick which DM flow should run.',
+                ]);
+            }
+        }
+
+        return $data;
     }
 
     private function formProps(Request $request, ?CommentAutomation $automation = null): array
     {
         $workspaceId = $this->workspaceId($request);
+
+        // Saved DM flows (draft + active) power the "A DM flow" delivery option
+        // in the wizard; drafts are listed too so a user can save the automation
+        // first and activate the flow later.
+        $flows = Flow::forWorkspace($workspaceId)
+            ->orderByDesc('created_at')
+            ->get(['id', 'name', 'status'])
+            ->map(fn (Flow $flow) => ['id' => $flow->id, 'name' => $flow->name.($flow->status === 'draft' ? ' (draft)' : '')])
+            ->all();
 
         return [
             'automation' => $automation?->only([
@@ -198,6 +229,7 @@ class AutomationController extends Controller
                 'reply_message', 'follow_gate', 'follow_prompt_message', 'reply_keyword',
                 'delivery', 'media_filter', 'media_ids', 'is_active', 'priority',
             ]),
+            'flows' => $flows,
             'accounts' => InstagramAccount::where('workspace_id', $workspaceId)
                 ->where('status', 'active')
                 ->get(['id', 'username', 'ig_user_id', 'status']),
