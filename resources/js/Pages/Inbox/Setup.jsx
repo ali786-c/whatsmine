@@ -897,7 +897,7 @@ function EmbeddedSignupButton({ configId, appId, channel, label, color, onCode, 
         const sessionInfoPromise = isWhatsapp ? waitForWabaSessionInfo() : Promise.resolve(null);
 
         const extrasMap = {
-            whatsapp:  { setup: {}, feature: 'whatsapp_embedded_signup' },
+            whatsapp:  { setup: {}, feature: 'whatsapp_embedded_signup', featureType: 'whatsapp_business_app_onboarding', coex: true, version: 'v4', sessionInfoVersion: '3' },
             instagram: { feature_type: 'instagram_management' },
             messenger: { feature_type: 'messenger_chat' },
         };
