@@ -40,17 +40,14 @@ return [
     // field) FAILS OPEN — an unknown must never block a real lead.
     'follow_check' => env('INSTAGRAM_FOLLOW_CHECK', true),
 
-    // Follow-up sends to a commenter who replied without the follow-gate
-    // keyword ("haha", questions, gibberish). When it runs out the funnel
-    // closes and the thread is handed to a human agent in the Inbox. Meta
-    // allows follow-ups only within the 24h window opened by the user's reply.
+    // DEPRECATED: the follow-gate loop is now uncapped by design — it stays
+    // alive until the user actually follows or goes quiet. The only bound is
+    // Meta's rule that every user reply refreshes a 24h window; once the user
+    // stops replying, the timeout job closes the funnel. nudge_count still
+    // tracks engagement volume for analytics. These keys remain for backwards
+    // compatibility and are no longer read by the funnel.
     'max_nudges' => (int) env('INSTAGRAM_MAX_NUDGES', 2),
 
-    // Budget for the follow-gate loop specifically ("I followed" taps by
-    // unverified users, "no"/"Not yet" answers). These are deliberate user
-    // actions, so they get more chances than generic keyword nudges. On
-    // exhaustion one final handoff message is sent (never silence), then the
-    // thread closes for a human agent.
     'gate_max_nudges' => (int) env('INSTAGRAM_GATE_MAX_NUDGES', 4),
 
 ];

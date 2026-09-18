@@ -351,20 +351,15 @@ class InstagramFunnelTest extends TestCase
         $this->assertSame(FunnelParticipant::STAGE_AWAITING_FOLLOW, $participant->stage);
         $this->assertSame(0, $participant->nudge_count);
 
-        // Four gate re-asks within the gate budget.
-        foreach ([1, 2, 3, 4] as $nudge) {
+        // The loop stays ALIVE until they follow or go quiet: every "no"
+        // gets the follow ask repeated, no artificial cap.
+        foreach ([1, 2, 3, 4, 5, 6] as $nudge) {
             $this->assertTrue($funnel->handleDmReply('17841400000001', $noEvent('dm-'.$nudge)));
             $this->assertSame($nudge, $participant->fresh()->nudge_count);
             $this->assertSame(FunnelParticipant::STAGE_AWAITING_FOLLOW, $participant->fresh()->stage);
         }
 
-        // Fifth NO after the gate: budget exhausted → ONE final handoff message
-        // (never silence), then closed for agent takeover.
-        $this->assertTrue($funnel->handleDmReply('17841400000001', $noEvent('dm-5')));
-        $participant = $participant->fresh();
-        $this->assertSame(FunnelParticipant::STAGE_CLOSED, $participant->stage);
-        $this->assertStringContainsString('our team', (string) (Http::recorded()[6][0]['message']['text'] ?? ''));
-        Http::assertSentCount(7); // reply + gate + 4 re-asks + final handoff message
+        Http::assertSentCount(8); // reply + gate + 6 re-asks — still alive, never silent
     }
 
     public function test_gate_yes_reply_reminds_keyword_then_keyword_delivers(): void

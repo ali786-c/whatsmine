@@ -268,8 +268,9 @@ use Illuminate\Database\QueryException;
         }
 
         // The user's FIRST reply OPENS the 24h window (Meta: follow-ups are only
-        // possible after the user responds). A later reply that arrives after the
-        // window already elapsed closes the funnel instead.
+        // possible after the user responds). Meta opens a FRESH window for EVERY
+        // user message, so we refresh the timestamp on each reply — this is what
+        // keeps the follow-gate loop alive indefinitely while the user engages.
         if ($participant->dm_thread_opened_at === null) {
             $participant->forceFill(['dm_thread_opened_at' => now()])->save();
             InstagramLog::dm('info', '24h follow-up window OPENED by participant reply', ['participant_id' => $participant->id, 'comment_id' => $participant->comment_id, 'username' => $participant->username]);
@@ -285,6 +286,10 @@ use Illuminate\Database\QueryException;
             $this->mirror->mirrorInbound($participant, $text, $mid ? (string) $mid : null, $event);
 
             return true;
+        } else {
+            // Still inside the old window — refresh it so the loop stays alive
+            // for as long as the user keeps replying (Meta-accurate behaviour).
+            $participant->forceFill(['dm_thread_opened_at' => now()])->save();
         }
 
         $this->mirror->mirrorInbound($participant, $text, $mid ? (string) $mid : null, $event);
@@ -358,19 +363,13 @@ use Illuminate\Database\QueryException;
 
         if ($follows === false) {
             // The API VERIFIED they do not follow — they cannot pass the gate by
-            // saying "yes" or "DONE". Repeat the ask (bounded by the gate budget)
-            // so the loop can never be driven forever.
-            $maxNudges = max(0, (int) config('instagram.gate_max_nudges', 4));
-            if ($participant->nudge_count < $maxNudges) {
-                $participant->increment('nudge_count');
-                $nudge = 'It seems you are not following us yet! Follow our account, then reply '.$keyword.' and I\'ll send it right over! 😊';
-                InstagramLog::dm('info', 'gate: follow NOT verified by API — repeating the ask', ['participant_id' => $participant->id, 'nudge_count' => $participant->nudge_count]);
-                $this->sendFollowUp($account, $participant, $automation, $senderId, $nudge, $event);
-
-                return true;
-            }
-
-            $this->handOffGateLoop($account, $automation, $participant, $senderId, $event, 'follow not verified');
+            // saying "yes" or "DONE". The loop stays ALIVE: every engagement gets
+            // the ask repeated, with no artificial cap — Meta's 24h window is the
+            // only bound (it stays open as long as the user keeps replying).
+            $participant->increment('nudge_count');
+            $nudge = 'It seems you are not following us yet! Follow our account, then reply '.$keyword.' and I\'ll send it right over! 😊';
+            InstagramLog::dm('info', 'gate: follow NOT verified by API — repeating the ask', ['participant_id' => $participant->id, 'nudge_count' => $participant->nudge_count]);
+            $this->sendFollowUp($account, $participant, $automation, $senderId, $nudge, $event);
 
             return true;
         }
@@ -380,59 +379,24 @@ use Illuminate\Database\QueryException;
             // ask, not the generic keyword nudge. This also covers the
             // inconclusive-API fail-open case: the quick reply must never be
             // answered with "just reply DONE" when they told us they haven't
-            // followed yet. Same bounded loop — budget exhausted hands the
-            // thread to a human agent instead of nagging forever.
-            $maxNudges = max(0, (int) config('instagram.gate_max_nudges', 4));
-            if ($participant->nudge_count < $maxNudges) {
-                $participant->increment('nudge_count');
-                $nudge = 'No problem! Just follow our account, then reply '.$keyword.' and I\'ll send it right over! 😊';
-                InstagramLog::dm('info', 'gate: user said NO — repeating the follow ask', ['participant_id' => $participant->id, 'nudge_count' => $participant->nudge_count]);
-                $this->sendFollowUp($account, $participant, $automation, $senderId, $nudge, $event);
-
-                return true;
-            }
-
-            $this->handOffGateLoop($account, $automation, $participant, $senderId, $event, 'user keeps saying no');
-
-            return true;
-        }
-
-        // Any other reply (question, "haha", gibberish) → bounded keyword nudge.
-        $maxNudges = max(0, (int) config('instagram.max_nudges', 2));
-        if ($participant->nudge_count < $maxNudges) {
+            // followed yet. Uncapped by design — alive until they actually follow
+            // or stop replying (then Meta's window closes the funnel).
             $participant->increment('nudge_count');
-            $nudge = "Just reply {$keyword} and I'll send it right over! 😊";
-            InstagramLog::dm('info', 'reply did not match keyword — sending nudge', ['participant_id' => $participant->id, 'nudge_count' => $participant->nudge_count, 'expected_keyword' => $keyword, 'received_text' => mb_substr($text, 0, 120)]);
+            $nudge = 'No problem! Just follow our account, then reply '.$keyword.' and I\'ll send it right over! 😊';
+            InstagramLog::dm('info', 'gate: user said NO — repeating the follow ask', ['participant_id' => $participant->id, 'nudge_count' => $participant->nudge_count]);
             $this->sendFollowUp($account, $participant, $automation, $senderId, $nudge, $event);
 
             return true;
         }
 
-        $this->log($account, $automation, $participant->comment_id, CommentAutomationLog::ACTION_SKIPPED, $event, $participant, 'nudge limit reached; keyword not matched');
+        // Any other reply (question, "haha", gibberish) → keyword reminder. Also
+        // uncapped — alive until they follow or go quiet (24h window rule).
+        $participant->increment('nudge_count');
+        $nudge = "Just reply {$keyword} and I'll send it right over! 😊";
+        InstagramLog::dm('info', 'reply did not match keyword — sending nudge', ['participant_id' => $participant->id, 'nudge_count' => $participant->nudge_count, 'expected_keyword' => $keyword, 'received_text' => mb_substr($text, 0, 120)]);
+        $this->sendFollowUp($account, $participant, $automation, $senderId, $nudge, $event);
 
         return true;
-    }
-
-    /**
-     * The gate loop ran out of chances without a verified follow: send ONE
-     * final message (never leave the user hanging on silence), then close the
-     * funnel — the mirrored Inbox thread hands the conversation to a human
-     * agent who can take over while Meta keeps a fresh 24h window open.
-     */
-    private function handOffGateLoop(
-        InstagramAccount $account,
-        ?CommentAutomation $automation,
-        FunnelParticipant $participant,
-        string $senderId,
-        array $event,
-        string $reason,
-    ): void {
-        $final = 'It seems we could not verify your follow. No worries — our team is here to help you personally from here! 😊';
-        $this->sendFollowUp($account, $participant, $automation, $senderId, $final, $event);
-
-        $participant->forceFill(['stage' => FunnelParticipant::STAGE_CLOSED, 'closed_at' => now()])->save();
-        $this->log($account, $automation, $participant->comment_id, CommentAutomationLog::ACTION_SKIPPED, $event, $participant, 'gate loop budget exhausted ('.$reason.')');
-        InstagramLog::dm('info', 'gate: budget exhausted — final handoff message sent, closed for agent takeover', ['participant_id' => $participant->id, 'reason' => $reason]);
     }
 
     /**
