@@ -363,38 +363,34 @@ use Illuminate\Database\QueryException;
 
         if ($follows === false) {
             // The API VERIFIED they do not follow — they cannot pass the gate by
-            // saying "yes" or "DONE". The loop stays ALIVE: every engagement gets
-            // the ask repeated, with no artificial cap — Meta's 24h window is the
-            // only bound (it stays open as long as the user keeps replying).
+            // saying "yes" or "DONE". The loop stays ALIVE and every re-ask is
+            // the SAME gate template (unlock text + Visit profile + I'm
+            // following) — never a different quick-reply text. Meta's 24h
+            // window (refreshed on every reply) is the only bound.
             $participant->increment('nudge_count');
-            $nudge = 'It seems you are not following us yet! Follow our account, then reply '.$keyword.' and I\'ll send it right over! 😊';
-            InstagramLog::dm('info', 'gate: follow NOT verified by API — repeating the ask', ['participant_id' => $participant->id, 'nudge_count' => $participant->nudge_count]);
-            $this->sendFollowUp($account, $participant, $automation, $senderId, $nudge, $event);
+            InstagramLog::dm('info', 'gate: follow NOT verified by API — re-sending the gate template', ['participant_id' => $participant->id, 'nudge_count' => $participant->nudge_count]);
+            $this->sendGateTemplate($account, $participant, $automation, $senderId, $event);
 
             return true;
         }
 
         if ($saidNo) {
-            // Explicit "no" / "not yet" (or the quick reply) — repeat the FOLLOW
-            // ask, not the generic keyword nudge. This also covers the
-            // inconclusive-API fail-open case: the quick reply must never be
-            // answered with "just reply DONE" when they told us they haven't
-            // followed yet. Uncapped by design — alive until they actually follow
-            // or stop replying (then Meta's window closes the funnel).
+            // Explicit "no" / "not yet" (or the quick reply) — re-send the SAME
+            // gate template, not a plain-text variant. Also covers the
+            // inconclusive-API fail-open case. Uncapped by design — alive until
+            // they actually follow or stop replying.
             $participant->increment('nudge_count');
-            $nudge = 'No problem! Just follow our account, then reply '.$keyword.' and I\'ll send it right over! 😊';
-            InstagramLog::dm('info', 'gate: user said NO — repeating the follow ask', ['participant_id' => $participant->id, 'nudge_count' => $participant->nudge_count]);
-            $this->sendFollowUp($account, $participant, $automation, $senderId, $nudge, $event);
+            InstagramLog::dm('info', 'gate: user said NO — re-sending the gate template', ['participant_id' => $participant->id, 'nudge_count' => $participant->nudge_count]);
+            $this->sendGateTemplate($account, $participant, $automation, $senderId, $event);
 
             return true;
         }
 
-        // Any other reply (question, "haha", gibberish) → keyword reminder. Also
-        // uncapped — alive until they follow or go quiet (24h window rule).
+        // Any other reply (question, "haha", gibberish) → the SAME gate template
+        // again. Also uncapped — alive until they follow or go quiet.
         $participant->increment('nudge_count');
-        $nudge = "Just reply {$keyword} and I'll send it right over! 😊";
-        InstagramLog::dm('info', 'reply did not match keyword — sending nudge', ['participant_id' => $participant->id, 'nudge_count' => $participant->nudge_count, 'expected_keyword' => $keyword, 'received_text' => mb_substr($text, 0, 120)]);
-        $this->sendFollowUp($account, $participant, $automation, $senderId, $nudge, $event);
+        InstagramLog::dm('info', 'reply did not match keyword — re-sending the gate template', ['participant_id' => $participant->id, 'nudge_count' => $participant->nudge_count, 'expected_keyword' => $keyword, 'received_text' => mb_substr($text, 0, 120)]);
+        $this->sendGateTemplate($account, $participant, $automation, $senderId, $event);
 
         return true;
     }

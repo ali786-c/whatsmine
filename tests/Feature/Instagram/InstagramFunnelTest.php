@@ -601,8 +601,11 @@ class InstagramFunnelTest extends TestCase
         $this->assertNull($participant->delivered_at);
         $this->assertSame(1, $participant->nudge_count);
 
-        $reAsk = (string) (Http::recorded()[2][0]['message']['text'] ?? '');
-        $this->assertStringContainsString('follow our account', $reAsk);
+        // The re-ask must be the SAME gate template (unlock text + buttons),
+        // never a different plain-text nudge.
+        $reAsk = Http::recorded()[2][0]['message'];
+        $this->assertSame('template', $reAsk['attachment']['type']);
+        $this->assertSame('Follow us on Instagram to unlock this!', $reAsk['attachment']['payload']['text']);
         Http::assertSentCount(3);
     }
 
