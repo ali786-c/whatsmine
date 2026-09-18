@@ -377,7 +377,7 @@ function CodeField({ label, value, icon: Icon }) {
     );
 }
 
-function WabaCard({ waba, webhookGlobalUrl, channelAccounts, chatbots }) {
+function WabaCard({ waba, webhookGlobalUrl, channelAccounts, chatbots, onSeedTemplates, seedingTemplates }) {
     const { t } = useTranslation();
     const [confirmDelete, setConfirmDelete] = useState(false);
     const [deleting, setDeleting]           = useState(false);
@@ -442,6 +442,18 @@ function WabaCard({ waba, webhookGlobalUrl, channelAccounts, chatbots }) {
                     </div>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
+                    {onSeedTemplates && (
+                        <button
+                            type="button"
+                            onClick={() => onSeedTemplates(waba)}
+                            disabled={seedingTemplates}
+                            title="Seed Default Templates"
+                            className="flex items-center gap-1.5 rounded-lg border border-neutral-200 dark:border-neutral-600 bg-white dark:bg-neutral-700 px-2.5 py-1.5 text-xs font-medium text-neutral-600 dark:text-neutral-300 hover:border-brand-300 hover:text-brand-600 dark:hover:text-brand-400 transition disabled:opacity-50"
+                        >
+                            <RefreshCw className={`h-3 w-3 ${seedingTemplates ? 'animate-spin' : ''}`} />
+                            <span className="hidden sm:inline">{seedingTemplates ? 'Seeding...' : 'Seed Templates'}</span>
+                        </button>
+                    )}
                     <Link
                         href={route('client.whatsapp.templates.index')}
                         className="flex items-center gap-1.5 rounded-lg border border-neutral-200 dark:border-neutral-600 bg-white dark:bg-neutral-700 px-2.5 py-1.5 text-xs font-medium text-neutral-600 dark:text-neutral-300 hover:border-brand-300 hover:text-brand-600 dark:hover:text-brand-400 transition"
@@ -580,6 +592,16 @@ function WhatsAppSection({ wabas, webhookGlobalUrl, channelAccountsByWaba, chatb
         }
     }, [setShowForm, t]);
 
+    const [seedingTemplates, setSeedingTemplates] = useState(null);
+    const seedTemplates = (waba) => {
+        if (!confirm('Are you sure you want to push default e-commerce templates to Meta?')) return;
+        setSeedingTemplates(waba.id);
+        router.post(route('client.whatsapp.setup.seed-templates', { waba: waba.id }), {}, {
+            preserveScroll: true,
+            onFinish: () => setSeedingTemplates(null),
+        });
+    };
+
     return (
         <ChannelCard
             icon={WhatsAppLogo}
@@ -596,6 +618,8 @@ function WhatsAppSection({ wabas, webhookGlobalUrl, channelAccountsByWaba, chatb
                             webhookGlobalUrl={webhookGlobalUrl}
                             channelAccounts={channelAccountsByWaba?.[waba.id] ?? []}
                             chatbots={chatbots}
+                            onSeedTemplates={seedTemplates}
+                            seedingTemplates={seedingTemplates === waba.id}
                         />
                     ))}
                 </div>
