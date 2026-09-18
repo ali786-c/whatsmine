@@ -84,6 +84,11 @@ function NavGroup({ label, items, onClose, autoOpen = false }) {
  */
 function useAutoScrollActiveNav() {
     const navRef = useRef(null);
+    // The effect must run ONLY on navigation (URL change), not on every
+    // render. Without the dependency array, any re-render — polling badges,
+    // shared-prop updates, Echo events — re-ran scrollIntoView and yanked the
+    // user back to the active item after they had scrolled away manually.
+    const { url } = usePage();
 
     useEffect(() => {
         const nav = navRef.current;
@@ -102,7 +107,7 @@ function useAutoScrollActiveNav() {
         });
 
         return () => window.cancelAnimationFrame(raf);
-    });
+    }, [url]);
 
     return navRef;
 }
