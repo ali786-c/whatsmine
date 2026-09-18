@@ -1,8 +1,8 @@
 # Instagram Comment Automation — Complete Setup & Operations Guide
 
-**Guide v2 — Sep 15, 2026.** A complete, copy-paste-ready guide for deploying and operating the Instagram comment-automation module (`app/Modules/Instagram`) on production.
+**Guide v3 — Sep 18, 2026.** A complete, copy-paste-ready guide for deploying and operating the Instagram comment-automation module (`app/Modules/Instagram`) on production. Now covers the **two-step button funnel** (hook + CTA button → follow gate with Visit-profile/I'm-following buttons), the **uncapped gate loop**, post-picker pagination, and the per-automation live DM preview.
 
-> **What it does:** Someone comments on your reel/post → the bot sends **one private-reply DM** → the DM asks them to follow and reply with a keyword → the bot **verifies the follow via the Graph API** (not just the user's word) → the reply opens the **24-hour window** → the bot delivers the "required thing" (link / file / message). The whole thread is mirrored into the shared Inbox so a human agent can take over at any point.
+> **What it does:** Someone comments on your reel/post → the bot sends **one private-reply DM** — a hook text with **one tappable CTA button** → tapping the button opens the **follow gate**: a button-template message with **[Visit profile]** (opens the connected creator's profile — built automatically, no user-set link) and **[I'm following ✅]** → the confirm tap triggers a **real follow verification via the Graph API** (not just the user's word) → verified → the bot delivers the "required thing" (link / file / flow). The gate loop is **uncapped** — it re-sends the exact same gate message until the user actually follows or goes quiet for 24h — and a delivered user is never re-gated. The whole thread is mirrored into the shared Inbox so a human agent can take over at any point.
 
 ```
 Customer comments "price" on your reel
@@ -14,19 +14,23 @@ Meta webhook ──► /webhooks/instagram/{token}   (token + HMAC signature + d
 ProcessInstagramCommentJob (instagram queue)
         │
         ▼
-CommentFunnelService ── match automation? ──► ONE private-reply DM
-        │                                      (hook + follow ask + keyword
-        │                                       + tappable YES/NO quick replies)
+CommentFunnelService ── match automation? ──► ONE private-reply DM (STEP 1)
+        │                                     hook text + [CTA button]
+        │                                     (labels editable per automation;
+        │                                      quick-reply + plain-text fallback)
         ▼
-Customer replies (consent event — Meta now allows profile access)
-        │
+Customer taps the CTA button / replies anything   ← 24h window OPENS and is
+        │                                            REFRESHED by every user reply
         ▼
-doesUserFollow() ── GET /{igsid}?fields=is_user_follow_business
-        ├─ true  + keyword  ──► DELIVERY (link / file / text) ──► delivered
-        ├─ true  + "yes"    ──► keyword reminder
-        ├─ false (verified) ──► "please follow us first" (bounded loop)
-        │                        budget exhausted ──► Inbox agent handoff
-        └─ unknown          ──► fail-open (lead never blocked)
+STEP 2: follow gate — button template, re-sent on every non-follow reply (UNCAPPED)
+        ├─ [Visit profile]     ──► opens instagram.com/{connected username}
+        └─ [I'm following ✅]  ──► doesUserFollow() ── GET /{igsid}?fields=is_user_follow_business
+                 ├─ true      ──► DELIVERY (link / file / flow) ──► delivered ✅
+                 │                (delivery CLOSES every pending funnel of that user —
+                 │                 unfollowing later can never restart the flow)
+                 └─ false     ──► the SAME gate message goes out again — loop stays
+                                  alive until they follow or go quiet for 24h
+        └─ the typed keyword ("DONE") still works as a direct verify path
         │
         └── whole thread mirrored in shared Inbox (human can take over)
 ```
@@ -129,24 +133,33 @@ The Instagram User token is valid **60 days**. A scheduled job (`refresh-instagr
 
 **Instagram → Comment Automations → New** (3-step wizard):
 
-| Step | Field | Example |
+| Step | Field | Default (pre-filled & editable) |
 |---|---|---|
 | 1. **Kab chalega?** | Trigger: keywords / mentions / all comments | `price`, `rate` (contains) |
-| 1. | Limit to specific posts (advanced options) | **Pick posts** → select reels; empty = all posts |
-| 2. **Kya bhejna hai?** | Private-reply DM text | *"Thanks for commenting! Follow and reply **DONE** to get the link 👇"* |
-| 2. | **Follow gate** | On — keyword `DONE` |
-| 3. **Kaise milega?** | Delivery: link / file / text | the "required thing" |
+| 1. | Limit to specific posts (advanced options) | **Pick posts** → searchable picker, 25 per page with **Load more** (up to 100 posts selectable); empty = all posts |
+| 2. **Kya bhejna hai?** | Message (first DM text) | *"Thanks for your comment! 🎉"* |
+| 2. | **Ask them to follow you first** (gate toggle) | On |
+| 2. | **Button text** (first DM's tappable button, ≤20 chars) | *"Send me the link"* |
+| 2. | **Button message** (text above the button) | *"Hey there! Thanks for your interest. Click below and I'll send the details."* |
+| 2. | **Follow unlock message** | *"Follow us on Instagram to unlock this!"* |
+| 2. | **Profile button label** / **Confirm button label** | *"Visit profile"* / *"I'm following ✅"* |
+| 2. | **The word they can also type** (keyword) | `DONE` |
+| 3. **Kaise milega?** | Delivery: link / file / flow | the "required thing" |
 | — | Enabled | ✅ |
+
+Every text/label ships **pre-made** — a new automation works with defaults alone; the user just tweaks wording. An **Instagram-style live preview** sits beside the form (right column on desktop, below on mobile) showing both steps' bubbles and buttons, updating as the user types.
 
 **Follow-gate behavior (with verification):**
 
-1. Commenter gets the one private-reply DM (with **"✅ I followed" / "Not yet"** tappable quick replies where supported)
-2. Any reply opens the 24h window AND enables the profile lookup
-3. Bot calls `GET /{igsid}?fields=is_user_follow_business`:
-   - **verified follower + keyword** → delivery instantly
-   - **verified NOT following** → "please follow us first" prompt, repeats within the bounded budget (`INSTAGRAM_MAX_NUDGES`, default 2), then hands the thread to an Inbox agent
+1. **Step-1 DM:** hook text + one CTA quick-reply button. If a Graph shape ever rejects the buttons, the same text is sent **plain-text automatically** — the funnel never breaks (Meta allows only ONE private reply per comment, so a rejected attempt costs nothing).
+2. **Step-2 gate:** the tap (or any typed reply) opens the 24h window AND enables the profile lookup. The gate goes out as a **button template**: `[Visit profile]` opens `instagram.com/{connected username}` — the URL is built at send time from the OAuth-saved username (user sets nothing; if the username were missing, the profile button is dropped rather than sent broken) — plus `[I'm following ✅]` (postback).
+3. **Verify + deliver:** bot calls `GET /{igsid}?fields=is_user_follow_business`:
+   - **verified follower** → delivery instantly (link / file / flow)
+   - **verified NOT following** → the **exact same gate message is re-sent** (same text + both buttons) — see the uncapped loop below
    - **inconclusive** (no consent yet / network error) → **fail-open**, delivery is never blocked by a broken check
-4. Lying ("DONE" without following) gets caught by the API — no free deliveries.
+4. **The flow stays alive until follow:** the gate loop is **uncapped** — every non-follow reply (tap, "no", off-keyword) re-sends the same gate template forever. The only bound is Meta's own rule: every user reply **refreshes** the 24h window, so the loop legally runs as long as the user engages; once they go silent, the timeout sweep closes the funnel. `nudge_count` keeps counting engagement for analytics only.
+5. **One delivery ends everything:** delivering closes **every pending funnel** of that user, and an already-delivered user can never re-trigger the gate (unfollow → reply again produces nothing; content is never re-demanded).
+6. Lying ("I'm following ✅" / "DONE" without following) gets caught by the API — no free deliveries.
 
 **Per-post precedence:** a post-specific automation always overrides an account-wide one on its posts, regardless of priority numbers.
 
@@ -243,10 +256,11 @@ keyword-matched automatically.
 ## Part F — Live End-to-End Test
 
 1. From a **second** Instagram account, comment `price` on your reel
-2. Within ~5–10s the commenter receives the **private-reply DM**
-3. **Without following, reply `DONE`** → the bot should reply *"It seems you are not following us yet!"* (the API caught the lie)
-4. Follow the account, then reply `DONE` (or tap **✅ I followed**) → the bot sends the **delivery**
-5. Every step is visible under **Instagram → Funnel Logs** (stage, action, error, payload) and `storage/logs/instagram/dm.log` (`follow-status resolved: true/false`)
+2. Within ~5–10s the commenter receives the **Step-1 DM** — hook text + the CTA button; tapping the button opens the **gate message** (*"Follow us on Instagram to unlock this!"* + **Visit profile** + **I'm following ✅**)
+3. Tap **Visit profile** → the connected creator's Instagram profile opens (URL built automatically — no user-set link anywhere)
+4. **Without following, tap `I'm following ✅`** → the API catches the lie and the **exact same gate message** comes back — repeat taps keep getting the same gate (uncapped loop; it never goes silent while you engage)
+5. Actually follow, tap `I'm following ✅` again (or type `DONE`) → the bot sends the **delivery** — the funnel is now finished: unfollow and reply again, and **nothing** happens
+6. Every step is visible under **Instagram → Funnel Logs** (stage, action, error, payload) and `storage/logs/instagram/dm.log` (`follow-status resolved: true/false`)
 
 Note: Meta allows **one private reply per comment** — to re-test, comment again (a fresh comment starts a fresh funnel).
 
@@ -298,6 +312,14 @@ php artisan instagram:register-webhook
 | 22 | **FEATURE — Instagram templates (Generic carousel / Button)** | Meta docs: Generic Template + Button Template (graph.instagram.com `/{ig_id}/messages`, `attachment.type=template`). **Koi Meta approval nahi chahiye** — WhatsApp templates se bilkul alag | Inbox ke Instagram conversation me Template icon: compose karo (carousel 1–10 cards ya 640-char text + 3 buttons), **save as template** (`instagram_templates` table, workspace-scoped), library se pick → send. Postback taps `messaging_postbacks` webhook se thread me aate hain (issue #18 wala pipeline). Limits: title/subtitle 80 chars, button title 20, payload 1000, max 10 elements / 3 buttons |
 | 23 | Automation wizard me **Next button kabhi enable nahi hota** — "Every comment" automation ban hi nahi sakti | Catch-22: `Next` disabled tha `!maxStep` pe, lekin `maxStep` state sirf Next click ke baad update hoti thi — enable hone ke liye click chahiye, click ke liye enable | Fixed — wizard ab `currentError` (per-step validation) se gated hai; Next valid step pe foran chalta hai |
 | 24 | "Every comment" automation ke bawajood kuch comments pe DM nahi gaya | Do traps: (a) **POST vs FEED** — Meta image posts ko `media_product_type=FEED` bolta hai, editor `POST` save karta tha → filter match fail; (b) **reel-only + FEED post** — galat filter combination silently no-match karta tha (`no_match` log) | Fixed — `triggerMatches()` dono taraf canonicalize karta hai (POST→FEED); media filter bachta hai to `no_match` log me `trigger_type` + `media_filter` + `media_type` context aata hai, aur editor me filter + post-type mismatch ki hint dikhti hai |
+| 25 | **FEATURE — Two-step button funnel (competitor-style)** | Purana gate pehli DM me hi typed keyword mangta tha; competitor ka UI chahiye tha: hook + button → follow gate tappable buttons ke sath | First DM = editable hook + **ek CTA quick-reply button** (plain-text fallback agar Graph reject kare); tap par gate **button template** jata hai (`Visit profile` → `instagram.com/{username}` + confirm postback) → verify → delivery. 5 naye per-automation fields (`cta_message`, `cta_button_label`, `gate_message`, `visit_profile_label`, `confirm_follow_label` — migration `2026_09_18_000400`), wizard me sab **pre-made defaults** + form ke sath **Instagram-style live preview** |
+| 26 | Post picker sirf pehli 25 posts dikhata tha — 1000-post wale accounts purani post pick nahi kar sakte the | `/{ig-user-id}/media` ki cursor pagination use nahi hui thi | Fixed — `recent-posts` ab `?cursor=` / `?limit=1–25` support karta hai; grid me **Load more** + "X posts loaded" counter + har thumbnail par date; `media_ids` validation cap 50 → **100** |
+| 27 | Follow verify fail hone par re-ask ke bajaye ghalat generic nudge ("Just reply DONE…") jata tha | `saidNo` + fail-open (inconclusive) case generic keyword-nudge path par gir raha tha | Fixed — "no" / "Not yet" (button ya typed) par ab **follow re-ask** jata hai |
+| 28 | User ne "I followed" teesri dafa dabaya to bot chup ho jata tha (nudge budget 2) | Gate loop generic nudge budget share karta tha | Evolution: pehle dedicated `gate_max_nudges` (4) + final handoff message, phir **uncapped** (issue #30 ne replace kiya) |
+| 29 | Gate loop me "Follow us…" gate ke bajaye quick-text nudge jata tha | Loop branches plain-text nudge bhejte the | Fixed — teeno loop branches (verified non-follower / "no" / off-keyword) ab **wahi gate template** dobara bhejte hain — same text + same buttons har repeat me |
+| 30 | Workflow 4 re-asks par mar jata tha — requirement: loop **alive** rahe jab tak follow na ho | Budget-based capping thi | Fixed — gate loop **UNCAPPED**: har non-follow reply par same gate message, koi cap nahi. Bound sirf Meta ka 24h-window rule hai. **Sath me fix:** pehle code sirf *pehle* reply ka window save karta tha — ab **har user reply window refresh** karta hai (Meta ka actual rule), isi se loop legally unlimited chalta hai jab tak user engage hai; chup hone par timeout sweep close karti hai. `INSTAGRAM_MAX_NUDGES` / `INSTAGRAM_GATE_MAX_NUDGES` ab **DEPRECATED** (funnel inhe read nahi karta) |
+| 31 | **Glitch:** delivery milne ke baad user unfollow karke dobara reply kare to gate **restart** ho jata tha | Us user ki doosri pending `awaiting_cta`/`awaiting_follow` row zinda reh jati thi jo purana gate re-arm kar deti thi | Fixed — delivery par us user ki **saari pending funnels close** + already-delivered user ka dobara gate/re-entry **skip** (content kabhi dobara demand nahi hota; test bhi added) |
+| 32 | Ek flow par bohat saare users ek sath — multi-user handling? | — | **Already implemented (verified):** har user ki apni `flow_participants`/`funnel_participants` row (isolated state + context), inbound DM apne IGSID se sahi user ko route hota hai, one-active-flow-per-user guard, per-user wait timeouts (per-minute sweep), per-account rate limit 30/min queue-staggered — 100 users parallel me bina interference chalte hain |
 
 Quick log locations:
 
@@ -321,7 +343,8 @@ tail -20 storage/logs/worker.log              # supervisor worker stdout
 | `INSTAGRAM_GRAPH_VERSION` | `v20.0` | Graph API version for all calls (both hosts) |
 | `INSTAGRAM_QUEUE` | `instagram` | Queue name for module jobs |
 | `INSTAGRAM_SENDS_PER_MINUTE` | `30` | Per-account outbound rate limit |
-| `INSTAGRAM_MAX_NUDGES` | `2` | Follow-up budget — keyword reminders + gate-loop repeats are bounded by this |
+| `INSTAGRAM_MAX_NUDGES` | `2` | **DEPRECATED** — the gate loop is uncapped by design (issue #30); kept for backwards compatibility, no longer read |
+| `INSTAGRAM_GATE_MAX_NUDGES` | `4` | **DEPRECATED** — same; `nudge_count` still tracks engagement volume for analytics only |
 | `INSTAGRAM_FOLLOW_CHECK` | `true` | **Real follow verification** via the User Profile API (`is_user_follow_business`, checked after the user's first DM = consent). `false` = legacy trust-mode |
 
 ### Admin credentials (integrations table)
@@ -339,13 +362,13 @@ tail -20 storage/logs/worker.log              # supervisor worker stdout
 
 1. **ONE private reply per comment** — `funnel_participants.comment_id` DB-unique + stage guard. Hook, follow-ask and (if no gate) delivery are all embedded in that single message.
 2. **7-day private-reply window** — `expires_at = comment + 7 days`; the timeout sweep expires stale participants and self-heals stranded sends.
-3. **Follow-ups only after the user replies, within 24h** — `dm_thread_opened_at` opens the window on the participant's first reply; sends outside the window are refused. The Human-Agent tag (7-day) is the documented escalation path beyond that.
+3. **Follow-ups only after the user replies, within 24h** — the window opens on the participant's first reply and is **refreshed by every reply** (this is what keeps the uncapped gate loop alive); sends outside the window are refused. The Human-Agent tag (7-day) is the documented escalation path beyond that.
 4. **Profile/follow data needs DM consent** — `is_user_follow_business` is only readable after the user has messaged the account; the funnel checks it exactly at that point, so the consent rule is satisfied by design.
 5. Inbox vs Request folder placement is decided by Instagram itself.
 
 ## Funnel Stages
 
-`commented → dm_sent → awaiting_follow → replied → delivered` — terminal states: `delivered`, `expired`, `closed`. Rate-limited/transient failures are retried by the queue; permanent failures close the funnel; mid-send crashes are healed by the sweep; budget-exhausted gate loops close for **agent handoff** (thread fully mirrored in the Inbox).
+`commented → dm_sent → awaiting_cta` (Step-1 button tap pending) `→ awaiting_follow` (gate active) `→ replied → delivered` — terminal states: `delivered`, `expired`, `closed`. The gate loop is **uncapped**: `awaiting_follow` re-sends the same gate template on every non-follow reply until verified. Rate-limited/transient failures are retried by the queue; permanent failures close the funnel; mid-send crashes are healed by the sweep; the sweep also expires `awaiting_cta` with the 7-day private-reply window and closes funnels silent for 24h; **delivery closes every pending funnel of that user** (thread fully mirrored in the Inbox either way).
 
 ---
 
@@ -356,16 +379,16 @@ app/Modules/Instagram/
 ├── InstagramServiceProvider.php     # auto-discovered; routes/webhook/scheduler/config
 ├── routes/web.php                   # client panel routes (app/instagram/*)
 ├── config → ../../config/instagram.php
-├── database/migrations/             # 4 tables + media_ids (+ shared contacts.avatar TEXT migration)
+├── database/migrations/             # 4 tables + media_ids + CTA/gate button-text columns (2026_09_18_000400) + shared contacts.avatar TEXT migration
 ├── Models/                          # InstagramAccount, CommentAutomation, FunnelParticipant, CommentAutomationLog
 ├── Services/
 │   ├── InstagramAuthService         # NEW — IG-Login OAuth: authorize, exchange, 60-day refresh, /me
-│   ├── CommentFunnelService         # state machine + gate loop + quick replies
+│   ├── CommentFunnelService         # state machine + 2-step button funnel + uncapped gate loop
 │   ├── PrivateReplyService / LeadDeliveryService / KeywordMatcher
 │   ├── InboxMirrorService / FunnelTimeoutService
 │   └── InstagramGraphClient         # host routing: graph.instagram.com (IG-login) vs graph.facebook.com (legacy)
 ├── Jobs/
-│   ├── ProcessInstagramCommentJob / ProcessInstagramDmJob / CheckFunnelTimeoutsJob
+│   ├── ProcessInstagramCommentJob / ProcessInstagramDmJob / CheckFunnelTimeoutsJob  # sweeps: 7-day expiry (incl. awaiting_cta) + 24h silence
 │   └── RefreshInstagramLoginTokensJob   # NEW — daily 60-day token renewal
 └── Http/Controllers/
     ├── ConnectController            # IG-Login redirect-back + persistence
@@ -373,8 +396,8 @@ app/Modules/Instagram/
     ├── AutomationController (CRUD + wizard presets + recent-posts)
     └── LogsController
 
-resources/js/Pages/Instagram/        # Setup.jsx (Connect-with-Instagram button), Automations/{Index,Edit}.jsx (3-step wizard), Logs/Index.jsx
-tests/Feature/Instagram/             # InstagramFunnelTest.php + InstagramInboundDmTest.php (run on PHP 8.2+)
+resources/js/Pages/Instagram/        # Setup.jsx (Connect-with-Instagram button), Automations/{Index,Edit}.jsx (3-step wizard: premade defaults + Instagram-style 2-step DM preview beside the form), Logs/Index.jsx
+tests/Feature/Instagram/             # InstagramFunnelTest + InstagramInboundDmTest + RecentPostsPaginationTest (run on PHP 8.2+)
 ```
 
 ## Removal / Deletion Drill
