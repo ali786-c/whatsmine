@@ -129,6 +129,20 @@ class LeadDeliveryService
                 'delivered_at' => now(),
             ])->save();
 
+            // Delivery is the funnel's finish line: close any OTHER pending
+            // funnels for the same person on the same account (multiple comments
+            // can leave several awaiting_* rows). Without this, an older
+            // half-finished gate re-arms on their next DM and starts the loop
+            // all over again after they already got the content.
+            FunnelParticipant::where('instagram_account_id', $participant->instagram_account_id)
+                ->where('commenter_igsid', $participant->commenter_igsid)
+                ->whereIn('stage', [FunnelParticipant::STAGE_AWAITING_CTA, FunnelParticipant::STAGE_AWAITING_FOLLOW])
+                ->where('id', '!=', $participant->id)
+                ->update([
+                    'stage' => FunnelParticipant::STAGE_CLOSED,
+                    'closed_at' => now(),
+                ]);
+
             $log(CommentAutomationLog::ACTION_DELIVERED, ['response_json' => $res]);
             InstagramLog::delivery('info', 'lead DELIVERED', ['participant_id' => $participant->id, 'comment_id' => $participant->comment_id, 'type' => $type, 'message_id' => $messageId]);
 

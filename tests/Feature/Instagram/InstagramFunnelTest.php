@@ -695,6 +695,57 @@ class InstagramFunnelTest extends TestCase
         Http::assertSentCount(3);
     }
 
+    public function test_funnel_stops_after_final_delivery_even_if_user_unfollows(): void
+    {
+        // The reported glitch: user got the delivery, unfollowed, replied again —
+        // the pending gate re-armed and started the flow over. After delivery the
+        // funnel must be FINISHED for this person.
+        Http::fake([
+            'graph.facebook.com/*/17841400000001/messages' => Http::sequence()
+                ->push(['message_id' => 'msg-1'], 200)   // private reply (hook + CTA)
+                ->push(['message_id' => 'msg-2'], 200)   // CTA tap → gate template
+                ->push(['message_id' => 'msg-3'], 200)   // confirm → delivery
+                ->push(['message_id' => 'msg-4'], 200),  // nothing more should reference the gate
+            'graph.facebook.com/*/igsid-customer*' => Http::sequence()
+                ->push(['is_user_follow_business' => true], 200)
+                ->push(['is_user_follow_business' => false], 200),
+        ]);
+
+        $this->automation([
+            'follow_gate' => true,
+            'reply_keyword' => 'DONE',
+            'delivery' => ['type' => 'text', 'text' => 'Here is your file!'],
+        ]);
+
+        $funnel = app(CommentFunnelService::class);
+        $funnel->handleComment('17841400000001', $this->commentValue());
+
+        $ctaTap = fn (string $mid) => [
+            'sender' => ['id' => 'igsid-customer'],
+            'recipient' => ['id' => '17841400000001'],
+            'message' => ['mid' => $mid, 'quick_reply' => ['payload' => '__CTA_TAP__'], 'text' => 'Send me the link'],
+        ];
+
+        // Step 1 → gate → verified confirm → DELIVERED.
+        $this->assertTrue($funnel->handleDmReply('17841400000001', $ctaTap('dm-cta')));
+        $this->assertTrue($funnel->handleDmReply('17841400000001', [
+            'sender' => ['id' => 'igsid-customer'],
+            'recipient' => ['id' => '17841400000001'],
+            'postback' => ['payload' => 'DONE', 'title' => "I'm following ✅"],
+        ]));
+        $this->assertSame(FunnelParticipant::STAGE_DELIVERED, FunnelParticipant::where('comment_id', 'comment-123')->firstOrFail()->stage);
+
+        // They unfollow and press the CTA again (old pending thread or a new
+        // comment on the same post) — the funnel must NOT restart the gate.
+        $this->assertTrue($funnel->handleDmReply('17841400000001', $ctaTap('dm-again')));
+
+        $this->assertSame(
+            FunnelParticipant::STAGE_DELIVERED,
+            FunnelParticipant::where('comment_id', 'comment-123')->firstOrFail()->stage,
+        );
+        Http::assertSentCount(3); // no fourth send — no re-gate after delivery
+    }
+
     public function test_follow_check_can_be_disabled_via_config(): void
     {
         config(['instagram.follow_check' => false]);

@@ -310,6 +310,19 @@ use Illuminate\Database\QueryException;
         // marker) or the user's FIRST typed reply opens the follow gate. The
         // gate message + Visit profile + "I'm following" template goes out
         // here — exactly the competitor UX from the reference screenshots.
+        // EXCEPTION: someone who ALREADY received the content (then unfollowed
+        // or re-commented) must never be re-gated — their content is delivered.
+        if ($participant->stage === FunnelParticipant::STAGE_AWAITING_CTA
+            && FunnelParticipant::where('instagram_account_id', $participant->instagram_account_id)
+                ->where('commenter_igsid', $participant->commenter_igsid)
+                ->where('stage', FunnelParticipant::STAGE_DELIVERED)
+                ->exists()) {
+            InstagramLog::dm('info', 'gate: user already DELIVERED — skipping re-gate, funnel complete', ['participant_id' => $participant->id]);
+            $participant->forceFill(['stage' => FunnelParticipant::STAGE_DELIVERED, 'delivered_at' => now()])->save();
+
+            return true;
+        }
+
         if ($participant->stage === FunnelParticipant::STAGE_AWAITING_CTA) {
             InstagramLog::dm('info', 'gate: CTA pressed (or first typed reply) — sending follow gate template', ['participant_id' => $participant->id, 'text' => mb_substr($text, 0, 120)]);
             $this->sendGateTemplate($account, $participant, $automation, $senderId, $event);
