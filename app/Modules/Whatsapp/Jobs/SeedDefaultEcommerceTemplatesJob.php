@@ -4,6 +4,7 @@ namespace App\Modules\Whatsapp\Jobs;
 
 use App\Modules\Whatsapp\Models\WhatsappBusinessAccount;
 use App\Modules\Whatsapp\Models\WhatsappTemplate;
+use App\Modules\Whatsapp\Services\CloudApiClient;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Log;
@@ -136,16 +137,65 @@ class SeedDefaultEcommerceTemplatesJob implements ShouldQueue
             ],
         ];
 
+        $client = CloudApiClient::forWorkspace($waba->workspace_id);
+        if (! $client) {
+            Log::warning('SeedDefaultEcommerceTemplatesJob: No Cloud API Client configured.');
+            return;
+        }
+
         foreach ($templates as $t) {
-            WhatsappTemplate::firstOrCreate(
-                ['waba_id' => $waba->waba_id, 'name' => $t['name'], 'language' => 'en'],
-                [
-                    'workspace_id' => $waba->workspace_id,
+            $existing = WhatsappTemplate::where('waba_id', $waba->waba_id)
+                ->where('name', $t['name'])
+                ->first();
+
+            if ($existing && $existing->meta_template_id) {
+                continue;
+            }
+
+            try {
+                $metaPayload = [
+                    'name' => $t['name'],
+                    'language' => 'en_US',
                     'category' => $t['category'],
-                    'status' => 'PENDING',
                     'components' => $t['components'],
-                ]
-            );
+                ];
+
+                $resp = $client->submitTemplate($waba->waba_id, $metaPayload);
+                $status = 'PENDING';
+                $metaId = null;
+                $rejectionReason = null;
+
+                if ($resp->successful()) {
+                    $metaId = $resp->json('id');
+                } else {
+                    $status = 'REJECTED';
+                    $rejectionReason = $resp->json('error.error_user_msg') ?? $resp->json('error.message') ?? 'Meta rejected template.';
+                    Log::warning("Failed to seed template {$t['name']}", ['error' => $rejectionReason]);
+                }
+
+                if ($existing) {
+                    $existing->update([
+                        'status' => $status,
+                        'meta_template_id' => $metaId,
+                        'rejection_reason' => $rejectionReason,
+                        'components' => $t['components'],
+                    ]);
+                } else {
+                    WhatsappTemplate::create([
+                        'workspace_id' => $waba->workspace_id,
+                        'waba_id' => $waba->waba_id,
+                        'name' => $t['name'],
+                        'language' => 'en_US',
+                        'category' => $t['category'],
+                        'status' => $status,
+                        'components' => $t['components'],
+                        'meta_template_id' => $metaId,
+                        'rejection_reason' => $rejectionReason,
+                    ]);
+                }
+            } catch (\Exception $e) {
+                Log::error("Exception seeding template {$t['name']}: " . $e->getMessage());
+            }
         }
 
         Log::info('Default E-Commerce templates seeded', ['workspace_id' => $waba->workspace_id, 'waba_id' => $waba->waba_id]);

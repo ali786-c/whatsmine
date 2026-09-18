@@ -17,6 +17,15 @@ use Illuminate\Support\Facades\Log;
 
 class WhatsappSetupController extends Controller
 {
+    public function seedTemplates(Request $request, WhatsappBusinessAccount $waba): RedirectResponse
+    {
+        $workspaceId = $request->user()->current_workspace_id ?? $request->user()->workspace_id;
+        $this->authorizeWaba($waba, $workspaceId);
+
+        \App\Modules\Whatsapp\Jobs\SeedDefaultEcommerceTemplatesJob::dispatch($waba->id)->onQueue('whatsapp');
+
+        return back()->with('success', 'Default E-Commerce templates are being pushed to Meta. Please wait a few moments and then click Sync from Meta in the Templates tab to see their status.');
+    }
     public function syncPhoneNumbers(Request $request, WhatsappBusinessAccount $waba): RedirectResponse
     {
         $workspaceId = $request->user()->current_workspace_id ?? $request->user()->workspace_id;

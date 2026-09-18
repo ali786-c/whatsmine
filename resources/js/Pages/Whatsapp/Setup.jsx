@@ -45,7 +45,7 @@ function StatusBadge({ status }) {
     );
 }
 
-function WabaCard({ waba, webhookUrl, webhookToken, activePhoneIds, onSyncTemplates }) {
+function WabaCard({ waba, webhookUrl, webhookToken, activePhoneIds, onSyncTemplates, onSeedTemplates, seedingTemplates }) {
     const { t } = useTranslation();
     const [confirmDelete, setConfirmDelete] = useState(false);
     const [deleting, setDeleting] = useState(false);
@@ -113,6 +113,14 @@ function WabaCard({ waba, webhookUrl, webhookToken, activePhoneIds, onSyncTempla
                     </div>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
+                    <button
+                        type="button"
+                        onClick={() => onSeedTemplates(waba)}
+                        disabled={seedingTemplates}
+                        className="flex items-center gap-1.5 rounded-lg border border-neutral-300 dark:border-neutral-600 px-3 py-1.5 text-xs text-neutral-600 dark:text-neutral-400 hover:bg-neutral-50 dark:hover:bg-neutral-800 transition disabled:opacity-50"
+                    >
+                        <RefreshCw className={`h-3.5 w-3.5 ${seedingTemplates ? 'animate-spin' : ''}`} /> {seedingTemplates ? 'Seeding...' : 'Seed Default Templates'}
+                    </button>
                     <button
                         type="button"
                         onClick={() => onSyncTemplates(waba)}
@@ -320,6 +328,16 @@ export default function WhatsappSetup({ wabas, webhookUrl, webhookTokensByWaba, 
     const flash = props.flash ?? {};
 
     const [syncingTemplates, setSyncingTemplates] = useState(null);
+    const [seedingTemplates, setSeedingTemplates] = useState(null);
+
+    const seedTemplates = (waba) => {
+        if (!confirm('Are you sure you want to push default e-commerce templates to Meta?')) return;
+        setSeedingTemplates(waba.id);
+        router.post(route('client.whatsapp.setup.seed-templates', { waba: waba.id }), {}, {
+            preserveScroll: true,
+            onFinish: () => setSeedingTemplates(null),
+        });
+    };
 
     const syncTemplates = (waba) => {
         setSyncingTemplates(waba.id);
@@ -362,6 +380,8 @@ export default function WhatsappSetup({ wabas, webhookUrl, webhookTokensByWaba, 
                                 activePhoneIds={channelAccountPhoneIdsByWaba?.[waba.id] ?? []}
                                 onSyncTemplates={() => syncTemplates(waba)}
                                 syncingTemplates={syncingTemplates === waba.id}
+                                onSeedTemplates={() => seedTemplates(waba)}
+                                seedingTemplates={seedingTemplates === waba.id}
                             />
                         ))}
                     </div>
