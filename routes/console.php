@@ -45,6 +45,12 @@ Schedule::job(new DispatchScheduledPostsJob, 'social')
     ->name('dispatch-social-posts')
     ->withoutOverlapping();
 
+// Resume Instagram DM flow waits whose timeout elapsed (every minute)
+Schedule::job(new \App\Modules\Instagram\Jobs\ResumeFlowWaitsJob, 'instagram')
+    ->everyMinute()
+    ->name('resume-instagram-flow-waits')
+    ->withoutOverlapping();
+
 // Refresh expiring social OAuth tokens daily
 Schedule::job(new RefreshSocialTokensJob, 'social')
     ->dailyAt('02:00')

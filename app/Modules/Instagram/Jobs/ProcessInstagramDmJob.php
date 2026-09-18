@@ -3,6 +3,7 @@
 namespace App\Modules\Instagram\Jobs;
 
 use App\Modules\Instagram\Services\CommentFunnelService;
+use App\Modules\Instagram\Services\FlowEngine;
 use App\Modules\Instagram\Services\InstagramLog;
 use App\Modules\Shared\Models\ChannelAccount;
 use App\Modules\Inbox\Services\InstagramDriver;
@@ -40,8 +41,16 @@ class ProcessInstagramDmJob implements ShouldQueue
         private readonly array $event,
     ) {}
 
-    public function handle(CommentFunnelService $funnel): void
+    public function handle(CommentFunnelService $funnel, FlowEngine $flows): void
     {
+        // Visual DM flows own the participant first — their inbound messages
+        // must never leak into the classic funnel or the Inbox pipeline.
+        $account = \App\Modules\Instagram\Models\InstagramAccount::where('ig_user_id', $this->entryId)->first();
+
+        if ($account !== null && $flows->handleInbound($account, $this->event)) {
+            return;
+        }
+
         $handledByFunnel = $funnel->handleDmReply($this->entryId, $this->event);
 
         if ($handledByFunnel) {

@@ -4,6 +4,7 @@ namespace App\Modules\Instagram\Services;
 
 use App\Modules\Instagram\Exceptions\InstagramGraphException;
 use App\Modules\Instagram\Models\CommentAutomationLog;
+use App\Modules\Instagram\Models\Flow;
 use App\Modules\Instagram\Models\FunnelParticipant;
 
 /**
@@ -54,6 +55,37 @@ class LeadDeliveryService
         ], $extra));
 
         $type = (string) ($delivery['type'] ?? 'text');
+
+        // Visual DM flow delivery: hand the conversation to the FlowEngine and
+        // mark the classic funnel delivered — the flow now owns this thread.
+        if ($type === 'flow' && filled($delivery['flow_id'] ?? null)) {
+            $flow = Flow::find((int) $delivery['flow_id']);
+
+            if ($flow && $flow->triggerNode() !== null) {
+                $started = app(FlowEngine::class)->startFromComment(
+                    $participant->account,
+                    $participant->commenter_igsid,
+                    $participant->username,
+                    $flow,
+                    $participant->comment_id,
+                    $participant->media_id,
+                );
+
+                if ($started) {
+                    $participant->forceFill([
+                        'stage' => FunnelParticipant::STAGE_DELIVERED,
+                        'delivered_at' => now(),
+                    ])->save();
+                    $log(CommentAutomationLog::ACTION_DELIVERED, ['response_json' => ['handed_to_flow' => $flow->id]]);
+
+                    return true;
+                }
+            }
+
+            $log(CommentAutomationLog::ACTION_DELIVERY_FAILED, ['error' => 'flow delivery: flow missing, draft or without trigger node']);
+
+            return false;
+        }
 
         InstagramLog::delivery('info', 'delivering lead follow-up', [
             'participant_id' => $participant->id,

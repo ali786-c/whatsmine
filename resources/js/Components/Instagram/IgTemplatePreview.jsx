@@ -153,3 +153,25 @@ export function IgTemplateBody({ payload, isOut = false }) {
 }
 
 export default IgTemplateBody;
+
+/**
+ * Flow-builder preview: renders the OUTGOING step of a DM flow (plain text OR
+ * saved/inline template) inside the same mock Instagram DM screen used by the
+ * template editor, so the agent sees exactly what the customer receives at
+ * that node.
+ */
+export function IgFlowStepPreview({ step, username = 'yourbusiness' }) {
+    if (!step) {
+        return (
+            <div className="flex h-full min-h-[220px] items-center justify-center rounded-2xl bg-black text-[11px] text-neutral-500 ring-1 ring-neutral-200 dark:ring-neutral-800">
+                Select a message node to preview
+            </div>
+        );
+    }
+
+    const payload = step.kind === 'template'
+        ? (step.definition ?? { template_type: 'button', text: '(saved template)', buttons: [] })
+        : { template_type: 'button', text: step.text || '(empty message)', buttons: [] };
+
+    return <IgDmPreview payload={payload} username={username} />;
+}

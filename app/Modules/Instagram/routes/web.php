@@ -2,6 +2,7 @@
 
 use App\Modules\Instagram\Http\Controllers\AutomationController;
 use App\Modules\Instagram\Http\Controllers\ConnectController;
+use App\Modules\Instagram\Http\Controllers\FlowController;
 use App\Modules\Instagram\Http\Controllers\LogsController;
 use App\Modules\Instagram\Http\Controllers\TemplateController;
 use Illuminate\Support\Facades\Route;
@@ -24,6 +25,15 @@ Route::patch('/automations/{automation}/toggle', [AutomationController::class, '
 Route::delete('/automations/{automation}', [AutomationController::class, 'destroy'])->name('automations.destroy');
 
 Route::get('/logs', [LogsController::class, 'index'])->name('logs.index');
+
+// Visual DM flow builder (node/edge playground)
+Route::get('/flows', [FlowController::class, 'index'])->name('flows.index');
+Route::get('/flows/create', [FlowController::class, 'create'])->name('flows.create');
+Route::get('/flows/{flow}/edit', [FlowController::class, 'edit'])->name('flows.edit');
+Route::post('/flows', [FlowController::class, 'store'])->name('flows.store');
+Route::put('/flows/{flow}', [FlowController::class, 'update'])->name('flows.update');
+Route::patch('/flows/{flow}/toggle', [FlowController::class, 'toggle'])->name('flows.toggle');
+Route::delete('/flows/{flow}', [FlowController::class, 'destroy'])->name('flows.destroy');
 
 // Saved message templates (generic carousel / button) for the Inbox composer
 // plus a full-page gallery/editor under the Instagram menu.

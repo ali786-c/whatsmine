@@ -46,6 +46,8 @@ class InstagramLog
 
     public const TIMEOUT = 'instagram_timeout';
 
+    public const FLOW = 'instagram_flow';
+
     public static function webhook(string $level, string $message, array $ctx = []): void
     {
         self::write(self::WEBHOOK, $level, $message, $ctx);
@@ -74,6 +76,11 @@ class InstagramLog
     public static function funnel(string $level, string $message, array $ctx = []): void
     {
         self::write(self::FUNNEL, $level, $message, $ctx);
+    }
+
+    public static function flow(string $level, string $message, array $ctx = []): void
+    {
+        self::write(self::FLOW, $level, $message, $ctx);
     }
 
     public static function mirror(string $level, string $message, array $ctx = []): void

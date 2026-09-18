@@ -4,7 +4,6 @@ namespace App\Modules\Instagram\Services;
 
 use App\Events\ContactCreated;
 use App\Events\MessageReceived;
-use App\Modules\Instagram\Models\FunnelParticipant;
 use App\Modules\Shared\Models\ChannelAccount;
 use App\Modules\Shared\Models\Contact;
 use App\Modules\Shared\Models\Conversation;
@@ -29,10 +28,13 @@ class InboxMirrorService
     }
 
     /**
-     * Record an outbound funnel message (private reply / delivery / nudge) on the
-     * mirrored thread.
+     * Record an outbound funnel/flow message on the mirrored thread.
+     *
+     * Duck-typed on the participant shape (commenter_igsid, username, account,
+     * workspace_id) so BOTH FunnelParticipant (classic funnel) and
+     * FlowParticipant (visual DM flows) mirror onto the same thread.
      */
-    public function mirrorOutbound(FunnelParticipant $participant, string $body, ?string $providerMessageId = null, array $payload = []): void
+    public function mirrorOutbound(object $participant, string $body, ?string $providerMessageId = null, array $payload = []): void
     {
         if (! $this->enabled()) {
             return;
@@ -69,8 +71,9 @@ class InboxMirrorService
     /**
      * Record an inbound DM reply from the participant and dispatch
      * MessageReceived so existing Inbox automations/chatbots can react.
+     * Duck-typed — see mirrorOutbound().
      */
-    public function mirrorInbound(FunnelParticipant $participant, string $body, ?string $mid = null, array $payload = []): void
+    public function mirrorInbound(object $participant, string $body, ?string $mid = null, array $payload = []): void
     {
         if (! $this->enabled()) {
             return;
@@ -114,7 +117,7 @@ class InboxMirrorService
     /**
      * @return array{0: Contact, 1: Conversation}
      */
-    private function resolveThread(FunnelParticipant $participant): array
+    private function resolveThread(object $participant): array
     {
         $workspaceId = (int) $participant->workspace_id;
         $igsid = $participant->commenter_igsid;
@@ -164,7 +167,7 @@ class InboxMirrorService
         return [$contact, $conversation];
     }
 
-    private function logMirrorFailure(string $direction, FunnelParticipant $participant, \Throwable $e): void
+    private function logMirrorFailure(string $direction, object $participant, \Throwable $e): void
     {
         InstagramLog::mirror('warning', 'inbox mirroring failed (funnel unaffected)', [
             'direction' => $direction,

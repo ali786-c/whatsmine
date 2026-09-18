@@ -198,14 +198,45 @@ Committed to the repo (`public/build`) — **no npm needed on the VPS**.
 
 ```bash
 php artisan instagram:diagnose        # full pipeline check — start HERE when anything breaks
+php artisan instagram:funnel          # live funnel + flow participant states, last 15 automation actions
 php artisan migrate:status | grep instagram
 php artisan route:list | grep instagram
 ```
+
+> **Testing the follow-gate / flows yourself?** Meta does NOT webhook messages an
+> account sends to itself — replying "Done" from the OWNER account never triggers
+> anything. Always test from the second account that commented.
 
 Webhook endpoint probe (should print `hello`):
 ```bash
 curl "https://wa.careerinpak.com/webhooks/instagram/<VERIFY_TOKEN>?hub.mode=subscribe&hub.verify_token=<VERIFY_TOKEN>&hub.challenge=hello"
 ```
+
+---
+
+## Part E2 — Visual DM Flows (node playground)
+
+Instagram menu → **DM Flows**: drag-and-drop conversation builder on the canvas
+(ReactFlow). Nodes:
+
+| Node | What it does | Outgoing handles |
+|---|---|---|
+| **Trigger** | Comment starts the flow | next |
+| **Message** | Send text or a saved DM Template | next |
+| **Wait for reply** | Pause for the user's next message (timeout config) | next (+ timeout edge) |
+| **Condition** | `Followed?` (Graph `is_user_follow_business`, fail-open) or keyword match | YES/NO · MATCH/ELSE |
+| **End** | Complete; thread stays open in Inbox for humans | — |
+
+**Attach to an automation:** Comment Automations → delivery type → the flow runs
+instead of the classic text/link/file delivery (funnel hands the thread to the
+flow engine). Example flow: Trigger → Template "Did you follow?" (Yes/No
+postback buttons) → Wait → Condition Followed? → YES: deliver · NO: re-ask → Wait.
+
+Engine guarantees: 24h window asserted before every non-first send, one active
+flow per person per flow, max 25 nodes/run + 3 retries, 7-day expiry, wait
+timeouts swept every minute (`resume-instagram-flow-waits` on the `instagram`
+queue). Flow button postbacks (`FLOW:auto:…`) route back into the flow and are
+keyword-matched automatically.
 
 ---
 
