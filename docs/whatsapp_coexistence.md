@@ -189,6 +189,26 @@ If the request is successful, the API responds with the same `{"messaging_produc
 
 Onboarded businesses are still able to use the WhatsApp Business app and supported companion devices to send and receive messages. Each time a business sends a message with one of these apps, it triggers an `smb_message_echoes` webhook, which you must digest and display in the contact message thread history in your app.
 
+## Message mirroring in this app (SaaS inbox)
+
+Once a coexistence number is connected, the customer's conversation in the SaaS inbox mirrors both directions of messaging automatically:
+
+| Direction | How it arrives | Where it lands in the inbox |
+| --- | --- | --- |
+| Customer → business (inbound) | `messages` webhook field (`type: text`, media, etc.) | Customer's conversation, `direction: 'in'`, unread count +1, `MessageReceived` event fires (automations/chatbots react) |
+| Business → customer, sent **from the SaaS** | Cloud API send; delivery/read updates arrive as `statuses` | Customer's conversation, `direction: 'out'` |
+| Business → customer, sent **from the WhatsApp Business mobile app** | `smb_message_echoes` webhook field (payload array is `message_echoes`) | **Same customer's conversation**, `direction: 'out'`, `sent_by: 'human'`, contact source `whatsapp_echo` |
+
+Key implementation rules (see `WhatsappDriver::processInboundMessage()`):
+
+- An echo's `from` is the **business's own number** and its `to` is the customer. The driver detects this (`smb_message_echoes` field, or `from` equal to `metadata.display_phone_number`) and files the message under the **customer's** contact/conversation — never under the business's own number. A ghost conversation for the business number must not be created.
+- Echoes raise **no unread count** and do not touch `last_inbound_at` / `first_response_at` — the business sent the message, nobody is waiting for a reply.
+- Echoes dispatch `MessageSent` instead of `MessageReceived`, so chatbots, auto-replies, and automation funnels **never trigger on the business's own app replies** (self-reply-loop protection).
+- Echo idempotency uses the same `WebhookIdempotencyService` guard as inbound messages (key `whatsapp_msg` on the Meta message ID), so mirrored Cloud API messages and their echo duplicates collapse into one row.
+- A `to`-less echo is logged and skipped, never crashes the webhook.
+
+> Historical note: builds before the direction-aware-echo fix stored echoes as inbound messages on the business's own number, creating ghost conversations. Messages stored during that window live in the business-number conversation and may need a one-time cleanup/merge.
+
 ## Reporting conversion activity
 
 Onboarded business customers may run Click to WhatsApp ads, so report purchase/lead-gen signals on behalf of the business using the Conversions API. See Meta's "Conversions API for business messaging" documentation.

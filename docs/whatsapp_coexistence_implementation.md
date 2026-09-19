@@ -70,9 +70,24 @@ When a business owner manually replies to a customer via their mobile WhatsApp B
 - **Payload shape:** the webhook field is `smb_message_echoes`, but the array inside the payload is `message_echoes`.
 - **Logic:** the driver merges `$value['messages']` and `$value['message_echoes']` into a single array before processing, so inbound messages and manual outbound echoes are digested through the same code path.
 
-**Known caveats:**
+**Direction-aware echo handling (current behavior):**
 
-- **Fixed — direction-aware echoes:** `processInboundMessage()` now detects outgoing echoes (`smb_message_echoes` field, or `from` equal to the business's `display_phone_number`) and stores them with `direction: 'out'`, `sent_by: 'human'`, source `whatsapp_echo`, on the **customer's** conversation (`msg.to`). No unread bump, `last_inbound_at` untouched, and `MessageSent` is dispatched instead of `MessageReceived`, so chatbots/automations never react to the business's own app replies. Recipient-less echoes are skipped gracefully. Covered by `tests/Feature/Meta/WhatsappCoexistenceEchoTest.php`.
+`processInboundMessage(array $value, array $msg, string $wabaId, bool $isEcho = false)` detects outgoing echoes two ways (belt and braces):
+
+1. the message arrived on the `smb_message_echoes` field, or
+2. `msg.from` equals `value.metadata.display_phone_number` (the business's own number).
+
+For an outgoing echo:
+
+- the **customer** is `msg.to` — the contact upsert and `Conversation::firstOrCreate` use the customer's number, so the message lands in the customer's existing thread;
+- the message row is created with `direction: 'out'`, `sent_by: 'human'`, contact source `whatsapp_echo`;
+- the conversation gets `last_message_at` + `status: open` only — **no unread bump**, `last_inbound_at` and `first_response_at` untouched;
+- **`MessageSent` is dispatched, not `MessageReceived`** — chatbots, auto-replies, and automation funnels never react to the business's own app replies (self-reply-loop protection);
+- an echo without a usable `to` is logged (`Coexistence: echo without a usable customer recipient skipped`) and skipped via `RuntimeException`, never crashing the webhook.
+
+For regular inbound messages the previous behavior is unchanged: `direction: 'in'`, unread +1, `MessageReceived` dispatched.
+
+**Regression tests:** `tests/Feature/Meta/WhatsappCoexistenceEchoTest.php` covers outbound-on-customer-conversation (and that the business number never becomes a contact), MessageSent-not-MessageReceived, duplicate-echo idempotency, and graceful skip of recipient-less echoes.
 - Inbound webhook idempotency is enforced by `WebhookIdempotencyService` on the Meta message ID (`whatsapp_msg`), so duplicate deliveries (e.g. an echo arriving for a message also mirrored by Cloud API) do not create duplicate rows.
 
 ### B. App State Sync (`smb_app_state_sync`)
@@ -143,4 +158,5 @@ In priority order:
 4. ~~**Handle echo direction** (§4A)~~ — **FIXED**: echoes now store as outbound (`direction: 'out'`) on the customer's conversation and fire `MessageSent` only.
 5. **Apply edit/revoke events** (§4E) — update or soft-delete the referenced messages instead of storing them as `unsupported`.
 6. **React to account-level events** (§4D) — flip WABA/channel status on `PARTNER_REMOVED` / `ACCOUNT_OFFBOARDED` / `ACCOUNT_RECONNECTED`.
-7. **Support chatbot decision** — coexistence requires subscribing to `smb_message_echoes`; confirm no chatbot reacts to echoed outbound messages before enabling broadly.
+7. **Support chatbot decision** — coexistence requires subscribing to `smb_message_echoes`; echo direction is now handled (§4A), so chatbots cannot fire on echoed outbound messages.
+8. **Ghost conversation cleanup** — messages stored by pre-fix builds live in the business's own-number conversation; a one-time merge/delete command would tidy those up.
