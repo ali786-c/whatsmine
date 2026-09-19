@@ -35,8 +35,8 @@ class SeedDefaultEcommerceTemplatesJob implements ShouldQueue
                     [
                         'type' => 'BUTTONS',
                         'buttons' => [
-                            ['type' => 'QUICK_REPLY', 'text' => '✅ Confirm Order'],
-                            ['type' => 'QUICK_REPLY', 'text' => '❌ Cancel Order']
+                            ['type' => 'QUICK_REPLY', 'text' => 'Confirm Order'],
+                            ['type' => 'QUICK_REPLY', 'text' => 'Cancel Order']
                         ]
                     ]
                 ],
@@ -58,7 +58,7 @@ class SeedDefaultEcommerceTemplatesJob implements ShouldQueue
                 'components' => [
                     [
                         'type' => 'BODY', 
-                        'text' => 'Great news {{1}}! Your order #{{2}} is on the way. Track it here: {{3}}', 
+                        'text' => 'Great news {{1}}! Your order #{{2}} is on the way. Track it here: {{3}} — we will notify you as soon as it is delivered.', 
                         'example' => ['body_text' => [['John', '1001', 'https://track.com/123']]]
                     ]
                 ],
@@ -102,7 +102,7 @@ class SeedDefaultEcommerceTemplatesJob implements ShouldQueue
                 'components' => [
                     [
                         'type' => 'BODY', 
-                        'text' => 'Hope you\'re loving your recent purchase! Could you take 10 seconds to leave a review? {{1}}', 
+                        'text' => 'Hope you\'re loving your recent purchase! Could you take 10 seconds to leave a review here: {{1}}? Your feedback means a lot to our small team.', 
                         'example' => ['body_text' => [['https://store.com/review']]]
                     ]
                 ],
@@ -124,13 +124,13 @@ class SeedDefaultEcommerceTemplatesJob implements ShouldQueue
                 'components' => [
                     [
                         'type' => 'BODY', 
-                        'text' => 'Hi {{1}}, we noticed you left something in your cart! Complete your purchase of {{2}} easily here: {{3}}', 
+                        'text' => 'Hi {{1}}, we noticed you left something in your cart! Complete your purchase of {{2}} easily here: {{3}} — your items are reserved for a limited time.', 
                         'example' => ['body_text' => [['John', '$50.00', 'https://store.com/cart/recovery']]]
                     ],
                     [
                         'type' => 'BUTTONS',
                         'buttons' => [
-                            ['type' => 'URL', 'text' => 'Complete Purchase', 'url' => 'https://example.com']
+                            ['type' => 'URL', 'text' => 'Complete Purchase', 'url' => 'https://store.com/cart/recovery']
                         ]
                     ]
                 ],
