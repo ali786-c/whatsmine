@@ -3,6 +3,7 @@
 namespace App\Modules\Whatsapp\Services;
 
 use App\Events\MessageReceived;
+use App\Events\MessageSent;
 use App\Events\MessageStatusUpdated;
 use App\Modules\Broadcasting\Models\CampaignRecipient;
 use App\Modules\Shared\Contracts\ChannelDriverInterface;
@@ -114,11 +115,13 @@ class WhatsappDriver implements ChannelDriverInterface
                     continue;
                 }
 
-                // Treat message_echoes the same as messages to show outbound manual messages
+                // Treat message_echoes the same as messages to show outbound manual messages,
+                // but store them as OUTBOUND from the customer's conversation (direction: out).
+                $isEchoField = $field === 'smb_message_echoes';
                 $messagesToProcess = array_merge($value['messages'] ?? [], $value['message_echoes'] ?? []);
                 foreach ($messagesToProcess as $msg) {
                     try {
-                        $processed[] = $this->processInboundMessage($value, $msg, $wabaId);
+                        $processed[] = $this->processInboundMessage($value, $msg, $wabaId, $isEchoField);
                     } catch (\Throwable $e) {
                         Log::error('WhatsApp webhook processing failed', ['error' => $e->getMessage(), 'msg' => $msg]);
                         \App\Services\MetaLogger::log("[Inbound Message Error]", [
@@ -232,7 +235,7 @@ class WhatsappDriver implements ChannelDriverInterface
         return true;
     }
 
-    private function processInboundMessage(array $value, array $msg, string $wabaId = ''): Message
+    private function processInboundMessage(array $value, array $msg, string $wabaId = '', bool $isEcho = false): Message
     {
         $msgId = $msg['id'] ?? null;
 
@@ -262,6 +265,21 @@ class WhatsappDriver implements ChannelDriverInterface
 
         $phoneId = $value['metadata']['phone_number_id'] ?? '';
         $fromPhone = $msg['from'] ?? '';
+        $displayPhone = preg_replace('/\D/', '', (string) ($value['metadata']['display_phone_number'] ?? ''));
+
+        // Coexistence echo: the business sent this message from the WhatsApp Business app.
+        // 'from' is the business's own number; the customer is the 'to' number.
+        $isOutgoingEcho = $isEcho
+            || ($fromPhone !== '' && $displayPhone !== '' && $fromPhone === $displayPhone);
+
+        if ($isOutgoingEcho) {
+            $toPhone = preg_replace('/\D/', '', (string) ($msg['to'] ?? ''));
+            if ($toPhone === '' || $toPhone === $displayPhone) {
+                Log::warning('Coexistence: echo without a usable customer recipient skipped', ['msg' => $msg]);
+                throw new \RuntimeException('Echo message without customer recipient');
+            }
+            $fromPhone = $toPhone; // downstream contact/conversation use the CUSTOMER's number
+        }
 
         $channelAccount = ChannelAccount::where('phone_number_id', $phoneId)
             ->where('channel', 'whatsapp')
@@ -310,7 +328,7 @@ class WhatsappDriver implements ChannelDriverInterface
         $contact = $this->contactService->upsert($workspaceId, [
             'phone_e164' => '+'.$fromPhone,
             'opt_in_whatsapp' => true,
-            'source' => 'whatsapp_inbound',
+            'source' => $isOutgoingEcho ? 'whatsapp_echo' : 'whatsapp_inbound',
         ]);
 
         $conversation = Conversation::firstOrCreate(
@@ -361,7 +379,7 @@ class WhatsappDriver implements ChannelDriverInterface
 
         $message = Message::create([
             'conversation_id' => $conversation->id,
-            'direction' => 'in',
+            'direction' => $isOutgoingEcho ? 'out' : 'in',
             'channel' => 'whatsapp',
             'type' => in_array($type, $allowedTypes, true) ? $type : 'unsupported',
             'payload' => $msg,
@@ -372,19 +390,30 @@ class WhatsappDriver implements ChannelDriverInterface
             'sent_at' => now()->createFromTimestamp($msg['timestamp'] ?? time()),
         ]);
 
-        $conversation->update([
-            'last_message_at' => $message->sent_at,
-            'status' => 'open',
-            'unread_count' => $conversation->unread_count + 1,
-            'last_inbound_at' => $message->sent_at,
-            // If contact replies after we responded, reset first_response_at for next cycle
-            'first_response_at' => $conversation->first_response_at && $conversation->last_inbound_at
-                ? ($message->sent_at > $conversation->first_response_at ? null : $conversation->first_response_at)
-                : $conversation->first_response_at,
-        ]);
+        if ($isOutgoingEcho) {
+            // Business's own app message — no unread bump, no inbound timestamps,
+            // and NO MessageReceived so automations/chatbots never react to it.
+            $conversation->update([
+                'last_message_at' => $message->sent_at,
+                'status' => 'open',
+            ]);
 
-        // Fire typed event for automations / AI
-        MessageReceived::dispatch($message);
+            MessageSent::dispatch($message);
+        } else {
+            $conversation->update([
+                'last_message_at' => $message->sent_at,
+                'status' => 'open',
+                'unread_count' => $conversation->unread_count + 1,
+                'last_inbound_at' => $message->sent_at,
+                // If contact replies after we responded, reset first_response_at for next cycle
+                'first_response_at' => $conversation->first_response_at && $conversation->last_inbound_at
+                    ? ($message->sent_at > $conversation->first_response_at ? null : $conversation->first_response_at)
+                    : $conversation->first_response_at,
+            ]);
+
+            // Fire typed event for automations / AI
+            MessageReceived::dispatch($message);
+        }
 
         \App\Services\MetaLogger::log('[Inbox Inbound Message Saved]', [
             'conversation_id' => $conversation->id,

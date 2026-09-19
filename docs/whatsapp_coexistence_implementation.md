@@ -72,7 +72,7 @@ When a business owner manually replies to a customer via their mobile WhatsApp B
 
 **Known caveats:**
 
-- `processInboundMessage()` does not branch on echo direction — it creates every message with `direction: 'in'` and fires `MessageReceived`. Outbound echoes therefore appear as inbound messages in the CRM, and any automation listening to `MessageReceived` (chatbots, auto-replies) can trigger on the business's *own* app replies — a self-reply loop risk. Filter on `direction` and/or the `to` field before automating. (The same class of bug is documented for Instagram echoes in `docs/instagram.md`.)
+- **Fixed — direction-aware echoes:** `processInboundMessage()` now detects outgoing echoes (`smb_message_echoes` field, or `from` equal to the business's `display_phone_number`) and stores them with `direction: 'out'`, `sent_by: 'human'`, source `whatsapp_echo`, on the **customer's** conversation (`msg.to`). No unread bump, `last_inbound_at` untouched, and `MessageSent` is dispatched instead of `MessageReceived`, so chatbots/automations never react to the business's own app replies. Recipient-less echoes are skipped gracefully. Covered by `tests/Feature/Meta/WhatsappCoexistenceEchoTest.php`.
 - Inbound webhook idempotency is enforced by `WebhookIdempotencyService` on the Meta message ID (`whatsapp_msg`), so duplicate deliveries (e.g. an echo arriving for a message also mirrored by Cloud API) do not create duplicate rows.
 
 ### B. App State Sync (`smb_app_state_sync`)
@@ -140,7 +140,7 @@ In priority order:
 1. **Send `session_event` from the frontend** (blocking — see warning at top). Without it, coexistence onboarding takes the normal path and sync never starts.
 2. **Persist history webhooks** (§4C) — currently logged only; without this the "mirror chat history" promise of coexistence is unrealized. Buffer + async processing + age cutoff recommended.
 3. **Upsert contacts from `smb_app_state_sync`** (§4B) — currently logged only.
-4. **Handle echo direction** (§4A) — mark echoes as outbound (`direction: 'out'`, `sent_by: business_app`) and gate automations so they don't fire on the business's own replies.
+4. ~~**Handle echo direction** (§4A)~~ — **FIXED**: echoes now store as outbound (`direction: 'out'`) on the customer's conversation and fire `MessageSent` only.
 5. **Apply edit/revoke events** (§4E) — update or soft-delete the referenced messages instead of storing them as `unsupported`.
 6. **React to account-level events** (§4D) — flip WABA/channel status on `PARTNER_REMOVED` / `ACCOUNT_OFFBOARDED` / `ACCOUNT_RECONNECTED`.
 7. **Support chatbot decision** — coexistence requires subscribing to `smb_message_echoes`; confirm no chatbot reacts to echoed outbound messages before enabling broadly.
