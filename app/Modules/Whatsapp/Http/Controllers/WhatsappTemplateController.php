@@ -5,6 +5,7 @@ namespace App\Modules\Whatsapp\Http\Controllers;
 use App\Http\Controllers\Controller;
 use App\Modules\Integrations\Services\CredentialResolver;
 use App\Modules\Whatsapp\Jobs\TemplateSyncJob;
+use App\Modules\Whatsapp\Jobs\ReseedDefaultEcommerceTemplatesJob;
 use App\Modules\Whatsapp\Models\WhatsappBusinessAccount;
 use App\Modules\Whatsapp\Models\WhatsappPhoneNumber;
 use App\Modules\Whatsapp\Models\WhatsappTemplate;
@@ -308,6 +309,24 @@ class WhatsappTemplateController extends Controller
         }
 
         return response()->json(['handle' => $handle, 'format' => $format]);
+    }
+
+    /** Re-seed default ecommerce templates: fix rejected, create missing, skip approved/pending. */
+    public function reseedDefaults(Request $request): RedirectResponse
+    {
+        $workspaceId = $request->user()->current_workspace_id ?? $request->user()->workspace_id;
+
+        $wabaRowIds = WhatsappBusinessAccount::where('workspace_id', $workspaceId)->pluck('id');
+
+        if ($wabaRowIds->isEmpty()) {
+            return back()->with('error', 'No WhatsApp business account connected for this workspace.');
+        }
+
+        foreach ($wabaRowIds as $id) {
+            ReseedDefaultEcommerceTemplatesJob::dispatch($id)->onQueue('whatsapp');
+        }
+
+        return back()->with('success', 'Default templates are being re-submitted to Meta (rejected ones fixed, missing ones created). Click "Sync from Meta" in a few moments to see their review status.');
     }
 
     public function sync(Request $request): RedirectResponse

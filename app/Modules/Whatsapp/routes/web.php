@@ -28,6 +28,7 @@ Route::middleware(['web', 'client-app'])->prefix('app/whatsapp')->name('client.w
     Route::get('/templates/create', [WhatsappTemplateController::class, 'create'])->name('templates.create');
     Route::post('/templates', [WhatsappTemplateController::class, 'store'])->name('templates.store');
     Route::post('/templates/sync', [WhatsappTemplateController::class, 'sync'])->name('templates.sync');
+    Route::post('/templates/reseed-defaults', [WhatsappTemplateController::class, 'reseedDefaults'])->name('templates.reseed-defaults');
     Route::post('/templates/upload-media', [WhatsappTemplateController::class, 'uploadMedia'])->name('templates.upload-media');
     Route::get('/templates/{template}/edit', [WhatsappTemplateController::class, 'edit'])->name('templates.edit');
     Route::put('/templates/{template}', [WhatsappTemplateController::class, 'update'])->name('templates.update');

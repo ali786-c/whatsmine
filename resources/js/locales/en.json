@@ -3613,6 +3613,8 @@
         "templates_heading": "Message Templates",
         "templates_subtitle": "Manage and submit WhatsApp message templates to Meta for approval.",
         "templates_sync": "Sync from Meta",
+        "templates_reseed": "Submit Default Templates",
+        "templates_reseed_confirm": "Re-submit the default e-commerce templates to Meta? Rejected ones will be fixed and re-sent, missing ones created, approved ones untouched.",
         "templates_new": "New Template",
         "templates_delete_confirm": "Delete template “{{name}}”? This removes it from Meta as well and cannot be undone.",
         "templates_search_placeholder": "Search templates…",

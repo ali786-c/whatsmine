@@ -2,7 +2,7 @@ import { Head, Link, router, usePage } from '@inertiajs/react';
 import ClientLayout from '@/Layouts/ClientLayout';
 import EmptyState from '@/Components/EmptyState';
 import TemplatePreview from '@/Components/TemplatePreview';
-import { Plus, RefreshCw, CheckCircle, XCircle, Clock, PauseCircle, FileText, Search, Phone, Pencil, Trash2 } from 'lucide-react';
+import { Plus, RefreshCw, CheckCircle, XCircle, Clock, PauseCircle, FileText, Search, Phone, Pencil, Trash2, Sparkles } from 'lucide-react';
 import { useState, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -40,6 +40,10 @@ export default function WhatsappTemplatesIndex({ templates, phoneNumbers = [], f
     };
 
     const handleSync = () => router.post(route('client.whatsapp.templates.sync'), {}, { preserveScroll: true });
+    const handleReseed = () => {
+        if (!window.confirm(t('whatsapp.templates_reseed_confirm'))) return;
+        router.post(route('client.whatsapp.templates.reseed-defaults'), {}, { preserveScroll: true });
+    };
     const handleStatus = (status) => applyFilters({ status: status || undefined });
     const handlePhone = (e) => applyFilters({ phone_number_id: e.target.value || undefined });
 
@@ -58,6 +62,9 @@ export default function WhatsappTemplatesIndex({ templates, phoneNumbers = [], f
                         <p className="text-sm text-neutral-500 dark:text-neutral-400 mt-0.5">{t('whatsapp.templates_subtitle')}</p>
                     </div>
                     <div className="flex gap-2">
+                        <button onClick={handleReseed} className="flex items-center gap-1.5 rounded-lg border border-brand-300 dark:border-brand-700 bg-brand-50 dark:bg-brand-900/30 px-3 py-2 text-sm text-brand-700 dark:text-brand-300 hover:bg-brand-100 dark:hover:bg-brand-900/50 transition">
+                            <Sparkles className="h-4 w-4" /> {t('whatsapp.templates_reseed')}
+                        </button>
                         <button onClick={handleSync} className="flex items-center gap-1.5 rounded-lg border border-neutral-300 dark:border-neutral-600 px-3 py-2 text-sm text-neutral-700 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-800 transition">
                             <RefreshCw className="h-4 w-4" /> {t('whatsapp.templates_sync')}
                         </button>
