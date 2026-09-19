@@ -2,6 +2,8 @@
 
 Sab documentation is folder me hai. **Aage se har nayi guide/plan/changelog yahi add hogi.**
 
+> **HTML version:** `docs/index.html` — saari docs ek professional HTML page me (sidebar, search, dark mode, print/PDF). Rebuild: `npm run docs` (nayi .md add karne ke baad `scripts/build-docs.cjs` ke `GROUPS` me uska entry add karna zaroori hai).
+
 ## Index
 
 | File | Kya hai |
