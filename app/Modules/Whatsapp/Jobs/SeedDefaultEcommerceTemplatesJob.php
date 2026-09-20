@@ -37,7 +37,12 @@ class SeedDefaultEcommerceTemplatesJob implements ShouldQueue
             return;
         }
 
-        foreach (ReseedDefaultEcommerceTemplatesJob::defaultTemplates() as $t) {
+        // Names that already exist on Meta (created via WhatsApp Manager or a
+        // previous install). Re-creating them would burn the 100-templates/hour
+        // quota on a guaranteed "duplicate name" rejection.
+        $metaNames = collect($client->fetchTemplates($waba->waba_id))->pluck('name')->all();
+
+        foreach (ReseedDefaultEcommerceTemplatesJob::defaultTemplates($waba->workspace_id) as $t) {
             $problems = TemplateValidator::problems($t);
             if ($problems !== []) {
                 Log::error("SeedDefaultEcommerceTemplatesJob: skipping {$t['name']}, payload invalid", ['problems' => $problems]);
@@ -46,9 +51,15 @@ class SeedDefaultEcommerceTemplatesJob implements ShouldQueue
 
             $existing = WhatsappTemplate::where('waba_id', $waba->waba_id)
                 ->where('name', $t['name'])
+                ->where('language', 'en_US')
                 ->first();
 
             if ($existing && $existing->meta_template_id) {
+                continue;
+            }
+
+            if (in_array($t['name'], $metaNames, true)) {
+                $this->backfillLocalRecord($waba, $t, $existing);
                 continue;
             }
 
@@ -96,6 +107,38 @@ class SeedDefaultEcommerceTemplatesJob implements ShouldQueue
             } catch (\Exception $e) {
                 Log::error("Exception seeding template {$t['name']}: " . $e->getMessage());
             }
+        }
+    }
+
+    /**
+     * The template exists on Meta but our local record is missing or has no
+     * Meta id (fresh DB, demo ghosts, partial sync). Record it locally as
+     * PENDING; "Sync from Meta" will reconcile the real status.
+     */
+    private function backfillLocalRecord(WhatsappBusinessAccount $waba, array $t, ?WhatsappTemplate $existing): void
+    {
+        $payload = [
+            'status' => 'PENDING',
+            'components' => $t['components'],
+            'rejection_reason' => null,
+        ];
+
+        try {
+            if ($existing) {
+                $existing->update($payload);
+            } else {
+                WhatsappTemplate::create($payload + [
+                    'workspace_id' => $waba->workspace_id,
+                    'waba_id' => $waba->waba_id,
+                    'name' => $t['name'],
+                    'language' => 'en_US',
+                    'category' => $t['category'],
+                ]);
+            }
+
+            Log::info("SeedDefaultEcommerceTemplatesJob: {$t['name']} already exists on Meta — local record backfilled.");
+        } catch (\Exception $e) {
+            Log::error("SeedDefaultEcommerceTemplatesJob: backfill failed for {$t['name']}: ".$e->getMessage());
         }
     }
 }

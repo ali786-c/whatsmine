@@ -43,7 +43,11 @@ class ReseedDefaultEcommerceTemplatesJob implements ShouldQueue
             return;
         }
 
-        $defaults = $this->defaultTemplates();
+        // Names that already exist on Meta — never re-create those, it would
+        // just burn the hourly quota on a guaranteed duplicate-name rejection.
+        $metaNames = collect($client->fetchTemplates($waba->waba_id))->pluck('name')->all();
+
+        $defaults = $this->defaultTemplates($waba->workspace_id);
 
         foreach ($defaults as $t) {
             $problems = TemplateValidator::problems($t);
@@ -54,11 +58,19 @@ class ReseedDefaultEcommerceTemplatesJob implements ShouldQueue
 
             $existing = WhatsappTemplate::where('waba_id', $waba->waba_id)
                 ->where('name', $t['name'])
+                ->where('language', 'en_US')
                 ->orderByRaw("CASE WHEN status = 'APPROVED' THEN 0 WHEN status = 'PENDING' THEN 1 ELSE 2 END")
                 ->first();
 
             if ($existing && in_array($existing->status, ['APPROVED', 'PENDING', 'IN_REVIEW'], true)) {
                 continue; // nothing to do
+            }
+
+            if (! $existing?->meta_template_id && in_array($t['name'], $metaNames, true)) {
+                // On Meta without a usable local meta id — editing is
+                // impossible, re-creating would be rejected. Backfill + skip.
+                Log::info("ReseedDefaultEcommerceTemplatesJob: {$t['name']} exists on Meta without local meta id — skipped.");
+                continue;
             }
 
             $metaPayload = [
@@ -122,19 +134,39 @@ class ReseedDefaultEcommerceTemplatesJob implements ShouldQueue
      * SeedDefaultEcommerceTemplatesJob delegates here so new-WABA seeding
      * and manual reseeding can never drift apart.
      *
+     * Every template follows Meta's Template Fundamentals rules:
+     * HEADER (static text, ≤60 chars) + BODY (variables never at the
+     * start/end, one example per positional variable) + FOOTER (no
+     * variables, ≤60 chars) + BUTTONS (URL button domain matches the
+     * body domain, quick-reply text ≤25 chars, no emoji/variables).
+     *
+     * Send-time variable meanings are defined in
+     * \App\Modules\Ecommerce\Services\EcommerceTemplateVariables — keep
+     * the two in sync when editing bodies here.
+     *
      * @return array<int, array{name: string, category: string, components: array}>
      */
-    public static function defaultTemplates(): array
+    public static function defaultTemplates(?int $workspaceId = null): array
     {
+        // Button + body links point at the workspace's own store domain when
+        // one is connected, so the templates read as real data out of the box.
+        $base = $workspaceId !== null
+            ? rtrim(\App\Modules\Ecommerce\Services\EcommerceTemplateVariables::defaultBaseUrl($workspaceId), '/')
+            : 'https://store.com';
+        $shop = $base.'/shop';
+        $review = $base.'/review';
+        $cart = $base.'/cart/recovery';
+        $track = str_replace('://', '://track.', $base).'/abc123';
         return [
             [
                 'name' => 'ecommerce_order_cod',
                 'category' => 'UTILITY',
                 'components' => [
+                    ['type' => 'HEADER', 'format' => 'TEXT', 'text' => 'Order Confirmation'],
                     [
                         'type' => 'BODY',
-                        'text' => 'Hi {{1}}, your order #{{2}} is placed! The total amount of {{3}} will be collected on delivery. Please confirm your order by clicking the button below.',
-                        'example' => ['body_text' => [['John', '1001', '$50.00']]],
+                        'text' => 'Hi {{1}}, your order #{{2}} has been placed successfully. Amount to pay on delivery: {{3}}. Expected delivery: {{4}}. Please confirm your order so we can ship it right away.',
+                        'example' => ['body_text' => [['John', '1001', '$50.00', 'Tue, 24 Sep']]],
                     ],
                     [
                         'type' => 'BUTTONS',
@@ -149,21 +181,30 @@ class ReseedDefaultEcommerceTemplatesJob implements ShouldQueue
                 'name' => 'ecommerce_order_paid',
                 'category' => 'UTILITY',
                 'components' => [
+                    ['type' => 'HEADER', 'format' => 'TEXT', 'text' => 'Payment Received'],
                     [
                         'type' => 'BODY',
-                        'text' => 'Hi {{1}}, we received your payment of {{2}} for order #{{3}}. Thank you for your purchase! We will notify you when it ships.',
+                        'text' => 'Hi {{1}}, we have received your payment of {{2}} for order #{{3}}. Your order is now being prepared for dispatch. Thank you for shopping with us!',
                         'example' => ['body_text' => [['John', '$50.00', '1001']]],
                     ],
+                    ['type' => 'FOOTER', 'text' => 'Reply to this message if you need any help.'],
                 ],
             ],
             [
                 'name' => 'ecommerce_order_shipped',
                 'category' => 'UTILITY',
                 'components' => [
+                    ['type' => 'HEADER', 'format' => 'TEXT', 'text' => 'Order Shipped'],
                     [
                         'type' => 'BODY',
-                        'text' => 'Great news {{1}}! Your order #{{2}} is on the way. Track it here: {{3}} — we will notify you as soon as it is delivered.',
-                        'example' => ['body_text' => [['John', '1001', 'https://track.com/123']]],
+                        'text' => 'Good news {{1}}! Your order #{{2}} is on its way and will arrive by {{3}}. Track your package live here: {{4}} — see you soon!',
+                        'example' => ['body_text' => [['John', '1001', 'Tue, 24 Sep', $track]]],
+                    ],
+                    [
+                        'type' => 'BUTTONS',
+                        'buttons' => [
+                            ['type' => 'URL', 'text' => 'Track Package', 'url' => $track],
+                        ],
                     ],
                 ],
             ],
@@ -171,10 +212,17 @@ class ReseedDefaultEcommerceTemplatesJob implements ShouldQueue
                 'name' => 'ecommerce_order_cancelled',
                 'category' => 'UTILITY',
                 'components' => [
+                    ['type' => 'HEADER', 'format' => 'TEXT', 'text' => 'Order Cancelled'],
                     [
                         'type' => 'BODY',
-                        'text' => 'We understand, {{1}}. Your order #{{2}} has been cancelled as requested. Let us know if you need any help!',
+                        'text' => 'Hi {{1}}, your order #{{2}} has been cancelled as requested. Any payment made will be refunded within 5-7 business days. We hope to serve you again soon!',
                         'example' => ['body_text' => [['John', '1001']]],
+                    ],
+                    [
+                        'type' => 'BUTTONS',
+                        'buttons' => [
+                            ['type' => 'URL', 'text' => 'Shop Again', 'url' => $shop],
+                        ],
                     ],
                 ],
             ],
@@ -182,21 +230,30 @@ class ReseedDefaultEcommerceTemplatesJob implements ShouldQueue
                 'name' => 'ecommerce_order_confirmed',
                 'category' => 'UTILITY',
                 'components' => [
+                    ['type' => 'HEADER', 'format' => 'TEXT', 'text' => 'Order Confirmed'],
                     [
                         'type' => 'BODY',
-                        'text' => 'Thank you {{1}}! Your COD order #{{2}} for {{3}} has been confirmed and is now being processed for delivery.',
+                        'text' => 'Thank you {{1}}! Your COD order #{{2}} for {{3}} is confirmed and is now being processed for delivery. We will notify you as soon as it ships.',
                         'example' => ['body_text' => [['John', '1001', '$50.00']]],
                     ],
+                    ['type' => 'FOOTER', 'text' => 'Thank you for shopping with us!'],
                 ],
             ],
             [
                 'name' => 'ecommerce_winback',
                 'category' => 'MARKETING',
                 'components' => [
+                    ['type' => 'HEADER', 'format' => 'TEXT', 'text' => 'We miss you!'],
                     [
                         'type' => 'BODY',
-                        'text' => "Hi {{1}}, it's been a while! We miss you. Use code {{2}} for {{3}} off your next purchase.",
-                        'example' => ['body_text' => [['John', 'WELCOMEBACK15', '15%']]],
+                        'text' => 'Hi {{1}}, it has been a while since your last order! Enjoy {{2}} off your next purchase with code {{3}}. Offer valid until {{4}} — treat yourself today!',
+                        'example' => ['body_text' => [['John', '15%', 'WELCOME15', 'Sep 30']]],
+                    ],
+                    [
+                        'type' => 'BUTTONS',
+                        'buttons' => [
+                            ['type' => 'URL', 'text' => 'Shop Now', 'url' => $shop],
+                        ],
                     ],
                 ],
             ],
@@ -204,10 +261,17 @@ class ReseedDefaultEcommerceTemplatesJob implements ShouldQueue
                 'name' => 'ecommerce_review_request',
                 'category' => 'MARKETING',
                 'components' => [
+                    ['type' => 'HEADER', 'format' => 'TEXT', 'text' => 'How did we do?'],
                     [
                         'type' => 'BODY',
-                        'text' => "Hope you're loving your recent purchase! Could you take 10 seconds to leave a review here: {{1}}? Your feedback means a lot to our small team.",
-                        'example' => ['body_text' => [['https://store.com/review']]],
+                        'text' => 'Hi {{1}}, thank you for your recent purchase! We would love to hear your thoughts on order #{{2}}. It takes only 10 seconds: {{3}} — your feedback helps us improve.',
+                        'example' => ['body_text' => [['John', '1001', $review]]],
+                    ],
+                    [
+                        'type' => 'BUTTONS',
+                        'buttons' => [
+                            ['type' => 'URL', 'text' => 'Leave a Review', 'url' => $review],
+                        ],
                     ],
                 ],
             ],
@@ -215,26 +279,29 @@ class ReseedDefaultEcommerceTemplatesJob implements ShouldQueue
                 'name' => 'ecommerce_vip_thanks',
                 'category' => 'MARKETING',
                 'components' => [
+                    ['type' => 'HEADER', 'format' => 'TEXT', 'text' => 'A personal thank you'],
                     [
                         'type' => 'BODY',
-                        'text' => "Hi {{1}}, I'm the founder. I personally wanted to thank you for your VIP order #{{2}}! We truly appreciate your support.",
-                        'example' => ['body_text' => [['John', '1001']]],
+                        'text' => 'Hi {{1}}, I am the founder of {{2}} and I personally wanted to thank you for your VIP order #{{3}}. Customers like you make everything we do worthwhile. If you ever need anything, just reply to this message!',
+                        'example' => ['body_text' => [['John', 'StoreX', '1001']]],
                     ],
+                    ['type' => 'FOOTER', 'text' => 'We read every reply.'],
                 ],
             ],
             [
                 'name' => 'ecommerce_abandoned_cart',
                 'category' => 'MARKETING',
                 'components' => [
+                    ['type' => 'HEADER', 'format' => 'TEXT', 'text' => 'Your cart is waiting'],
                     [
                         'type' => 'BODY',
-                        'text' => 'Hi {{1}}, we noticed you left something in your cart! Complete your purchase of {{2}} easily here: {{3}} — your items are reserved for a limited time.',
-                        'example' => ['body_text' => [['John', '$50.00', 'https://store.com/cart/recovery']]],
+                        'text' => 'Hi {{1}}, you left {{2}} worth of items in your cart and they are selling fast! Complete your purchase here: {{3}} — your items are reserved for a limited time only.',
+                        'example' => ['body_text' => [['John', '$50.00', $cart]]],
                     ],
                     [
                         'type' => 'BUTTONS',
                         'buttons' => [
-                            ['type' => 'URL', 'text' => 'Complete Purchase', 'url' => 'https://store.com/cart/recovery'],
+                            ['type' => 'URL', 'text' => 'Complete Purchase', 'url' => $cart],
                         ],
                     ],
                 ],

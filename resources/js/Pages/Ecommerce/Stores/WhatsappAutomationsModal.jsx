@@ -13,6 +13,26 @@ export default function WhatsappAutomationsModal({ store, visible, onClose, temp
         }
     });
 
+    // Default templates ship with fixed positional variables — show what
+    // each will fill with real order data so the merchant knows what they
+    // are approving.
+    const VARIABLE_HINTS = {
+        ecommerce_order_cod: '{{1}} name · {{2}} order # · {{3}} amount · {{4}} delivery date',
+        ecommerce_order_paid: '{{1}} name · {{2}} amount · {{3}} order #',
+        ecommerce_order_shipped: '{{1}} name · {{2}} order # · {{3}} delivery date · {{4}} tracking link',
+        ecommerce_order_cancelled: '{{1}} name · {{2}} order #',
+        ecommerce_order_confirmed: '{{1}} name · {{2}} order # · {{3}} amount',
+        ecommerce_winback: '{{1}} name · {{2}} discount · {{3}} coupon code · {{4}} expiry',
+        ecommerce_review_request: '{{1}} name · {{2}} order # · {{3}} review link',
+        ecommerce_vip_thanks: '{{1}} name · {{2}} store name · {{3}} order #',
+        ecommerce_abandoned_cart: '{{1}} name · {{2}} cart value · {{3}} recovery link',
+    };
+
+    const templateOptions = (templates || []).map(t => ({
+        label: `${t.name} (${t.status?.toLowerCase?.() || t.status})`,
+        value: t.id,
+    }));
+
     const handleSave = () => {
         put(route('stores.update', store.uuid), {
             onSuccess: () => {
@@ -56,7 +76,7 @@ export default function WhatsappAutomationsModal({ store, visible, onClose, temp
                                 <Select 
                                     className="w-full"
                                     placeholder="Select a Meta approved template"
-                                    options={templates.map(t => ({ label: t.name, value: t.id }))}
+                                    options={templateOptions}
                                     value={data.messaging_config.order_placed_cod.template_id}
                                     onChange={(val) => setData('messaging_config', {
                                         ...data.messaging_config,
@@ -64,6 +84,39 @@ export default function WhatsappAutomationsModal({ store, visible, onClose, temp
                                     })}
                                 />
                             </Form.Item>
+                            <TemplateVariableHint templates={templates} selectedId={data.messaging_config.order_placed_cod.template_id} hints={VARIABLE_HINTS} />
+                        </div>
+                    )}
+                </div>
+
+                <Divider />
+
+                <div className="mb-6">
+                    <div className="flex justify-between items-center mb-2">
+                        <Title level={5}>💳 Order Confirmation (Paid)</Title>
+                        <Switch 
+                            checked={data.messaging_config.order_placed_paid?.enabled} 
+                            onChange={(val) => setData('messaging_config', {
+                                ...data.messaging_config,
+                                order_placed_paid: { ...data.messaging_config.order_placed_paid, enabled: val }
+                            })}
+                        />
+                    </div>
+                    {data.messaging_config.order_placed_paid?.enabled && (
+                        <div className="bg-gray-50 p-4 rounded-md">
+                            <Form.Item label="Select WhatsApp Template">
+                                <Select 
+                                    className="w-full"
+                                    placeholder="Select a Meta approved template"
+                                    options={templateOptions}
+                                    value={data.messaging_config.order_placed_paid?.template_id}
+                                    onChange={(val) => setData('messaging_config', {
+                                        ...data.messaging_config,
+                                        order_placed_paid: { ...data.messaging_config.order_placed_paid, template_id: val }
+                                    })}
+                                />
+                            </Form.Item>
+                            <TemplateVariableHint templates={templates} selectedId={data.messaging_config.order_placed_paid?.template_id} hints={VARIABLE_HINTS} />
                         </div>
                     )}
                 </div>
@@ -108,7 +161,7 @@ export default function WhatsappAutomationsModal({ store, visible, onClose, temp
                                         <Select 
                                             className="w-full"
                                             placeholder="Select template"
-                                            options={templates.map(t => ({ label: t.name, value: t.id }))}
+                                            options={templateOptions}
                                             value={step.template_id}
                                             onChange={(val) => {
                                                 const newSeq = [...data.messaging_config.abandoned_cart_sequence];
@@ -128,5 +181,18 @@ export default function WhatsappAutomationsModal({ store, visible, onClose, temp
                 </div>
             </div>
         </Modal>
+    );
+}
+
+function TemplateVariableHint({ templates, selectedId, hints }) {
+    const template = (templates || []).find(t => t.id === selectedId);
+    const hint = template ? hints[template.name] : null;
+
+    if (!hint) return null;
+
+    return (
+        <Text type="secondary" style={{ fontSize: 12 }}>
+            Fills automatically with real order data: {hint}
+        </Text>
     );
 }

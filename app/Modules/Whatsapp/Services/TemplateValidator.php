@@ -11,8 +11,10 @@ use Illuminate\Support\Str;
  * - Names: lowercase alphanumeric + underscores, max 512 chars.
  * - Positional parameters: {{1}}, {{2}}, ... sequential, no gaps.
  * - Body/header text must not start or end with a variable.
+ * - HEADER text: max 60 chars. FOOTER: max 60 chars, no variables.
  * - QUICK_REPLY button text: max 25 chars, no variables/emojis/formatting.
- * - URL button: domain must match a URL present in the body text.
+ * - URL button: text max 25 chars; domain must match a URL present in the
+ *   body text; variable URLs require an example whose domain matches.
  * - example.body_text must supply one example per parameter, in order.
  */
 class TemplateValidator
@@ -48,6 +50,10 @@ class TemplateValidator
 
                 case 'HEADER':
                     $problems = array_merge($problems, self::headerProblems($component));
+                    break;
+
+                case 'FOOTER':
+                    $problems = array_merge($problems, self::footerProblems($component));
                     break;
 
                 case 'BUTTONS':
@@ -100,6 +106,9 @@ class TemplateValidator
             if (preg_match('/^\s*\{\{\d+\}\}/', $text) || preg_match('/\{\{\d+\}\}\s*$/u', $text)) {
                 return ["Header text starts or ends with a variable: \"{$text}\""];
             }
+            if (mb_strlen($text) > 60) {
+                return ['Header text exceeds 60 characters ('.mb_strlen($text).').'];
+            }
             return [];
         }
 
@@ -109,6 +118,22 @@ class TemplateValidator
         }
 
         return [];
+    }
+
+    /** Meta: footer text is max 60 chars and cannot contain variables. */
+    private static function footerProblems(array $component): array
+    {
+        $text = $component['text'] ?? '';
+        $problems = [];
+
+        if (mb_strlen($text) > 60) {
+            $problems[] = 'Footer text exceeds 60 characters ('.mb_strlen($text).').';
+        }
+        if (Str::contains($text, '{{')) {
+            $problems[] = 'Footer text cannot contain variables.';
+        }
+
+        return $problems;
     }
 
     /** @return string[] */
@@ -150,15 +175,45 @@ class TemplateValidator
                 }
             }
 
-            if ($type === 'URL' && ! empty($button['url']) && Str::contains($button['url'], '{{')) {
-                // Variable URLs are allowed but must have an example; validated below via domain rule.
-                if (empty($button['example'])) {
-                    $problems[] = "URL button \"{$label}\" with a variable URL requires an example URL.";
+            if ($type === 'URL') {
+                if (mb_strlen($text) > 25) {
+                    $problems[] = "URL button \"{$label}\" text exceeds 25 characters (".mb_strlen($text).").";
+                }
+                if (! empty($button['url']) && Str::contains($button['url'], '{{')) {
+                    // Variable URLs are allowed but must have an example; validated below via domain rule.
+                    if (empty($button['example'])) {
+                        $problems[] = "URL button \"{$label}\" with a variable URL requires an example URL.";
+                    } else {
+                        $problems = array_merge($problems, self::variableUrlExampleProblems($button, $label));
+                    }
                 }
             }
         }
 
         return $problems;
+    }
+
+    /**
+     * Meta: for a variable URL button, the example URL's domain must match
+     * the static domain of the button URL itself.
+     *
+     * @return string[]
+     */
+    private static function variableUrlExampleProblems(array $button, string $label): array
+    {
+        $staticHost = self::hostOf(preg_replace('/\{\{\d+\}\}/', 'x', $button['url'] ?? ''));
+        $example = is_array($button['example']) ? ($button['example'][0] ?? null) : $button['example'];
+
+        if (! is_string($example) || $example === '') {
+            return ["URL button \"{$label}\" example must be a URL string."];
+        }
+
+        $exampleHost = self::hostOf($example);
+        if ($staticHost !== null && $exampleHost !== null && $staticHost !== $exampleHost) {
+            return ["URL button \"{$label}\" example domain ({$exampleHost}) doesn't match the button URL domain ({$staticHost})."];
+        }
+
+        return [];
     }
 
     /** Meta: URL button domain must match a domain used in the body text. */
@@ -175,6 +230,7 @@ class TemplateValidator
             if ($url === '' || Str::contains($url, '{{')) {
                 continue; // variable URL — domain rule applies to the example instead
             }
+            // A static URL button still needs a syntactically valid URL.
             $host = self::hostOf($url);
             if ($host === null) {
                 $problems[] = "URL button #".($i + 1)." has an invalid URL: {$url}";
