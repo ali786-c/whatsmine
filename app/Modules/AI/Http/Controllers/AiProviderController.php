@@ -5,6 +5,7 @@ namespace App\Modules\AI\Http\Controllers;
 use App\Http\Controllers\Controller;
 use App\Modules\AI\Models\AiProviderConfig;
 use App\Models\Workspace;
+use App\Modules\AI\Services\Llm\LlmManager;
 use App\Modules\Broadcasting\Models\UsageMeter;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
