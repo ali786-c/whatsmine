@@ -49,10 +49,9 @@ const SETUP_GUIDES = {
     },
     omniroute: {
         steps: [
-            'OmniRoute is a self-hosted AI gateway exposing an OpenAI-compatible API with 175+ models.',
-            'Enter the gateway Base URL (e.g. http://your-server:20128/v1) and its API key (Bearer token).',
-            'Use “Fetch Models” to verify the connection and pick a default model.',
-            'If your workspace leaves this disabled, the platform\'s system OmniRoute gateway may still serve requests if enabled by the admin.'
+            'OmniRoute is provided and configured by the platform administrator — no API keys are needed from you.',
+            'Simply enable this provider to start using it for AI features.',
+            'Usage is deducted from your monthly plan AI credits.'
         ],
         link: '',
         linkLabelKey: '',
@@ -135,7 +134,7 @@ const PROVIDER_INFO = {
     openai:    { label: 'OpenAI',    Icon: OpenAILogo,    models: ['gpt-4o', 'gpt-4o-mini', 'gpt-3.5-turbo'] },
     anthropic: { label: 'Anthropic', Icon: AnthropicLogo, models: ['claude-3-opus-20240229', 'claude-3-sonnet-20240229', 'claude-3-haiku-20240307'] },
     gemini:    { label: 'Gemini',    Icon: GeminiLogo,    models: ['gemini-1.5-pro', 'gemini-1.5-flash', 'gemini-1.0-pro'] },
-    omniroute: { label: 'OmniRoute', Icon: OmniRouteLogo, isGateway: true },
+    omniroute: { label: 'OmniRoute', Icon: OmniRouteLogo, isSystem: true, systemLabel: 'OmniRoute' },
     ollama:    { label: 'System AI', Icon: OllamaLogo,    isLocal: true, isSystem: true },
 };
 
@@ -146,48 +145,13 @@ function ProviderCard({ provider }) {
 
     const { data, setData, put, processing, errors } = useForm({
         api_key:             '',
-        base_url:            provider.base_url || '',
         default_model_chat:  provider.default_model_chat || (info.isLocal ? info.defaultModel : info.models?.[1]) || '',
         enabled:             provider.enabled,
     });
 
-    const [models, setModels] = useState(null);
-    const [fetching, setFetching] = useState(false);
-    const [fetchError, setFetchError] = useState('');
-
     const handleSubmit = (e) => {
         e.preventDefault();
         put(route('client.ai.providers.update', provider.provider), { preserveScroll: true });
-    };
-
-    const fetchModels = async () => {
-        setFetching(true); setFetchError('');
-        try {
-            const resp = await fetch(route('client.ai.providers.omniroute-models'), {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]')?.content || '',
-                    'Accept': 'application/json',
-                    'X-Requested-With': 'XMLHttpRequest',
-                },
-                body: JSON.stringify({
-                    base_url: data.base_url || undefined,
-                    api_key: data.api_key || undefined,
-                }),
-            });
-            const json = await resp.json();
-            if (!resp.ok) throw new Error(json.error || 'Request failed');
-            setModels(json.models ?? []);
-            if (json.models?.length && !data.default_model_chat) {
-                setData('default_model_chat', json.models[0]);
-            }
-        } catch (err) {
-            setModels(null);
-            setFetchError(err.message);
-        } finally {
-            setFetching(false);
-        }
     };
 
     return (
@@ -201,23 +165,11 @@ function ProviderCard({ provider }) {
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-3">
-                {info.isGateway && (
-                    <div>
-                        <label className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Base URL</label>
-                        <input
-                            type="text"
-                            value={data.base_url}
-                            onChange={e => setData('base_url', e.target.value)}
-                            placeholder="http://your-server:20128/v1"
-                            className="mt-1 w-full rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm font-mono"
-                        />
-                    </div>
-                )}
                 {!info.isSystem && (
                     <>
                         <div>
                             <label className="text-xs font-medium text-neutral-500 dark:text-neutral-400">
-                                {info.isLocal || info.isGateway ? (info.isGateway ? 'API Key (Bearer token)' : 'Base URL') : t('ai.api_key')}
+                                {info.isLocal ? 'Base URL' : t('ai.api_key')}
                             </label>
                             <div className="relative mt-1">
                                 <input
@@ -236,49 +188,19 @@ function ProviderCard({ provider }) {
                         </div>
                         <div>
                             <label className="text-xs font-medium text-neutral-500 dark:text-neutral-400">{t('ai.default_chat_model')}</label>
-                            {info.isLocal || info.isGateway ? (
-                                <input type="text" value={data.default_model_chat} onChange={e => setData('default_model_chat', e.target.value)} placeholder={info.isLocal ? 'e.g. qwen2:0.5b' : 'e.g. gpt-4o-mini'} className="mt-1 w-full rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm" />
+                            {info.isLocal ? (
+                                <input type="text" value={data.default_model_chat} onChange={e => setData('default_model_chat', e.target.value)} placeholder="e.g. qwen2:0.5b" className="mt-1 w-full rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm" />
                             ) : (
                                 <select value={data.default_model_chat} onChange={e => setData('default_model_chat', e.target.value)} className="mt-1 w-full rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm">
                                     {info.models?.map(m => <option key={m} value={m}>{m}</option>)}
                                 </select>
                             )}
                         </div>
-                        {info.isGateway && (
-                            <div className="space-y-1.5">
-                                <button type="button" onClick={fetchModels} disabled={fetching} className="rounded-lg border border-neutral-300 dark:border-neutral-600 px-3 py-1.5 text-xs font-medium text-neutral-700 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-800 disabled:opacity-50 transition">
-                                    {fetching ? 'Testing…' : 'Fetch Models / Test Connection'}
-                                </button>
-                                {fetchError && <p className="text-xs text-red-500">{fetchError}</p>}
-                                {models !== null && (
-                                    <p className="text-xs text-green-600 dark:text-green-400">✓ Connected — {models.length} models available</p>
-                                )}
-                                {models !== null && models.length > 0 && (
-                                    <div className="rounded-lg bg-neutral-50 dark:bg-neutral-800/60 px-2.5 py-2 flex flex-wrap gap-1.5">
-                                        {models.slice(0, 10).map((m) => (
-                                            <button
-                                                key={m}
-                                                type="button"
-                                                onClick={() => setData('default_model_chat', m)}
-                                                className={`rounded-full px-2 py-0.5 text-[11px] font-mono transition ${
-                                                    data.default_model_chat === m
-                                                        ? 'bg-brand-600 text-white'
-                                                        : 'bg-white dark:bg-neutral-700 text-neutral-600 dark:text-neutral-300 border border-neutral-200 dark:border-neutral-600 hover:border-brand-400'
-                                                }`}
-                                            >
-                                                {m}
-                                            </button>
-                                        ))}
-                                        {models.length > 10 && <span className="text-[11px] text-neutral-400 self-center">+{models.length - 10} more</span>}
-                                    </div>
-                                )}
-                            </div>
-                        )}
                     </>
                 )}
                 {info.isSystem && (
                     <div className="rounded-lg border border-indigo-200 dark:border-indigo-900 bg-indigo-50 dark:bg-indigo-900/20 px-4 py-3 text-sm text-indigo-700 dark:text-indigo-300 mb-4">
-                        <p><strong>System AI</strong> uses models provided natively by this platform. No API keys are required. Usage counts towards your plan's AI Credits limit.</p>
+                        <p><strong>{info.systemLabel ?? 'System AI'}</strong> is provided and configured by the platform administrator. No API keys are required. Usage counts towards your plan's AI Credits limit.</p>
                     </div>
                 )}
                 <label className="flex items-center gap-2 text-sm cursor-pointer">

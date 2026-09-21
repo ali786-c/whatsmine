@@ -3,6 +3,7 @@
 namespace App\Modules\AI\Services\Llm;
 
 use Illuminate\Support\Facades\Http;
+use App\Modules\Broadcasting\Models\UsageMeter;
 
 /**
  * OmniRoute — self-hosted AI gateway exposing an OpenAI-compatible API.
@@ -67,10 +68,17 @@ class OmniRouteProvider implements LlmProviderInterface
         $json = $resp->json();
         $latency = (int) ((microtime(true) - $start) * 1000);
 
+        $promptTokens = $json['usage']['prompt_tokens'] ?? 0;
+        $completionTokens = $json['usage']['completion_tokens'] ?? 0;
+
+        if ($this->workspaceId) {
+            UsageMeter::track($this->workspaceId, 'ai_tokens_per_month', $promptTokens + $completionTokens);
+        }
+
         return new LlmResponse(
             content: $json['choices'][0]['message']['content'] ?? '',
-            promptTokens: $json['usage']['prompt_tokens'] ?? 0,
-            completionTokens: $json['usage']['completion_tokens'] ?? 0,
+            promptTokens: $promptTokens,
+            completionTokens: $completionTokens,
             model: $json['model'] ?? $this->chatModel,
             latencyMs: $latency,
         );
@@ -88,6 +96,10 @@ class OmniRouteProvider implements LlmProviderInterface
 
         if (! $resp->successful()) {
             throw new \RuntimeException('OmniRoute embed failed: '.$resp->body());
+        }
+
+        if ($this->workspaceId && isset($resp->json()['usage']['prompt_tokens'])) {
+            UsageMeter::track($this->workspaceId, 'ai_tokens_per_month', (int) $resp->json()['usage']['prompt_tokens']);
         }
 
         return array_column($resp->json()['data'] ?? [], 'embedding');

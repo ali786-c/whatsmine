@@ -37,6 +37,11 @@ class LlmManager
                     'embed' => 'nomic-embed-text',
                 ], $workspaceId);
             }
+            // Workspace enabled OmniRoute: serve via the admin-configured system gateway
+            // (clients never hold gateway credentials — usage is metered per workspace)
+            if ($config->provider === 'omniroute' && ($omni = static::systemOmniroute($workspaceId))) {
+                return $omni;
+            }
             if (! empty($config->credentials['api_key'] ?? '')) {
                 return static::build($config->provider, $config->credentials ?? [], [
                     'chat' => $config->default_model_chat,
@@ -80,6 +85,10 @@ class LlmManager
             ->get();
 
         foreach ($configs as $config) {
+            // Workspace enabled OmniRoute: serve via the admin-configured system gateway
+            if ($config->provider === 'omniroute' && ($omni = static::systemOmniroute($workspaceId))) {
+                return $omni;
+            }
             if (! in_array($config->provider, self::EMBED_CAPABLE, true)) {
                 continue;
             }
