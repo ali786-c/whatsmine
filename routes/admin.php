@@ -122,6 +122,8 @@ Route::post('/settings/favicon', [SystemSettingsController::class, 'uploadFavico
 Route::delete('/settings/favicon', [SystemSettingsController::class, 'deleteFavicon'])->name('settings.favicon.delete')->middleware('permission:manage_settings');
 Route::put('/settings/firebase', [SystemSettingsController::class, 'updateFirebase'])->name('settings.firebase.update')->middleware('permission:manage_settings');
 Route::put('/settings/system-ai', [SystemSettingsController::class, 'updateSystemAi'])->name('settings.system-ai.update')->middleware('permission:manage_settings');
+Route::put('/settings/omniroute', [SystemSettingsController::class, 'updateOmniroute'])->name('settings.omniroute.update')->middleware('permission:manage_settings');
+Route::post('/settings/omniroute/models', [SystemSettingsController::class, 'omnirouteModels'])->name('settings.omniroute.models')->middleware('permission:manage_settings');
 
 // License & Updates
 Route::get('/license', [LicenseController::class, 'index'])->name('license.index')->middleware('permission:view_settings');

@@ -3,7 +3,7 @@ import AdminLayout from '@/Layouts/AdminLayout';
 import { Button, Card, Tabs } from '@/Components/ui';
 import { Head, router, useForm, usePage } from '@inertiajs/react';
 import { useTranslation } from 'react-i18next';
-import { Upload, X, Image, Globe, Palette, Settings2, Code2, Flame, Bot } from 'lucide-react';
+import { Upload, X, Image, Globe, Palette, Settings2, Code2, Flame, Bot, Route } from 'lucide-react';
 
 // ─── General Settings Tab ─────────────────────────────────────────────────────
 
@@ -568,7 +568,159 @@ function SystemAiTab({ systemAi, flash }) {
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
-export default function AdminSettingsIndex({ general = {}, settingsByGroup = {}, firebase = {}, systemAi = {} }) {
+// ─── OmniRoute Gateway Tab ───────────────────────────────────────────────────
+
+function OmniRouteTab({ omniroute, flash }) {
+    const { data, setData, put, processing } = useForm({
+        system_omniroute_enabled:       omniroute?.enabled ? 'true' : 'false',
+        system_omniroute_base_url:      omniroute?.baseUrl ?? '',
+        system_omniroute_api_key:       '',
+        system_omniroute_default_model: omniroute?.defaultModel ?? '',
+    });
+    const [models, setModels] = useState(null);
+    const [fetching, setFetching] = useState(false);
+    const [fetchError, setFetchError] = useState('');
+
+    const submit = (e) => {
+        e.preventDefault();
+        put(route('admin.settings.omniroute.update'), { preserveScroll: true });
+    };
+
+    const fetchModels = async () => {
+        setFetching(true); setFetchError('');
+        try {
+            const resp = await fetch(route('admin.settings.omniroute.models'), {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]')?.content || '',
+                    'Accept': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+                body: JSON.stringify({
+                    base_url: data.system_omniroute_base_url,
+                    api_key: data.system_omniroute_api_key || undefined,
+                }),
+            });
+            const json = await resp.json();
+            if (!resp.ok) throw new Error(json.error || 'Request failed');
+            setModels(json.models ?? []);
+        } catch (err) {
+            setModels(null);
+            setFetchError(err.message);
+        } finally {
+            setFetching(false);
+        }
+    };
+
+    const field = (label, key, description, placeholder = '', type = 'text') => (
+        <div className="space-y-1">
+            <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300">{label}</label>
+            {description && <p className="text-xs text-neutral-400 dark:text-neutral-500">{description}</p>}
+            <input
+                type={type}
+                value={data[key]}
+                onChange={(e) => setData(key, e.target.value)}
+                placeholder={placeholder}
+                className="w-full rounded-soft border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+            />
+        </div>
+    );
+
+    return (
+        <form onSubmit={submit} className="space-y-6">
+            {flash?.success && (
+                <div className="rounded-soft-lg bg-green-50 dark:bg-green-900/30 text-green-800 dark:text-green-200 px-4 py-2 text-sm">
+                    {flash.success}
+                </div>
+            )}
+            <Card>
+                <Card.Body className="space-y-5">
+                    <div className="flex items-center gap-3 pb-4 border-b border-neutral-100 dark:border-neutral-800">
+                        <Route className="h-5 w-5 text-violet-500" />
+                        <div>
+                            <h3 className="font-semibold text-neutral-900 dark:text-neutral-100">OmniRoute Gateway</h3>
+                            <p className="text-xs text-neutral-500 dark:text-neutral-400">
+                                OpenAI-compatible AI gateway (self-hosted, 175+ models). Serves all AI features when workspaces have no own provider.
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="flex items-center justify-between rounded-soft border border-neutral-200 dark:border-neutral-700 px-4 py-3">
+                        <div>
+                            <p className="text-sm font-medium text-neutral-700 dark:text-neutral-300">Enable OmniRoute</p>
+                            <p className="text-xs text-neutral-400 dark:text-neutral-500 mt-0.5">Serve AI features through your self-hosted OmniRoute server.</p>
+                        </div>
+                        <button
+                            type="button"
+                            role="switch"
+                            aria-checked={data.system_omniroute_enabled === 'true'}
+                            onClick={() => setData('system_omniroute_enabled', data.system_omniroute_enabled === 'true' ? 'false' : 'true')}
+                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500/20 ${
+                                data.system_omniroute_enabled === 'true' ? 'bg-brand-500' : 'bg-neutral-300 dark:bg-neutral-600'
+                            }`}
+                        >
+                            <span
+                                className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                                    data.system_omniroute_enabled === 'true' ? 'translate-x-6' : 'translate-x-1'
+                                }`}
+                            />
+                        </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                        {field('Base URL', 'system_omniroute_base_url', 'OpenAI-compatible endpoint (include /v1)', 'http://107.172.136.44:20128/v1')}
+                        {field('API Key', 'system_omniroute_api_key', omniroute?.hasApiKey ? 'A key is saved — leave blank to keep it.' : 'Bearer token for the gateway', 'sk-…', 'password')}
+                        {field('Default Model', 'system_omniroute_default_model', 'Model used when none is specified', 'gpt-4o-mini')}
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                        <button
+                            type="button"
+                            onClick={fetchModels}
+                            disabled={fetching || !data.system_omniroute_base_url}
+                            className="rounded-soft border border-neutral-300 dark:border-neutral-600 px-3 py-1.5 text-xs font-medium text-neutral-700 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-800 disabled:opacity-50 transition"
+                        >
+                            {fetching ? 'Testing…' : 'Fetch Models / Test Connection'}
+                        </button>
+                        {models !== null && (
+                            <span className="text-xs text-green-600 dark:text-green-400">
+                                ✓ Connected — {models.length} models available
+                            </span>
+                        )}
+                    </div>
+                    {fetchError && <p className="text-xs text-red-500">{fetchError}</p>}
+                    {models !== null && models.length > 0 && (
+                        <div className="rounded-soft bg-neutral-50 dark:bg-neutral-800/60 px-3 py-2 flex flex-wrap gap-1.5">
+                            {models.slice(0, 12).map((m) => (
+                                <button
+                                    key={m}
+                                    type="button"
+                                    onClick={() => setData('system_omniroute_default_model', m)}
+                                    className={`rounded-full px-2 py-0.5 text-[11px] font-mono transition ${
+                                        data.system_omniroute_default_model === m
+                                            ? 'bg-brand-600 text-white'
+                                            : 'bg-white dark:bg-neutral-700 text-neutral-600 dark:text-neutral-300 border border-neutral-200 dark:border-neutral-600 hover:border-brand-400'
+                                    }`}
+                                >
+                                    {m}
+                                </button>
+                            ))}
+                            {models.length > 12 && <span className="text-[11px] text-neutral-400 self-center">+{models.length - 12} more — click any model to set it as default</span>}
+                        </div>
+                    )}
+                </Card.Body>
+            </Card>
+            <div className="flex justify-end">
+                <Button type="submit" variant="primary" disabled={processing}>
+                    {processing ? 'Saving…' : 'Save OmniRoute Settings'}
+                </Button>
+            </div>
+        </form>
+    );
+}
+
+export default function AdminSettingsIndex({ general = {}, settingsByGroup = {}, firebase = {}, systemAi = {}, omniroute = {} }) {
     const { t } = useTranslation();
     const { props } = usePage();
     const flash = props.flash ?? {};
@@ -577,6 +729,7 @@ export default function AdminSettingsIndex({ general = {}, settingsByGroup = {},
         { key: 'general',  label: t('settings.tab_general') },
         { key: 'firebase', label: t('settings.tab_firebase') },
         { key: 'systemAi', label: 'System AI' },
+        { key: 'omniroute', label: 'OmniRoute' },
         { key: 'advanced', label: t('settings.tab_advanced') },
     ];
 
@@ -599,6 +752,9 @@ export default function AdminSettingsIndex({ general = {}, settingsByGroup = {},
                         <SystemAiTab systemAi={systemAi} flash={flash} />
                     </Tabs.Panel>
                     <Tabs.Panel index={3} activeIndex={activeIndex}>
+                        <OmniRouteTab omniroute={omniroute} flash={flash} />
+                    </Tabs.Panel>
+                    <Tabs.Panel index={4} activeIndex={activeIndex}>
                         <AdvancedTab settingsByGroup={settingsByGroup} flash={flash} />
                     </Tabs.Panel>
                 </Tabs>

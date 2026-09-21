@@ -12,12 +12,20 @@ class LlmManager
     /** Providers that support embeddings natively. */
     private const EMBED_CAPABLE = ['openai', 'gemini', 'ollama'];
 
+    /** System-level OmniRoute settings (Admin → Settings). */
+    public const OMNIROUTE_KEYS = [
+        'enabled' => 'system_omniroute_enabled',
+        'base_url' => 'system_omniroute_base_url',
+        'api_key' => 'system_omniroute_api_key',
+        'model' => 'system_omniroute_default_model',
+    ];
+
     /** Resolve a provider for chat completions (all providers supported). */
     public static function forWorkspace(int $workspaceId): LlmProviderInterface
     {
         $config = AiProviderConfig::where('workspace_id', $workspaceId)
             ->where('enabled', true)
-            ->orderByRaw("FIELD(provider, 'openai', 'anthropic', 'gemini', 'ollama')")
+            ->orderByRaw("FIELD(provider, 'openai', 'anthropic', 'gemini', 'omniroute', 'ollama')")
             ->first();
 
         if ($config) {
@@ -38,11 +46,21 @@ class LlmManager
         }
 
         $workspace = app(Workspace::class)->find($workspaceId);
-        foreach (['openai', 'anthropic', 'gemini', 'ollama'] as $provider) {
+        foreach (['openai', 'anthropic', 'gemini'] as $provider) {
             $creds = CredentialResolver::for($workspace)->llm($provider);
             if ($creds) {
                 return static::build($provider, $creds->toArray(), [], $workspaceId);
             }
+        }
+
+        // System-level OmniRoute gateway (Admin → Settings → AI Providers)
+        if ($omni = static::systemOmniroute($workspaceId)) {
+            return $omni;
+        }
+
+        $systemAi = CredentialResolver::for($workspace)->llm('ollama');
+        if ($systemAi) {
+            return static::build('ollama', $systemAi->toArray(), [], $workspaceId);
         }
 
         throw new \RuntimeException('No AI provider configured for workspace '.$workspaceId);
@@ -109,7 +127,36 @@ class LlmManager
             'anthropic' => new AnthropicProvider($creds['api_key'] ?? '', $models['chat'] ?? 'claude-3-haiku-20240307'),
             'gemini' => new GeminiProvider($creds['api_key'] ?? '', $models['chat'] ?? 'gemini-1.5-flash', $models['embed'] ?? 'text-embedding-004'),
             'ollama' => new OllamaProvider($creds['api_key'] ?? 'http://127.0.0.1:11434', $models['chat'] ?? 'qwen2:0.5b', $models['embed'] ?? 'nomic-embed-text', $workspaceId),
+            'omniroute' => new OmniRouteProvider(
+                $creds['api_key'] ?? '',
+                $creds['base_url'] ?? '',
+                $models['chat'] ?? 'gpt-4o-mini',
+                $models['embed'] ?? 'text-embedding-3-small',
+                $workspaceId,
+            ),
             default => throw new \RuntimeException("Unknown LLM provider: {$provider}"),
         };
+    }
+
+    /** Build the admin-configured system-level OmniRoute gateway, if enabled and complete. */
+    public static function systemOmniroute(?int $workspaceId = null): ?OmniRouteProvider
+    {
+        if (SystemSetting::get(self::OMNIROUTE_KEYS['enabled'], 'false') !== 'true') {
+            return null;
+        }
+
+        $baseUrl = trim((string) SystemSetting::get(self::OMNIROUTE_KEYS['base_url'], ''));
+        $apiKey = trim((string) SystemSetting::get(self::OMNIROUTE_KEYS['api_key'], ''));
+
+        if ($baseUrl === '' || $apiKey === '') {
+            return null;
+        }
+
+        return new OmniRouteProvider(
+            $apiKey,
+            $baseUrl,
+            (string) SystemSetting::get(self::OMNIROUTE_KEYS['model'], 'gpt-4o-mini'),
+            workspaceId: $workspaceId,
+        );
     }
 }

@@ -64,11 +64,20 @@ class SystemSettingsController extends Controller
             'defaultModel'  => SystemSetting::get('system_ai_default_model', 'qwen2:0.5b'),
         ];
 
+        $omniKeys = \App\Modules\AI\Services\Llm\LlmManager::OMNIROUTE_KEYS;
+        $omniroute = [
+            'enabled'      => SystemSetting::get($omniKeys['enabled'], 'false') === 'true',
+            'baseUrl'      => SystemSetting::get($omniKeys['base_url'], ''),
+            'hasApiKey'    => filled(SystemSetting::get($omniKeys['api_key'], '')),
+            'defaultModel' => SystemSetting::get($omniKeys['model'], ''),
+        ];
+
         return Inertia::render('Admin/Settings/Index', [
             'general'         => $general,
             'settingsByGroup' => $byGroup,
             'firebase'        => $firebase,
             'systemAi'        => $systemAi,
+            'omniroute'       => $omniroute,
         ]);
     }
 
@@ -174,6 +183,59 @@ class SystemSettingsController extends Controller
         }
 
         return back()->with('success', __('System AI settings saved.'));
+    }
+
+    public function updateOmniroute(Request $request): RedirectResponse
+    {
+        $keys = \App\Modules\AI\Services\Llm\LlmManager::OMNIROUTE_KEYS;
+
+        $validated = $request->validate([
+            'system_omniroute_enabled'       => ['required', 'in:true,false'],
+            'system_omniroute_base_url'      => ['nullable', 'string', 'max:512'],
+            'system_omniroute_api_key'       => ['nullable', 'string', 'max:512'],
+            'system_omniroute_default_model' => ['nullable', 'string', 'max:191'],
+        ]);
+
+        foreach ($validated as $key => $value) {
+            if ($key === $keys['api_key']) {
+                // Bullets mean "unchanged" — never overwrite the stored secret with masked value
+                if (empty($value) || preg_match('/^•+$/', $value)) {
+                    continue;
+                }
+                SystemSetting::set($key, $value, true, 'system_omniroute');
+                continue;
+            }
+
+            SystemSetting::set($key, $key === $keys['base_url'] ? rtrim(trim((string) $value), '/') : ($value ?? ''), false, 'system_omniroute');
+        }
+
+        return back()->with('success', __('OmniRoute settings saved.'));
+    }
+
+    /** Fetch models from the configured OmniRoute gateway (admin-side test). */
+    public function omnirouteModels(Request $request): \Illuminate\Http\JsonResponse
+    {
+        $keys = \App\Modules\AI\Services\Llm\LlmManager::OMNIROUTE_KEYS;
+
+        $validated = $request->validate([
+            'base_url' => ['nullable', 'string', 'max:512'],
+            'api_key'  => ['nullable', 'string', 'max:512'],
+        ]);
+
+        $baseUrl = filled($validated['base_url'] ?? null) ? rtrim(trim($validated['base_url']), '/') : (string) SystemSetting::get($keys['base_url'], '');
+        $apiKey = filled($validated['api_key'] ?? null) && ! preg_match('/^•+$/', $validated['api_key'])
+            ? $validated['api_key']
+            : (string) SystemSetting::get($keys['api_key'], '');
+
+        if ($baseUrl === '' || $apiKey === '') {
+            return response()->json(['error' => 'OmniRoute base URL and API key are required.'], 422);
+        }
+
+        try {
+            return response()->json(['models' => \App\Modules\AI\Services\Llm\OmniRouteProvider::fetchModels($apiKey, $baseUrl)]);
+        } catch (\Throwable $e) {
+            return response()->json(['error' => 'Could not reach OmniRoute: '.$e->getMessage()], 502);
+        }
     }
 
     public function update(Request $request): RedirectResponse

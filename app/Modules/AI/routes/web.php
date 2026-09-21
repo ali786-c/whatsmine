@@ -9,6 +9,7 @@ Route::middleware(['web', 'client-app'])->prefix('app/ai')->name('client.ai.')->
     // Provider configs
     Route::get('/providers', [AiProviderController::class, 'index'])->name('providers.index');
     Route::put('/providers/{provider}', [AiProviderController::class, 'update'])->name('providers.update');
+    Route::post('/providers/omniroute/models', [AiProviderController::class, 'omnirouteModels'])->name('providers.omniroute-models');
 
     // Knowledge bases
     Route::get('/knowledge-bases', [AiKnowledgeBaseController::class, 'index'])->name('knowledge-bases.index');
