@@ -3,10 +3,9 @@
 namespace App\Listeners;
 
 use App\Events\MessageReceived;
-use App\Events\MessageSent;
 use App\Models\User;
+use App\Modules\AI\Jobs\GenerateAiReplyJob;
 use App\Modules\AI\Models\AiChatbot;
-use App\Modules\AI\Services\ChatbotRunner;
 use App\Modules\Shared\Models\Conversation;
 use App\Modules\Shared\Models\Message;
 use App\Modules\Shared\Services\ChannelManager;
@@ -29,7 +28,6 @@ const HANDOVER_PHRASES = [
 class AutoReplyListener
 {
     public function __construct(
-        private readonly ChatbotRunner $runner,
         private readonly ChannelManager $channelManager,
     ) {}
 
@@ -114,47 +112,10 @@ class AutoReplyListener
             return;
         }
 
-        try {
-            $reply = $this->runner->run($chatbot, $message);
-            if ($reply === null) {
-                return;
-            }
-
-            $botMessage = Message::create([
-                'conversation_id' => $conversation->id,
-                'direction' => 'out',
-                'channel' => $message->channel,
-                'type' => 'text',
-                'body' => $reply,
-                'payload' => [],
-                'status' => 'queued',
-                'sent_by' => 'bot',
-                'sent_at' => now(),
-            ]);
-
-            try {
-                $driver = $this->channelManager->driver($message->channel);
-                $providerId = $driver->send($botMessage);
-                $botMessage->update(['status' => 'sent', 'provider_message_id' => $providerId]);
-            } catch (\Throwable $sendErr) {
-                $botMessage->update(['status' => 'failed', 'error_json' => ['message' => $sendErr->getMessage()]]);
-                Log::warning('AutoReplyListener AI chatbot send failed', [
-                    'message_id' => $botMessage->id,
-                    'channel' => $message->channel,
-                    'error' => $sendErr->getMessage(),
-                ]);
-            }
-
-            $conversation->update(['last_message_at' => now()]);
-            $botMessage->load('conversation');
-            MessageSent::dispatch($botMessage);
-        } catch (\Throwable $e) {
-            Log::error('AutoReplyListener AI chatbot run failed', [
-                'message_id' => $message->id,
-                'chatbot_id' => $chatbotId,
-                'error' => $e->getMessage(),
-            ]);
-        }
+        // Async: LLM calls are slow (30-60s) — dispatch a queued job so the
+        // inbound MessageReceived broadcast is never delayed by AI latency.
+        // The job re-checks handover state before replying.
+        GenerateAiReplyJob::dispatch($chatbot->id, $message->id);
     }
 
     private function findMatchingAutoReply(
