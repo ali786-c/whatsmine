@@ -140,6 +140,7 @@ function ChatbotCard({ chatbot, knowledgeBases }) {
         name: chatbot.name,
         system_prompt: chatbot.system_prompt ?? '',
         tone: chatbot.tone ?? 'professional',
+        temperature: chatbot.temperature ?? 0.3,
         max_context_chunks: chatbot.max_context_chunks ?? 3,
         history_limit: chatbot.history_limit ?? 5,
         max_tokens: chatbot.max_tokens ?? 256,
@@ -251,6 +252,23 @@ function ChatbotCard({ chatbot, knowledgeBases }) {
                         </div>
 
                         <div className="space-y-1">
+                            <div className="flex items-center justify-between">
+                                <label className="text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wide" title="Lower = more consistent and factual. 0.2–0.4 recommended for support bots.">Creativity (Temperature)</label>
+                                <span className="text-xs font-mono text-neutral-500 dark:text-neutral-400">{Number(data.temperature).toFixed(1)}</span>
+                            </div>
+                            <input
+                                type="range"
+                                min={0}
+                                max={1}
+                                step={0.1}
+                                value={data.temperature}
+                                onChange={e => setData('temperature', Number(e.target.value))}
+                                className="w-full accent-brand-600"
+                            />
+                            <p className="text-xs text-neutral-400 dark:text-neutral-500">Low (0–0.3) = consistent & factual replies. High (0.7+) = creative but random — not recommended for support.</p>
+                        </div>
+
+                        <div className="space-y-1">
                             <label className="text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wide">{t('ai.knowledge_base')}</label>
                             <select
                                 value={data.ai_kb_id}
@@ -264,6 +282,7 @@ function ChatbotCard({ chatbot, knowledgeBases }) {
 
                         <div className="space-y-1">
                             <label className="text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wide">{t('ai.system_prompt')}</label>
+                            <p className="text-xs text-neutral-400 dark:text-neutral-500">Platform-wide rules and the selected tone are always applied on top of this prompt.</p>
                             <textarea
                                 value={data.system_prompt}
                                 onChange={e => setData('system_prompt', e.target.value)}

@@ -40,8 +40,8 @@ class ChatbotRunner
             $contextChunks = array_column($results, 'chunk');
         }
 
-        // Base system prompt remains strictly for behavioral instructions
-        $systemPrompt = $bot->system_prompt ?? 'You are a helpful assistant.';
+        // Layered prompt: core guardrails + admin global rules + tone + bot prompt
+        $systemPrompt = app(AiSystemPrompt::class)->build($bot);
 
         // Load recent conversation turns as context
         $historyLimit = $bot->history_limit ?? 5;
@@ -88,7 +88,7 @@ class ChatbotRunner
                 $augmentedUserMessage .= "Product Information (Use if asked about pricing/stock/products):\n" . $productSummary . "\n\n";
             }
             
-            $augmentedUserMessage .= "---------------------\nAnswer the user's query using the context provided above. If the context does not contain the answer, say so. However, if the query is a simple greeting or conversational (like 'hi' or 'thanks'), just respond naturally and conversationally.\nQuery: ";
+            $augmentedUserMessage .= "---------------------\nUse the context above when it is relevant. If it does not contain the answer, say you don't have that information and offer to connect a human agent — do not invent anything. If the query is a simple greeting or small talk (like 'hi' or 'thanks'), just respond naturally and conversationally.\nQuery: ";
         }
 
         $augmentedUserMessage .= $body;
@@ -107,7 +107,8 @@ class ChatbotRunner
                 [
                     'max_tokens' => $bot->max_tokens ?? 256,
                     'num_ctx' => $bot->num_ctx ?? 2048,
-                    'keep_alive' => $bot->keep_alive ?? '10m'
+                    'keep_alive' => $bot->keep_alive ?? '10m',
+                    'temperature' => (float) ($bot->temperature ?? 0.3),
                 ],
                 $bot->id,
                 $conversation->id,
@@ -252,8 +253,8 @@ class ChatbotRunner
             $contextChunks = array_column($results, 'chunk');
         }
 
-        // 3. Build messages array
-        $systemPrompt = $bot->system_prompt ?? 'You are a helpful assistant.';
+        // 3. Build messages array — layered prompt (guardrails + admin rules + tone + bot prompt)
+        $systemPrompt = app(AiSystemPrompt::class)->build($bot);
         
         $augmentedUserMessage = "";
         if (! empty($contextChunks)) {
@@ -275,7 +276,7 @@ class ChatbotRunner
             $response = $this->llmGateway->chat(
                 $workspaceId,
                 $messages,
-                ['max_tokens' => 512],
+                ['max_tokens' => 512, 'temperature' => (float) ($bot->temperature ?? 0.3)],
                 $bot->id,
             );
 

@@ -486,6 +486,8 @@ function SystemAiTab({ systemAi, flash }) {
         system_ai_enabled:       systemAi?.enabled ? 'true' : 'false',
         system_ai_base_url:      systemAi?.baseUrl ?? '',
         system_ai_default_model: systemAi?.defaultModel ?? '',
+        system_ai_global_rules:  systemAi?.globalRules ?? '',
+        system_ai_default_temperature: systemAi?.defaultTemperature ?? 0.3,
     });
 
     const submit = (e) => {
@@ -553,6 +555,37 @@ function SystemAiTab({ systemAi, flash }) {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                         {field('Base URL', 'system_ai_base_url', 'Your Ollama Server Address', 'http://127.0.0.1:11434')}
                         {field('Default Model', 'system_ai_default_model', 'Model to use for client requests', 'qwen2:0.5b')}
+                    </div>
+
+                    <div className="space-y-2 rounded-soft border border-indigo-200 dark:border-indigo-800 bg-indigo-50/50 dark:bg-indigo-900/20 px-4 py-4">
+                        <div>
+                            <label className="block text-sm font-semibold text-neutral-900 dark:text-neutral-100">Global AI Rules</label>
+                            <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">These rules are injected into EVERY AI chatbot's system prompt (after built-in guardrails, before the bot's own prompt). Use them for platform-wide policies — e.g. "Always mention COD is available", "Never quote prices above X".</p>
+                        </div>
+                        <textarea
+                            value={data.system_ai_global_rules}
+                            onChange={(e) => setData('system_ai_global_rules', e.target.value)}
+                            rows={6}
+                            placeholder={"- Always reply in the customer's language\n- COD available on all orders\n- Never quote delivery dates beyond 3 days"}
+                            className="w-full rounded-soft border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 px-3 py-2 text-sm font-mono resize-y focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+                        />
+                        {errors['system_ai_global_rules'] && <p className="text-xs text-red-500">{errors['system_ai_global_rules']}</p>}
+                        <div>
+                            <div className="flex items-center justify-between">
+                                <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300">Default Temperature for new chatbots</label>
+                                <span className="text-xs font-mono text-neutral-500">{Number(data.system_ai_default_temperature).toFixed(1)}</span>
+                            </div>
+                            <input
+                                type="range"
+                                min={0}
+                                max={1}
+                                step={0.1}
+                                value={data.system_ai_default_temperature}
+                                onChange={(e) => setData('system_ai_default_temperature', Number(e.target.value))}
+                                className="w-full accent-brand-600"
+                            />
+                            <p className="text-xs text-neutral-400 dark:text-neutral-500">Lower = consistent, factual replies (recommended 0.2–0.4 for support bots).</p>
+                        </div>
                     </div>
                 </Card.Body>
             </Card>

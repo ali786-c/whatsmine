@@ -27,7 +27,7 @@ class OpenAiProvider implements LlmProviderInterface
             'model' => $opts['model'] ?? $this->chatModel,
             'messages' => $messages,
             'max_tokens' => $opts['max_tokens'] ?? 1024,
-            'temperature' => $opts['temperature'] ?? 0.7,
+            'temperature' => $opts['temperature'] ?? 0.4,
         ]);
 
         if (! $resp->successful()) {

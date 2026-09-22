@@ -59,9 +59,11 @@ class SystemSettingsController extends Controller
         ];
 
         $systemAi = [
-            'enabled'       => SystemSetting::get('system_ai_enabled', 'false') === 'true',
-            'baseUrl'       => SystemSetting::get('system_ai_base_url', 'http://127.0.0.1:11434'),
-            'defaultModel'  => SystemSetting::get('system_ai_default_model', 'qwen2:0.5b'),
+            'enabled'           => SystemSetting::get('system_ai_enabled', 'false') === 'true',
+            'baseUrl'           => SystemSetting::get('system_ai_base_url', 'http://127.0.0.1:11434'),
+            'defaultModel'      => SystemSetting::get('system_ai_default_model', 'qwen2:0.5b'),
+            'globalRules'       => SystemSetting::get('system_ai_global_rules', ''),
+            'defaultTemperature' => (float) SystemSetting::get('system_ai_default_temperature', '0.3'),
         ];
 
         $omniKeys = \App\Modules\AI\Services\Llm\LlmManager::OMNIROUTE_KEYS;
@@ -173,9 +175,11 @@ class SystemSettingsController extends Controller
     public function updateSystemAi(Request $request): RedirectResponse
     {
         $validated = $request->validate([
-            'system_ai_enabled'       => ['required', 'in:true,false'],
-            'system_ai_base_url'      => ['nullable', 'url', 'max:255'],
-            'system_ai_default_model' => ['nullable', 'string', 'max:128'],
+            'system_ai_enabled'            => ['required', 'in:true,false'],
+            'system_ai_base_url'           => ['nullable', 'url', 'max:255'],
+            'system_ai_default_model'      => ['nullable', 'string', 'max:128'],
+            'system_ai_global_rules'       => ['nullable', 'string', 'max:8192'],
+            'system_ai_default_temperature' => ['nullable', 'numeric', 'min:0', 'max:1'],
         ]);
 
         foreach ($validated as $key => $value) {

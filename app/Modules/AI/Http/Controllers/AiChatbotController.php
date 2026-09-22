@@ -57,6 +57,7 @@ class AiChatbotController extends Controller
             'max_context_chunks' => ['nullable', 'integer', 'min:1', 'max:20'],
             'history_limit' => ['nullable', 'integer', 'min:0', 'max:50'],
             'max_tokens' => ['nullable', 'integer', 'min:50', 'max:4096'],
+            'temperature' => ['nullable', 'numeric', 'min:0', 'max:1'],
             'num_ctx' => ['nullable', 'integer', 'min:512', 'max:8192'],
             'keep_alive' => ['nullable', 'string', 'max:20'],
             'fallback_reply' => ['nullable', 'string', 'max:512'],
