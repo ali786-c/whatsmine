@@ -30,18 +30,25 @@ class EmbeddingStore
         }
     }
 
-    /** Find top-k most similar chunks to the query embedding. */
-    public function search(int $kbId, array $queryEmbedding, int $topK = 5): array
+    /**
+     * Minimum cosine similarity for a chunk to be considered relevant.
+     * Chunks below this are noise — injecting them into the prompt wastes
+     * tokens and drags the model toward wrong answers.
+     */
+    public const MIN_RELEVANCE_SCORE = 0.30;
+
+    /** Find top-k most similar chunks to the query embedding (relevance-filtered). */
+    public function search(int $kbId, array $queryEmbedding, int $topK = 5, float $minScore = self::MIN_RELEVANCE_SCORE): array
     {
         if ($this->qdrantEnabled()) {
-            $results = $this->qdrantSearch($kbId, $queryEmbedding, $topK);
+            $results = $this->qdrantSearch($kbId, $queryEmbedding, $topK, $minScore);
             if (! empty($results)) {
                 return $results;
             }
             // Fall through to MySQL if Qdrant returns nothing (e.g. collection empty)
         }
 
-        return $this->mysqlSearch($kbId, $queryEmbedding, $topK);
+        return $this->mysqlSearch($kbId, $queryEmbedding, $topK, $minScore);
     }
 
     // -------------------------------------------------------------------------
@@ -88,7 +95,7 @@ class EmbeddingStore
         }
     }
 
-    private function qdrantSearch(int $kbId, array $queryEmbedding, int $topK): array
+    private function qdrantSearch(int $kbId, array $queryEmbedding, int $topK, float $minScore): array
     {
         try {
             $resp = $this->qdrantClient()->post('/collections/'.self::QDRANT_COLLECTION.'/points/search', [
@@ -104,14 +111,19 @@ class EmbeddingStore
                 return [];
             }
 
-            $chunkIds = array_column($resp->json('result', []), 'id');
+            $hits = array_values(array_filter(
+                $resp->json('result', []),
+                fn ($hit) => (float) ($hit['score'] ?? 0) >= $minScore
+            ));
+
+            $chunkIds = array_column($hits, 'id');
             if (empty($chunkIds)) {
                 return [];
             }
 
             $chunks = AiKbChunk::whereIn('id', $chunkIds)->get()->keyBy('id');
             $results = [];
-            foreach ($resp->json('result', []) as $hit) {
+            foreach ($hits as $hit) {
                 $chunk = $chunks->get($hit['id']);
                 if ($chunk) {
                     $results[] = ['chunk' => $chunk, 'score' => $hit['score']];
@@ -143,7 +155,7 @@ class EmbeddingStore
     // MySQL fallback
     // -------------------------------------------------------------------------
 
-    private function mysqlSearch(int $kbId, array $queryEmbedding, int $topK): array
+    private function mysqlSearch(int $kbId, array $queryEmbedding, int $topK, float $minScore): array
     {
         $chunks = AiKbChunk::where('kb_id', $kbId)
             ->whereNotNull('embedding')
@@ -154,7 +166,12 @@ class EmbeddingStore
                 'chunk' => $chunk,
                 'score' => $this->cosine($queryEmbedding, $this->unpackEmbedding($chunk->embedding ?? '')),
             ];
-        })->sortByDesc('score')->take($topK)->values()->toArray();
+        })
+            ->filter(fn (array $r) => $r['score'] >= $minScore)
+            ->sortByDesc('score')
+            ->take($topK)
+            ->values()
+            ->toArray();
     }
 
     private function unpackEmbedding(string $json): array

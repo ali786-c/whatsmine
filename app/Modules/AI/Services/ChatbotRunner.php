@@ -7,6 +7,12 @@ use App\Modules\Shared\Models\Message;
 
 class ChatbotRunner
 {
+    /** Max recent conversation turns replayed to the model (token-cost guard). */
+    public const HISTORY_TURNS = 6;
+
+    /** Max characters kept per history turn — huge pasted messages get truncated. */
+    public const HISTORY_MAX_CHARS = 500;
+
     public function __construct(
         private LlmGateway $llmGateway,
         private EmbeddingStore $embedStore,
@@ -37,14 +43,14 @@ class ChatbotRunner
         $contextChunks = [];
         if ($bot->ai_kb_id && ! empty($queryEmbedding)) {
             $results = $this->embedStore->search($bot->ai_kb_id, $queryEmbedding, $bot->max_context_chunks ?? 5);
-            $contextChunks = array_column($results, 'chunk');
+            $contextChunks = array_column(app(KbContextTrimmer::class)->fit($results), 'chunk');
         }
 
         // Layered prompt: core guardrails + admin global rules + tone + bot prompt
         $systemPrompt = app(AiSystemPrompt::class)->build($bot);
 
-        // Load recent conversation turns as context
-        $historyLimit = $bot->history_limit ?? 5;
+        // Load recent conversation turns as context (capped — see HISTORY_TURNS)
+        $historyLimit = min($bot->history_limit ?? 5, self::HISTORY_TURNS);
         $history = [];
         $recentMessages = $conversation->messages()
             ->whereIn('type', ['text', 'template'])
@@ -61,7 +67,7 @@ class ChatbotRunner
             }
             $history[] = [
                 'role' => $m->direction === 'out' ? 'assistant' : 'user',
-                'content' => $m->body,
+                'content' => mb_substr($m->body, 0, self::HISTORY_MAX_CHARS),
             ];
         }
 
@@ -77,7 +83,7 @@ class ChatbotRunner
             
             if ($hasContext) {
                 $contextText = implode("\n\n---\n\n", array_map(fn ($c) => $c->content, $contextChunks));
-                $augmentedUserMessage .= "Knowledge Base:\n" . $contextText . "\n\n";
+                $augmentedUserMessage .= "Knowledge Base (highest-priority source of truth — answer from it whenever it addresses the query):\n" . $contextText . "\n\n";
             }
             
             if ($orderSummary !== null) {
@@ -88,7 +94,7 @@ class ChatbotRunner
                 $augmentedUserMessage .= "Product Information (Use if asked about pricing/stock/products):\n" . $productSummary . "\n\n";
             }
             
-            $augmentedUserMessage .= "---------------------\nUse the context above when it is relevant. If it does not contain the answer, say you don't have that information and offer to connect a human agent — do not invent anything. If the query is a simple greeting or small talk (like 'hi' or 'thanks'), just respond naturally and conversationally.\nQuery: ";
+            $augmentedUserMessage .= "---------------------\nUse the context above when it is relevant — the Knowledge Base always wins over general knowledge. If it does not contain the answer, say you don't have that information and offer to connect a human agent — do not invent anything. If the query is a simple greeting or small talk (like 'hi' or 'thanks'), just respond naturally and conversationally.\nQuery: ";
         }
 
         $augmentedUserMessage .= $body;
@@ -250,7 +256,7 @@ class ChatbotRunner
         $contextChunks = [];
         if ($bot->ai_kb_id && ! empty($queryEmbedding)) {
             $results = $this->embedStore->search($bot->ai_kb_id, $queryEmbedding, $bot->max_context_chunks ?? 5);
-            $contextChunks = array_column($results, 'chunk');
+            $contextChunks = array_column(app(KbContextTrimmer::class)->fit($results), 'chunk');
         }
 
         // 3. Build messages array — layered prompt (guardrails + admin rules + tone + bot prompt)
@@ -260,8 +266,8 @@ class ChatbotRunner
         if (! empty($contextChunks)) {
             $augmentedUserMessage .= "Context information is below.\n---------------------\n";
             $context = implode("\n\n---\n\n", array_map(fn ($c) => $c->content, $contextChunks));
-            $augmentedUserMessage .= "Knowledge Base:\n" . $context . "\n\n";
-            $augmentedUserMessage .= "---------------------\nAnswer the user's query using the context provided above. If the context does not contain the answer, say so. However, if the query is a simple greeting or conversational (like 'hi' or 'thanks'), just respond naturally and conversationally.\nQuery: ";
+            $augmentedUserMessage .= "Knowledge Base (highest-priority source of truth — answer from it whenever it addresses the query):\n" . $context . "\n\n";
+            $augmentedUserMessage .= "---------------------\nAnswer the user's query using the context provided above — the Knowledge Base always wins over general knowledge. If the context does not contain the answer, say so. However, if the query is a simple greeting or conversational (like 'hi' or 'thanks'), just respond naturally and conversationally.\nQuery: ";
         }
         $augmentedUserMessage .= $message;
 
