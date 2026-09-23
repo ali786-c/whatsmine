@@ -9,7 +9,14 @@ use App\Modules\Integrations\Services\CredentialResolver;
 
 class LlmManager
 {
-    /** Providers that support embeddings natively. */
+    /**
+     * Providers that support embeddings natively.
+     *
+     * OmniRoute deliberately NOT included: the gateway only proxies whatever upstream
+     * models are configured, and typical self-hosted instances ship 0 embedding models
+     * (the embeddings call fails → KB retrieval silently dies → the bot answers from
+     * general knowledge). Embeddings must come from a real provider (OpenAI/Gemini/Ollama).
+     */
     private const EMBED_CAPABLE = ['openai', 'gemini', 'ollama'];
 
     /** System-level OmniRoute settings (Admin → Settings). */
@@ -78,17 +85,13 @@ class LlmManager
      */
     public static function forWorkspaceEmbed(int $workspaceId): LlmProviderInterface
     {
-        // Workspace-level: prefer embed-capable providers, then fall back to any enabled one
+        // Workspace-level: prefer embed-capable providers, skip OmniRoute/Anthropic
         $configs = AiProviderConfig::where('workspace_id', $workspaceId)
             ->where('enabled', true)
             ->orderByRaw("FIELD(provider, 'openai', 'gemini', 'ollama', 'anthropic')")
             ->get();
 
         foreach ($configs as $config) {
-            // Workspace enabled OmniRoute: serve via the admin-configured system gateway
-            if ($config->provider === 'omniroute' && ($omni = static::systemOmniroute($workspaceId))) {
-                return $omni;
-            }
             if (! in_array($config->provider, self::EMBED_CAPABLE, true)) {
                 continue;
             }

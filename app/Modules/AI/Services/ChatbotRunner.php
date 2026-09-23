@@ -3,6 +3,7 @@
 namespace App\Modules\AI\Services;
 
 use App\Modules\AI\Models\AiChatbot;
+use App\Modules\AI\Models\AiKbChunk;
 use App\Modules\Shared\Models\Message;
 
 class ChatbotRunner
@@ -39,10 +40,19 @@ class ChatbotRunner
             }
         }
 
-        // 2. Retrieve top-k relevant chunks
+        // 2. Retrieve top-k relevant chunks (embedding search, with keyword fallback)
         $contextChunks = [];
-        if ($bot->ai_kb_id && ! empty($queryEmbedding)) {
-            $results = $this->embedStore->search($bot->ai_kb_id, $queryEmbedding, $bot->max_context_chunks ?? 5);
+        if ($bot->ai_kb_id) {
+            $results = [];
+            if (! empty($queryEmbedding)) {
+                $results = $this->embedStore->search($bot->ai_kb_id, $queryEmbedding, $bot->max_context_chunks ?? 5);
+            }
+            if (empty($results)) {
+                // Embedding unavailable (no embed-capable provider) or no relevant hit —
+                // fall back to keyword search so the bot still answers from the KB
+                // instead of drifting into general knowledge.
+                $results = $this->keywordChunks($bot->ai_kb_id, $body, $bot->max_context_chunks ?? 5);
+            }
             $contextChunks = array_column(app(KbContextTrimmer::class)->fit($results), 'chunk');
         }
 
@@ -125,6 +135,37 @@ class ChatbotRunner
             // Fallback
             return $bot->fallback_reply ?? null;
         }
+    }
+
+    /**
+     * Keyword fallback retrieval for when embeddings are unavailable (no
+     * embedding-capable provider configured) or similarity search returns no
+     * relevant hit. Matches query words against chunk content — good enough
+     * for FAQ-style knowledge bases where the question text is in the chunk.
+     *
+     * @return array<int, array{chunk: AiKbChunk, score: float}>
+     */
+    private function keywordChunks(int $kbId, string $query, int $limit): array
+    {
+        $clean = preg_replace('/[^a-zA-Z0-9\s]/', ' ', mb_strtolower($query)) ?? '';
+        $words = array_filter(explode(' ', $clean), fn ($w) => mb_strlen(trim($w)) > 2);
+        $stopWords = ['the', 'and', 'for', 'you', 'have', 'with', 'this', 'that', 'are', 'what', 'how', 'much', 'can', 'get', 'want'];
+        $keywords = array_values(array_diff($words, $stopWords));
+
+        if (empty($keywords)) {
+            return [];
+        }
+
+        return AiKbChunk::where('kb_id', $kbId)
+            ->where(function ($builder) use ($keywords) {
+                foreach ($keywords as $kw) {
+                    $builder->orWhere('content', 'LIKE', '%'.$kw.'%');
+                }
+            })
+            ->take($limit)
+            ->get()
+            ->map(fn ($chunk) => ['chunk' => $chunk, 'score' => 0.5])
+            ->toArray();
     }
 
     /**
@@ -252,10 +293,16 @@ class ChatbotRunner
             }
         }
 
-        // 2. Retrieve top-k relevant chunks
+        // 2. Retrieve top-k relevant chunks (embedding search, with keyword fallback)
         $contextChunks = [];
-        if ($bot->ai_kb_id && ! empty($queryEmbedding)) {
-            $results = $this->embedStore->search($bot->ai_kb_id, $queryEmbedding, $bot->max_context_chunks ?? 5);
+        if ($bot->ai_kb_id) {
+            $results = [];
+            if (! empty($queryEmbedding)) {
+                $results = $this->embedStore->search($bot->ai_kb_id, $queryEmbedding, $bot->max_context_chunks ?? 5);
+            }
+            if (empty($results)) {
+                $results = $this->keywordChunks($bot->ai_kb_id, $message, $bot->max_context_chunks ?? 5);
+            }
             $contextChunks = array_column(app(KbContextTrimmer::class)->fit($results), 'chunk');
         }
 

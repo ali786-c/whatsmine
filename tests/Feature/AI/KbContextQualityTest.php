@@ -3,9 +3,16 @@
 namespace Tests\Feature\AI;
 
 use App\Modules\AI\Models\AiKbChunk;
+use App\Modules\AI\Models\AiProviderConfig;
+use App\Modules\AI\Services\ChatbotRunner;
 use App\Modules\AI\Services\EmbeddingStore;
 use App\Modules\AI\Services\KbContextTrimmer;
+use App\Modules\AI\Services\Llm\LlmManager;
+use App\Modules\Shared\Models\Contact;
+use App\Modules\Shared\Models\Conversation;
+use App\Modules\Shared\Models\Message;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
 class KbContextQualityTest extends TestCase
@@ -82,6 +89,108 @@ class KbContextQualityTest extends TestCase
 
         $this->assertCount(1, $kept);
         $this->assertSame('real content here', $kept[0]['chunk']->content);
+    }
+
+    // -------------------------------------------------------------------------
+    // Keyword fallback + embed-provider exclusion
+    // -------------------------------------------------------------------------
+
+    public function test_runner_falls_back_to_keyword_search_when_embeddings_fail(): void
+    {
+        $data = $this->createWorkspaceContext();
+        $workspace = $data['workspace'];
+
+        $kb = \App\Modules\AI\Models\AiKnowledgeBase::create([
+            'workspace_id' => $workspace->id,
+            'name' => 'HostingGram KB',
+            'embedding_model' => 'text-embedding-3-small',
+            'dimensions' => 3,
+            'status' => 'active',
+        ]);
+        $doc = \App\Modules\AI\Models\AiKbDocument::create([
+            'kb_id' => $kb->id,
+            'title' => 'Hosting plans',
+            'source_type' => 'faq',
+            'source_ref' => '[]',
+            'status' => 'indexed',
+        ]);
+        AiKbChunk::create([
+            'kb_id' => $kb->id,
+            'document_id' => $doc->id,
+            'ord' => 0,
+            'content' => 'Q: What is the price of the Starter hosting plan?\nA: The Starter plan starts at Rs 1,999/year.',
+            'tokens' => 20,
+            'embedding' => null, // No embeddings stored at all
+        ]);
+
+        $chatbot = \App\Modules\AI\Models\AiChatbot::create([
+            'workspace_id' => $workspace->id,
+            'name' => 'HostingGram Bot',
+            'ai_kb_id' => $kb->id,
+            'system_prompt' => null,
+            'enabled' => true,
+            'channels' => ['whatsapp'],
+        ]);
+
+        $capturedUserMessage = null;
+        Http::fake([
+            '*embeddings*' => Http::response(['error' => ['message' => 'no embedding models']], 404),
+            '*chat/completions*' => function ($request) use (&$capturedUserMessage) {
+                $body = json_decode($request->body(), true);
+                $capturedUserMessage = collect($body['messages'] ?? [])
+                    ->firstWhere('role', 'user')['content'] ?? '';
+
+                return Http::response([
+                    'choices' => [['message' => ['content' => 'The Starter plan starts at Rs 1,999 per year.']]],
+                    'usage' => ['prompt_tokens' => 60, 'completion_tokens' => 12],
+                    'model' => 'test-model',
+                ], 200);
+            },
+        ]);
+
+        AiProviderConfig::create([
+            'workspace_id' => $workspace->id,
+            'provider' => 'openai',
+            'credentials' => ['api_key' => 'sk-test'],
+            'default_model_chat' => 'gpt-4o-mini',
+            'default_model_embed' => 'text-embedding-3-small',
+            'enabled' => true,
+        ]);
+
+        $contact = Contact::factory()->create(['workspace_id' => $workspace->id]);
+        $conv = Conversation::create([
+            'workspace_id' => $workspace->id,
+            'contact_id' => $contact->id,
+            'status' => 'open',
+        ]);
+        $message = new Message;
+        $message->body = 'starter plan ka price kya hai?';
+        $message->direction = 'in';
+        $message->channel = 'whatsapp';
+        $message->setRelation('conversation', $conv);
+
+        $reply = app(ChatbotRunner::class)->run($chatbot, $message);
+
+        $this->assertNotNull($reply);
+        $this->assertStringContainsString('Starter plan starts at Rs 1,999', (string) $capturedUserMessage,
+            'KB chunk must reach the prompt via keyword fallback when embeddings fail.');
+    }
+
+    public function test_omniroute_is_never_used_for_embeddings(): void
+    {
+        $workspace = $this->createWorkspaceContext()['workspace'];
+
+        AiProviderConfig::create([
+            'workspace_id' => $workspace->id,
+            'provider' => 'omniroute',
+            'credentials' => ['api_key' => 'sk-x', 'base_url' => 'http://omni.test/v1'],
+            'enabled' => true,
+        ]);
+
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('embedding-capable');
+
+        LlmManager::forWorkspaceEmbed($workspace->id);
     }
 
     // -------------------------------------------------------------------------
