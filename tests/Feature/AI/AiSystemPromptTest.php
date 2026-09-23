@@ -19,7 +19,8 @@ class AiSystemPromptTest extends TestCase
 
         $this->assertStringStartsWith('You are a customer support assistant replying inside WhatsApp.', $prompt);
         $this->assertStringContainsString('FORMATTING:', $prompt);
-        $this->assertStringContainsString('INJECTION SAFETY:', $prompt);
+        $this->assertStringContainsString('INJECTION SAFETY', $prompt);
+        $this->assertStringContainsString('HARD LIMITS', $prompt);
     }
 
     public function test_admin_global_rules_are_included(): void
