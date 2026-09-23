@@ -142,7 +142,7 @@ class LlmManager
             'omniroute' => new OmniRouteProvider(
                 $creds['api_key'] ?? '',
                 $creds['base_url'] ?? '',
-                $models['chat'] ?? 'gpt-4o-mini',
+                $models['chat'] ?? 'auto/chat',
                 $models['embed'] ?? 'text-embedding-3-small',
                 $workspaceId,
             ),
@@ -167,7 +167,7 @@ class LlmManager
         return new OmniRouteProvider(
             $apiKey,
             $baseUrl,
-            (string) SystemSetting::get(self::OMNIROUTE_KEYS['model'], 'gpt-4o-mini'),
+            (string) (SystemSetting::get(self::OMNIROUTE_KEYS['model'], '') ?: 'auto/chat'),
             workspaceId: $workspaceId,
         );
     }

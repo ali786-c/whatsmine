@@ -57,7 +57,7 @@ function PlaygroundPanel({ chatbot }) {
                 body: JSON.stringify({ message: userMsg.content, history: messages }),
             });
             const data = await res.json();
-            setMessages(prev => [...prev, { role: 'assistant', content: data.reply ?? data.error ?? t('ai.playground_error') }]);
+            setMessages(prev => [...prev, { role: 'assistant', content: data.reply ?? data.error ?? t('ai.playground_error'), meta: data.meta ?? null }]);
         } finally {
             setLoading(false);
         }
@@ -89,8 +89,15 @@ function PlaygroundPanel({ chatbot }) {
                         <div className={`shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold ${m.role === 'user' ? 'bg-brand-600 text-white' : 'bg-neutral-200 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-300'}`}>
                             {m.role === 'user' ? 'U' : <Bot className="h-3.5 w-3.5" />}
                         </div>
-                        <div className={`rounded-2xl px-3.5 py-2 text-sm leading-relaxed ${m.role === 'user' ? 'max-w-[75%] bg-brand-600 text-white rounded-tr-sm whitespace-pre-wrap break-words' : 'max-w-[85%] bg-white dark:bg-neutral-700 text-neutral-900 dark:text-neutral-100 shadow-sm rounded-tl-sm'}`}>
-                            {m.role === 'user' ? m.content : <MarkdownLite content={m.content} />}
+                        <div>
+                            <div className={`rounded-2xl px-3.5 py-2 text-sm leading-relaxed ${m.role === 'user' ? 'max-w-[75%] bg-brand-600 text-white rounded-tr-sm whitespace-pre-wrap break-words' : 'max-w-[85%] bg-white dark:bg-neutral-700 text-neutral-900 dark:text-neutral-100 shadow-sm rounded-tl-sm'}`}>
+                                {m.role === 'user' ? m.content : <MarkdownLite content={m.content} />}
+                            </div>
+                            {m.role === 'assistant' && m.meta?.model && (
+                                <p className="mt-0.5 text-[10px] text-neutral-400 dark:text-neutral-500 px-1 font-mono">
+                                    via {m.meta.model} · {m.meta.latency_ms ?? '—'}ms · {m.meta.completion_tokens ?? 0} out tokens
+                                </p>
+                            )}
                         </div>
                     </div>
                 ))}

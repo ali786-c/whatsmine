@@ -108,10 +108,12 @@ class AiChatbotController extends Controller
             $fakeConversation->id = 0;
             $fakeMessage->setRelation('conversation', $fakeConversation);
 
-            $reply = app(ChatbotRunner::class)->run($chatbot, $fakeMessage);
+            $meta = null;
+            $reply = app(ChatbotRunner::class)->run($chatbot, $fakeMessage, $meta);
 
             return response()->json([
                 'reply' => $reply ?? $chatbot->fallback_reply ?? 'No response.',
+                'meta' => $meta,
             ]);
         } catch (\Throwable $e) {
             return response()->json(['error' => $e->getMessage()], 422);

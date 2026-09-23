@@ -613,6 +613,11 @@ function OmniRouteTab({ omniroute, flash }) {
     const [models, setModels] = useState(null);
     const [fetching, setFetching] = useState(false);
     const [fetchError, setFetchError] = useState('');
+    const [testing, setTesting] = useState(false);
+    const [testResult, setTestResult] = useState(null);
+
+    // Curated combos that always resolve to a live upstream — safe defaults for chat.
+    const RECOMMENDED_MODELS = ['auto/chat', 'auto/best-chat', 'auto/fast', 'auto/cheap', 'auto/reasoning', 'auto/smart'];
 
     const submit = (e) => {
         e.preventDefault();
@@ -643,6 +648,32 @@ function OmniRouteTab({ omniroute, flash }) {
             setFetchError(err.message);
         } finally {
             setFetching(false);
+        }
+    };
+
+    const testModel = async (modelName) => {
+        setTesting(true); setTestResult(null);
+        try {
+            const resp = await fetch(route('admin.settings.omniroute.test-model'), {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]')?.content || '',
+                    'Accept': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+                body: JSON.stringify({
+                    base_url: data.system_omniroute_base_url,
+                    api_key: data.system_omniroute_api_key || undefined,
+                    model: modelName || data.system_omniroute_default_model,
+                }),
+            });
+            const json = await resp.json();
+            setTestResult(json);
+        } catch (err) {
+            setTestResult({ ok: false, error: err.message });
+        } finally {
+            setTesting(false);
         }
     };
 
@@ -704,7 +735,30 @@ function OmniRouteTab({ omniroute, flash }) {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                         {field('Base URL', 'system_omniroute_base_url', 'OpenAI-compatible endpoint (include /v1)', 'http://107.172.136.44:20128/v1')}
                         {field('API Key', 'system_omniroute_api_key', omniroute?.hasApiKey ? 'A key is saved — leave blank to keep it.' : 'Bearer token for the gateway', 'sk-…', 'password')}
-                        {field('Default Model', 'system_omniroute_default_model', 'Model used when none is specified', 'gpt-4o-mini')}
+                        {field('Default Model', 'system_omniroute_default_model', 'Model used when none is specified — pick a recommended combo below for reliable quality', 'auto/chat')}
+                    </div>
+
+                    <div className="space-y-2">
+                        <p className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Recommended for customer-support bots (auto-resolve to a live upstream model):</p>
+                        <div className="flex flex-wrap gap-1.5">
+                            {RECOMMENDED_MODELS.map((m) => (
+                                <button
+                                    key={m}
+                                    type="button"
+                                    onClick={() => setData('system_omniroute_default_model', m)}
+                                    className={`rounded-full px-2.5 py-1 text-[11px] font-mono transition ${
+                                        data.system_omniroute_default_model === m
+                                            ? 'bg-brand-600 text-white'
+                                            : 'bg-brand-50 dark:bg-brand-900/20 text-brand-700 dark:text-brand-300 border border-brand-200 dark:border-brand-800 hover:border-brand-400'
+                                    }`}
+                                >
+                                    {m}
+                                </button>
+                            ))}
+                        </div>
+                        <p className="text-[11px] text-neutral-400 dark:text-neutral-500">
+                            Avoid pinning concrete model ids (e.g. gpt-4o-mini) unless you verified them below — upstream credentials change and the model silently dies.
+                        </p>
                     </div>
 
                     <div className="flex items-center gap-3">
@@ -723,6 +777,34 @@ function OmniRouteTab({ omniroute, flash }) {
                         )}
                     </div>
                     {fetchError && <p className="text-xs text-red-500">{fetchError}</p>}
+
+                    <div className="flex items-center gap-3 flex-wrap">
+                        <button
+                            type="button"
+                            onClick={() => testModel()}
+                            disabled={testing || !data.system_omniroute_default_model}
+                            className="rounded-soft border border-brand-300 dark:border-brand-700 px-3 py-1.5 text-xs font-medium text-brand-700 dark:text-brand-300 hover:bg-brand-50 dark:hover:bg-brand-900/20 disabled:opacity-50 transition"
+                        >
+                            {testing ? 'Testing…' : `Test Model: ${data.system_omniroute_default_model || '—'}`}
+                        </button>
+                    </div>
+                    {testResult && (
+                        <div className={`rounded-soft px-3 py-2 text-xs font-mono ${
+                            testResult.ok
+                                ? 'bg-green-50 dark:bg-green-900/30 text-green-800 dark:text-green-200'
+                                : 'bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-300'
+                        }`}>
+                            {testResult.ok ? (
+                                <>
+                                    ✓ Reply: “{testResult.reply}”
+                                    {testResult.upstream_model && <span className="ml-2 opacity-70">via {testResult.upstream_model}</span>}
+                                    <span className="ml-2 opacity-70">({testResult.latency_ms} ms)</span>
+                                </>
+                            ) : (
+                                <>✗ {testResult.error || 'Empty reply — this model is not usable.'}</>
+                            )}
+                        </div>
+                    )}
                     {models !== null && models.length > 0 && (
                         <div className="rounded-soft bg-neutral-50 dark:bg-neutral-800/60 px-3 py-2 flex flex-wrap gap-1.5">
                             {models.slice(0, 12).map((m) => (

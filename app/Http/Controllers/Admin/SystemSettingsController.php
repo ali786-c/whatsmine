@@ -242,6 +242,66 @@ class SystemSettingsController extends Controller
         }
     }
 
+    /**
+     * Live-probe an OmniRoute model: send a tiny chat completion and report what
+     * actually answered (upstream model), the latency, and any error. Catches
+     * dead/rate-limited/weak models at config time instead of on live chats.
+     */
+    public function omnirouteTestModel(Request $request): \Illuminate\Http\JsonResponse
+    {
+        $validated = $request->validate([
+            'base_url' => ['nullable', 'string', 'max:512'],
+            'api_key'  => ['nullable', 'string', 'max:512'],
+            'model'    => ['required', 'string', 'max:191'],
+        ]);
+
+        $keys = \App\Modules\AI\Services\Llm\LlmManager::OMNIROUTE_KEYS;
+        $baseUrl = filled($validated['base_url'] ?? null) ? rtrim(trim($validated['base_url']), '/') : (string) SystemSetting::get($keys['base_url'], '');
+        $apiKey = filled($validated['api_key'] ?? null) && ! preg_match('/^•+$/', $validated['api_key'])
+            ? $validated['api_key']
+            : (string) SystemSetting::get($keys['api_key'], '');
+
+        if ($baseUrl === '' || $apiKey === '') {
+            return response()->json(['error' => 'OmniRoute base URL and API key are required.'], 422);
+        }
+
+        $start = microtime(true);
+        try {
+            $resp = \Illuminate\Support\Facades\Http::withToken($apiKey)
+                ->timeout(45)
+                ->post($baseUrl.'/chat/completions', [
+                    'model' => $validated['model'],
+                    'messages' => [
+                        ['role' => 'user', 'content' => 'Reply with exactly: OK'],
+                    ],
+                    'max_tokens' => 20,
+                    'temperature' => 0,
+                    'stream' => false,
+                ]);
+
+            $latencyMs = (int) ((microtime(true) - $start) * 1000);
+
+            if (! $resp->successful()) {
+                $body = $resp->json();
+                $msg = $body['error']['message'] ?? mb_substr($resp->body(), 0, 300);
+
+                return response()->json(['ok' => false, 'error' => $msg], 200);
+            }
+
+            $json = $resp->json();
+            $content = trim((string) ($json['choices'][0]['message']['content'] ?? ''));
+
+            return response()->json([
+                'ok' => $content !== '',
+                'upstream_model' => $json['model'] ?? null,
+                'reply' => mb_substr($content, 0, 200),
+                'latency_ms' => $latencyMs,
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json(['ok' => false, 'error' => $e->getMessage()], 200);
+        }
+    }
+
     public function update(Request $request): RedirectResponse
     {
         $validated = $request->validate([

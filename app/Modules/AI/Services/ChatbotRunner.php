@@ -19,7 +19,7 @@ class ChatbotRunner
         private EmbeddingStore $embedStore,
     ) {}
 
-    public function run(AiChatbot $bot, Message $inboundMessage): ?string
+    public function run(AiChatbot $bot, Message $inboundMessage, ?array &$meta = null): ?string
     {
         if (! $bot->enabled) {
             return null;
@@ -121,7 +121,7 @@ class ChatbotRunner
                 $workspaceId,
                 $messages,
                 [
-                    'max_tokens' => $bot->max_tokens ?? 256,
+                    'max_tokens' => $bot->max_tokens ?? 512,
                     'num_ctx' => $bot->num_ctx ?? 2048,
                     'keep_alive' => $bot->keep_alive ?? '10m',
                     'temperature' => (float) ($bot->temperature ?? 0.3),
@@ -130,11 +130,44 @@ class ChatbotRunner
                 $conversation->id,
             );
 
-            return $response->content;
+            $meta = [
+                'model' => $response->model,
+                'latency_ms' => $response->latencyMs,
+                'prompt_tokens' => $response->promptTokens,
+                'completion_tokens' => $response->completionTokens,
+            ];
+
+            return $this->cleanReply($response->content, $bot);
         } catch (\Throwable $e) {
             // Fallback
             return $bot->fallback_reply ?? null;
         }
+    }
+
+    /**
+     * Normalise a raw LLM reply for chat delivery.
+     *
+     * Weak/rotued upstream models leak markdown into WhatsApp replies and can
+     * return whitespace-only content (e.g. reasoning models that burned the
+     * whole token budget thinking). This strips markdown artifacts and falls
+     * back to the bot's configured fallback reply when nothing usable remains.
+     */
+    private function cleanReply(?string $content, AiChatbot $bot): ?string
+    {
+        $text = trim((string) $content);
+
+        if ($text === '') {
+            return $bot->fallback_reply ?: null;
+        }
+
+        // Strip fenced code blocks, heading markers, and bold/italic emphasis —
+        // none of which render on WhatsApp.
+        $text = preg_replace('/```[a-zA-Z0-9_-]*\n?|```/', '', $text) ?? $text;
+        $text = preg_replace('/^#{1,6}\s+/m', '', $text) ?? $text;
+        $text = str_replace(['**', '__'], '', $text) ?? $text;
+        $text = trim($text);
+
+        return $text !== '' ? $text : ($bot->fallback_reply ?: null);
     }
 
     /**
@@ -334,7 +367,7 @@ class ChatbotRunner
             );
 
             return [
-                'reply' => $response->content,
+                'reply' => $this->cleanReply($response->content, $bot),
                 'tokens_used' => $response->promptTokens + $response->completionTokens,
             ];
         } catch (\Throwable) {

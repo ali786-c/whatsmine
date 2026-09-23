@@ -22,7 +22,10 @@ class OmniRouteProvider implements LlmProviderInterface
     public function __construct(
         private readonly string $apiKey,
         string $baseUrl,
-        private readonly string $chatModel = 'gpt-4o-mini',
+        // 'auto/chat' is the OmniRoute built-in auto-routing combo — it always resolves
+        // to a live upstream model. Pinning a concrete id (e.g. gpt-4o-mini) breaks
+        // silently when that model has no active upstream credentials on the gateway.
+        private readonly string $chatModel = 'auto/chat',
         private readonly string $embedModel = 'text-embedding-3-small',
         private readonly ?int $workspaceId = null,
     ) {
@@ -59,6 +62,8 @@ class OmniRouteProvider implements LlmProviderInterface
                 'messages' => $messages,
                 'max_tokens' => $opts['max_tokens'] ?? 1024,
                 'temperature' => $opts['temperature'] ?? 0.7,
+                // Some OmniRoute upstreams stream by default; this client parses JSON.
+                'stream' => false,
             ]);
 
         if (! $resp->successful()) {
@@ -71,12 +76,19 @@ class OmniRouteProvider implements LlmProviderInterface
         $promptTokens = $json['usage']['prompt_tokens'] ?? 0;
         $completionTokens = $json['usage']['completion_tokens'] ?? 0;
 
+        // Reasoning models can burn all tokens on thinking and return empty content
+        // while the real answer sits in the reasoning trace — fall back to it.
+        $content = $json['choices'][0]['message']['content'] ?? '';
+        if (trim((string) $content) === '') {
+            $content = $json['choices'][0]['message']['reasoning_content'] ?? '';
+        }
+
         if ($this->workspaceId) {
             UsageMeter::track($this->workspaceId, 'ai_tokens_per_month', $promptTokens + $completionTokens);
         }
 
         return new LlmResponse(
-            content: $json['choices'][0]['message']['content'] ?? '',
+            content: $content,
             promptTokens: $promptTokens,
             completionTokens: $completionTokens,
             model: $json['model'] ?? $this->chatModel,
