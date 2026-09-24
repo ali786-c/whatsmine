@@ -601,6 +601,49 @@ function SystemAiTab({ systemAi, flash }) {
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
+// ─── Diagnostic report ────────────────────────────────────────────────
+
+function DiagnosticReport({ report }) {
+    const s = report.settings ?? {};
+    const c = report.code ?? {};
+    const probes = report.probes ?? [];
+
+    return (
+        <div className="rounded-soft border border-neutral-200 dark:border-neutral-700 divide-y divide-neutral-200 dark:divide-neutral-700 text-xs overflow-hidden">
+            <div className="px-3 py-2 bg-neutral-50 dark:bg-neutral-800/60 space-y-1">
+                <p className="font-semibold">Settings</p>
+                <p>enabled: <b className={s.enabled ? 'text-green-600' : 'text-red-500'}>{s.enabled ? 'yes' : 'NO'}</b></p>
+                <p>base_url: <span className="font-mono">{s.base_url || '(missing)'}</span></p>
+                <p>api_key: {s.api_key_set ? <span className="font-mono">{s.api_key_preview}</span> : <b className="text-red-500">MISSING</b>}</p>
+                <p>default_model: <span className="font-mono">{s.default_model}</span>{!s.model_is_recommended_combo && <b className="ml-1 text-amber-600">not an auto/* combo</b>}</p>
+            </div>
+            <div className="px-3 py-2 bg-neutral-50 dark:bg-neutral-800/60 space-y-1">
+                <p className="font-semibold">Deployed code</p>
+                <p>dead-upstream guards: <b className={c.defense_active ? 'text-green-600' : 'text-red-500'}>{c.defense_active ? 'ACTIVE' : 'MISSING — OLD CODE ON SERVER'}</b></p>
+                {c.note && <p className="opacity-70">{c.note}</p>}
+            </div>
+            <div className="px-3 py-2 bg-neutral-50 dark:bg-neutral-800/60 space-y-1">
+                <p className="font-semibold">Live gateway probes</p>
+                {probes.length === 0 && <p className="opacity-70">(none ran)</p>}
+                {probes.map((p, i) => (
+                    <div key={i} className="rounded px-2 py-1.5 font-mono space-y-0.5 bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700">
+                        <p><b className={p.ok ? 'text-green-600' : 'text-red-500'}>{p.ok ? 'OK' : 'FAIL'}</b> {p.model} <span className="opacity-60">({p.label})</span></p>
+                        <p className="opacity-70">http {p.http_status} · {p.latency_ms}ms · upstream: {p.upstream_model ?? 'n/a'}</p>
+                        {p.guard_reason && <p className="text-amber-600">guard: {p.guard_reason}</p>}
+                        {p.reply_preview && <p>reply: “{p.reply_preview}”</p>}
+                        {p.error && <p className="text-red-500">error: {p.error}</p>}
+                        {!p.ok && p.raw_body && <p className="opacity-50 break-all">raw: {p.raw_body}</p>}
+                    </div>
+                ))}
+            </div>
+            <div className="px-3 py-2 bg-amber-50 dark:bg-amber-900/20">
+                <p className="font-semibold">Diagnosis</p>
+                <p className="mt-0.5">{report.diagnosis}</p>
+            </div>
+        </div>
+    );
+}
+
 // ─── OmniRoute Gateway Tab ───────────────────────────────────────────────────
 
 function OmniRouteTab({ omniroute, flash }) {
@@ -618,6 +661,23 @@ function OmniRouteTab({ omniroute, flash }) {
 
     // Curated combos that always resolve to a live upstream — safe defaults for chat.
     const RECOMMENDED_MODELS = ['auto/chat', 'auto/best-chat', 'auto/fast', 'auto/cheap', 'auto/reasoning', 'auto/smart'];
+
+    const [diagnosing, setDiagnosing] = useState(false);
+    const [diagResult, setDiagResult] = useState(null);
+
+    const runDiagnostic = async () => {
+        setDiagnosing(true); setDiagResult(null);
+        try {
+            const resp = await fetch(route('admin.settings.omniroute.diagnose'), {
+                headers: { 'X-Requested-With': 'XMLHttpRequest' },
+            });
+            setDiagResult(await resp.json());
+        } catch {
+            setDiagResult({ diagnosis: 'Diagnostic request failed — check network tab.' });
+        } finally {
+            setDiagnosing(false);
+        }
+    };
 
     const submit = (e) => {
         e.preventDefault();
@@ -805,6 +865,23 @@ function OmniRouteTab({ omniroute, flash }) {
                             )}
                         </div>
                     )}
+
+                    <div className="border-t border-neutral-200 dark:border-neutral-700 pt-4 space-y-2">
+                        <div className="flex items-center gap-3">
+                            <button
+                                type="button"
+                                onClick={runDiagnostic}
+                                disabled={diagnosing}
+                                className="rounded-soft bg-neutral-900 dark:bg-neutral-100 px-3 py-1.5 text-xs font-semibold text-white dark:text-neutral-900 hover:opacity-90 disabled:opacity-50 transition"
+                            >
+                                {diagnosing ? 'Running full diagnostic…' : '🔍 Run Full Diagnostic'}
+                            </button>
+                            <span className="text-[11px] text-neutral-400 dark:text-neutral-500">
+                                Checks settings, deployed code, and live gateway — names the exact root cause.
+                            </span>
+                        </div>
+                        {diagResult && <DiagnosticReport report={diagResult} />}
+                    </div>
                     {models !== null && models.length > 0 && (
                         <div className="rounded-soft bg-neutral-50 dark:bg-neutral-800/60 px-3 py-2 flex flex-wrap gap-1.5">
                             {models.slice(0, 12).map((m) => (

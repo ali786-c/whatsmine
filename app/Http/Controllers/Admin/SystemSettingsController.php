@@ -302,6 +302,17 @@ class SystemSettingsController extends Controller
         }
     }
 
+    /**
+     * Full AI pipeline diagnostic: stored settings, deployed-code guard markers,
+     * raw gateway probes (configured model + auto/chat baseline), and a named
+     * root-cause diagnosis. Used by the "Run Full Diagnostic" button and the
+     * ai:diagnose command when the playground keeps producing garbage.
+     */
+    public function omnirouteDiagnose(): \Illuminate\Http\JsonResponse
+    {
+        return response()->json(app(\App\Modules\AI\Services\AiDiagnostic::class)->run());
+    }
+
     public function update(Request $request): RedirectResponse
     {
         $validated = $request->validate([

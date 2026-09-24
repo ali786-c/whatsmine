@@ -125,6 +125,7 @@ Route::put('/settings/system-ai', [SystemSettingsController::class, 'updateSyste
 Route::put('/settings/omniroute', [SystemSettingsController::class, 'updateOmniroute'])->name('settings.omniroute.update')->middleware('permission:manage_settings');
 Route::post('/settings/omniroute/test-model', [SystemSettingsController::class, 'omnirouteTestModel'])->name('settings.omniroute.test-model')->middleware('permission:manage_settings');
 Route::post('/settings/omniroute/models', [SystemSettingsController::class, 'omnirouteModels'])->name('settings.omniroute.models')->middleware('permission:manage_settings');
+Route::get('/settings/omniroute/diagnose', [SystemSettingsController::class, 'omnirouteDiagnose'])->name('settings.omniroute.diagnose')->middleware('permission:manage_settings');
 
 // License & Updates
 Route::get('/license', [LicenseController::class, 'index'])->name('license.index')->middleware('permission:view_settings');
