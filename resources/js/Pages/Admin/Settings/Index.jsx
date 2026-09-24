@@ -636,6 +636,31 @@ function DiagnosticReport({ report }) {
                     </div>
                 ))}
             </div>
+            <div className="px-3 py-2 bg-neutral-50 dark:bg-neutral-800/60 space-y-1">
+                <p className="font-semibold">Workspace resolution (what bots actually use)</p>
+                {report.workspace?.note ? (
+                    <p className="opacity-70">{report.workspace.note}</p>
+                ) : (
+                    <>
+                        <p>workspace_id: {report.workspace?.workspace_id_checked}</p>
+                        <p>
+                            resolved provider:{' '}
+                            <span className="font-mono">{report.workspace?.resolved_provider?.class ?? 'error'}</span>
+                            {report.workspace?.resolved_provider?.chat_model && (
+                                <span className="font-mono"> · model: {report.workspace.resolved_provider.chat_model}</span>
+                            )}
+                        </p>
+                        {report.workspace?.resolved_provider?.error && (
+                            <p className="text-red-500">error: {report.workspace.resolved_provider.error}</p>
+                        )}
+                        {report.workspace?.workspace_provider_configs?.length > 0 && (
+                            <p className="opacity-70">
+                                workspace-level configs: {report.workspace.workspace_provider_configs.length} — these override the system gateway
+                            </p>
+                        )}
+                    </>
+                )}
+            </div>
             <div className="px-3 py-2 bg-amber-50 dark:bg-amber-900/20">
                 <p className="font-semibold">Diagnosis</p>
                 <p className="mt-0.5">{report.diagnosis}</p>

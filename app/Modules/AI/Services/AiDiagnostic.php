@@ -40,12 +40,18 @@ class AiDiagnostic
         $settings = $this->settings();
         $code = $this->codeMarkers();
         $probes = $this->probes($settings);
+        $workspaceLayer = $this->workspaceLayer();
+
+        if ($this->diagnosis === null) {
+            $this->diagnosis = $this->defaultDiagnosis($code, $probes, $workspaceLayer);
+        }
 
         return [
             'settings' => $settings,
             'code' => $code,
             'probes' => $probes,
-            'diagnosis' => $this->diagnosis ?? $this->defaultDiagnosis($code, $probes),
+            'workspace' => $workspaceLayer,
+            'diagnosis' => $this->diagnosis,
         ];
     }
 
@@ -192,6 +198,49 @@ class AiDiagnostic
         ];
     }
 
+    // ── 3b. Workspace-level provider resolution (what bots ACTUALLY use) ─
+
+    /**
+     * Bots never call the gateway directly — they resolve a provider via
+     * LlmManager::forWorkspace(), which prefers the workspace's own provider
+     * config over the system gateway. A stale workspace config pointing at a
+     * dead model would produce garbage while all system probes stay green.
+     */
+    private function workspaceLayer(): array
+    {
+        $firstWorkspaceId = \App\Models\Workspace::query()->orderBy('id')->value('id');
+
+        if ($firstWorkspaceId === null) {
+            return ['note' => 'No workspaces exist.'];
+        }
+
+        $configs = \App\Modules\AI\Models\AiProviderConfig::query()
+            ->where('workspace_id', $firstWorkspaceId)
+            ->where('enabled', true)
+            ->orderBy('id')
+            ->get(['id', 'provider', 'default_model_chat', 'enabled']);
+
+        $resolved = null;
+        try {
+            $provider = LlmManager::forWorkspace($firstWorkspaceId);
+            $resolved = [
+                'class' => $provider::class,
+                'chat_model' => method_exists($provider, 'chat')
+                    ? ((new \ReflectionClass($provider))->getProperty('chatModel')->getValue($provider))
+                    : null,
+            ];
+        } catch (\Throwable $e) {
+            $resolved = ['error' => $e->getMessage()];
+        }
+
+        return [
+            'workspace_id_checked' => $firstWorkspaceId,
+            'workspace_provider_configs' => $configs->toArray(),
+            'resolved_provider' => $resolved,
+            'resolved_via_workspace_config' => $configs->isNotEmpty(),
+        ];
+    }
+
     // ── 4. Diagnosis ──────────────────────────────────────────────────────
 
     private function diagnose(string $text): void
@@ -200,7 +249,7 @@ class AiDiagnostic
     }
 
     /** Verdict when nothing else fired: everything healthy, or old code on a healthy gateway. */
-    private function defaultDiagnosis(array $code, array $probes): string
+    private function defaultDiagnosis(array $code, array $probes, array $workspaceLayer = []): string
     {
         if ($probes !== [] && collect($probes)->contains(fn ($p) => ($p['ok'] ?? false) === true) && ! $code['defense_active']) {
             return 'Gateway and model are healthy, but the DEPLOYED CODE IS OLD (guards missing). '.
@@ -208,8 +257,18 @@ class AiDiagnostic
         }
 
         if ($probes !== [] && collect($probes)->every(fn ($p) => ($p['ok'] ?? false) === true)) {
-            return 'All checks passed — gateway reachable, model healthy, guards active. '.
-                'If the bot still misbehaves, check the workspace-level provider config and the bot\'s own settings.';
+            // System layer is green — point at the next layer with specifics.
+            $resolved = $workspaceLayer['resolved_provider'] ?? [];
+            $chatModel = $resolved['chat_model'] ?? null;
+            $viaWorkspace = $workspaceLayer['resolved_via_workspace_config'] ?? false;
+
+            if ($viaWorkspace && $chatModel !== null && ! str_starts_with((string) $chatModel, 'auto/')) {
+                return "System gateway is healthy, but workspaces resolve their OWN provider first — currently model [{$chatModel}] from a workspace-level config, which is NOT an auto/* combo and may route to a dead upstream. ".
+                    'Fix: Admin/Client AI Providers — either disable the workspace-level provider (so the system gateway serves it) or set its chat model to auto/chat.';
+            }
+
+            return 'All checks passed — gateway reachable, model healthy, guards active, workspace resolution clean. '.
+                'If the playground still misbehaves, send the via-model tag from a bad reply and re-run this diagnostic right after.';
         }
 
         return 'No probe ran (gateway disabled or credentials missing) — see settings section above.';
