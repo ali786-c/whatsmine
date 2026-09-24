@@ -176,6 +176,95 @@ class KbContextQualityTest extends TestCase
             'KB chunk must reach the prompt via keyword fallback when embeddings fail.');
     }
 
+    public function test_faq_document_chunks_keep_question_and_answer_together(): void
+    {
+        $job = new \App\Modules\AI\Jobs\IndexDocumentJob(1);
+        $formatFaq = new \ReflectionMethod($job, 'formatFaq');
+        $formatFaq->setAccessible(true);
+        $chunkFaq = new \ReflectionMethod($job, 'chunkFaq');
+        $chunkFaq->setAccessible(true);
+
+        $faq = json_encode([
+            ['question' => 'What is the price of the Starter hosting plan?', 'answer' => 'The Starter plan starts at Rs 1,999/year.'],
+            ['question' => 'What is HostingGram?', 'answer' => 'HostingGram is a web hosting provider.'],
+            ['question' => 'What is the price of the PRO hosting plan?', 'answer' => 'The PRO plan starts at Rs 2,999/year.'],
+        ]);
+
+        $text = $formatFaq->invoke($job, $faq);
+        $chunks = $chunkFaq->invoke($job, $text);
+
+        $this->assertNotEmpty($chunks);
+        foreach ($chunks as $chunk) {
+            // Every chunk boundary must fall BETWEEN pairs — never through one.
+            $this->assertTrue(
+                str_contains($chunk, 'Q: ') && str_contains($chunk, 'A: '),
+                'FAQ chunk must contain complete Q&A pairs, never a question severed from its answer.'
+            );
+        }
+        // The price fact must appear intact inside one chunk.
+        $priceChunk = collect($chunks)->first(fn ($c) => str_contains($c, 'Rs 1,999/year'));
+        $this->assertNotNull($priceChunk);
+        $this->assertStringContainsString('What is the price of the Starter hosting plan?', $priceChunk);
+    }
+
+    public function test_keyword_fallback_ranks_best_matching_chunk_first(): void
+    {
+        $workspace = $this->createWorkspaceContext()['workspace'];
+        $kb = \App\Modules\AI\Models\AiKnowledgeBase::create([
+            'workspace_id' => $workspace->id,
+            'name' => 'Test KB',
+            'status' => 'active',
+        ]);
+        $doc = \App\Modules\AI\Models\AiKbDocument::create([
+            'kb_id' => $kb->id,
+            'title' => 'FAQ',
+            'source_type' => 'faq',
+            'source_ref' => '[]',
+            'status' => 'indexed',
+        ]);
+
+        // A chunk that only mentions "plan" vs the chunk that actually answers
+        // the Starter-price question (starter + plan + price + hosting).
+        $distractor = AiKbChunk::create([
+            'kb_id' => $kb->id,
+            'document_id' => $doc->id,
+            'ord' => 0,
+            'content' => 'Our PRO plan is very popular. Every plan includes support.',
+            'tokens' => 12,
+            'embedding' => null,
+        ]);
+        $answer = AiKbChunk::create([
+            'kb_id' => $kb->id,
+            'document_id' => $doc->id,
+            'ord' => 1,
+            'content' => 'Q: What is the price of the Starter hosting plan?\nA: The Starter plan starts at Rs 1,999/year.',
+            'tokens' => 20,
+            'embedding' => null,
+        ]);
+
+        $results = app(ChatbotRunner::class)->keywordChunksForDiagnostic(
+            $kb->id,
+            'What is the price of the Starter hosting plan',
+            5
+        );
+
+        $this->assertNotEmpty($results);
+        $this->assertSame($answer->id, $results[0]['chunk']->id,
+            'Ranked fallback must put the chunk matching the most query keywords first.');
+        $this->assertGreaterThan($this->scoreOf($results, $distractor->id), $this->scoreOf($results, $answer->id));
+    }
+
+    private function scoreOf(array $results, int $chunkId): float
+    {
+        foreach ($results as $r) {
+            if ($r['chunk']->id === $chunkId) {
+                return (float) $r['score'];
+            }
+        }
+
+        return -1.0;
+    }
+
     public function test_omniroute_is_never_used_for_embeddings(): void
     {
         $workspace = $this->createWorkspaceContext()['workspace'];

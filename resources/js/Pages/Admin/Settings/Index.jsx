@@ -661,6 +661,48 @@ function DiagnosticReport({ report }) {
                     </>
                 )}
             </div>
+            <div className="px-3 py-2 bg-neutral-50 dark:bg-neutral-800/60 space-y-1">
+                <p className="font-semibold">Knowledge base / RAG (why the bot ignores your KB)</p>
+                {report.kb?.note ? (
+                    <p className="opacity-70">{report.kb.note}</p>
+                ) : (
+                    <>
+                        <p>
+                            bot: {report.kb?.bot_checked?.id}:{report.kb?.bot_checked?.name} · KB attached:{' '}
+                            {report.kb?.kb_attached ? (
+                                <b className="text-green-600">yes</b>
+                            ) : (
+                                <b className="text-red-500">NO — bot has no KB</b>
+                            )}
+                        </p>
+                        {report.kb?.kb_attached && (
+                            <>
+                                <p>
+                                    kb: <span className="font-mono">{report.kb?.kb_name}</span> · status: {report.kb?.kb_status} · chunks:{' '}
+                                    <b>{report.kb?.chunks_total ?? 0}</b> · with embedding: <b>{report.kb?.chunks_with_embedding ?? 0}</b>
+                                    {report.kb?.chunks_with_embedding === 0 && (
+                                        <b className="text-amber-600"> ← no vectors; keyword fallback only</b>
+                                    )}
+                                </p>
+                                <p className="opacity-70">
+                                    retrieval probe: {report.kb?.retrieval_probe?.chunks_found ?? 0} found /{' '}
+                                    {report.kb?.retrieval_probe?.chunks_injected ?? 0} injected via{' '}
+                                    <span className="font-mono">{report.kb?.retrieval_probe?.via ?? 'n/a'}</span>
+                                    {report.kb?.retrieval_probe?.top_score != null && (
+                                        <> · top_score: {report.kb.retrieval_probe.top_score}</>
+                                    )}
+                                </p>
+                                {report.kb?.retrieval_probe?.preview && (
+                                    <p className="opacity-50 break-all">preview: “{report.kb.retrieval_probe.preview}”</p>
+                                )}
+                                {report.kb?.retrieval_probe?.error && (
+                                    <p className="text-red-500">retrieval error: {report.kb.retrieval_probe.error}</p>
+                                )}
+                            </>
+                        )}
+                    </>
+                )}
+            </div>
             <div className="px-3 py-2 bg-amber-50 dark:bg-amber-900/20">
                 <p className="font-semibold">Diagnosis</p>
                 <p className="mt-0.5">{report.diagnosis}</p>

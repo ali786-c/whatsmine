@@ -39,7 +39,11 @@ class IndexDocumentJob implements ShouldQueue
 
         try {
             $text = $this->extractText($doc, $storage);
-            $chunks = $this->chunk($text);
+            $isFaqShaped = $doc->source_type === 'faq'
+                || ($doc->source_type === 'file' && str_ends_with(strtolower($doc->source_ref ?? ''), '.json'));
+            $chunks = $isFaqShaped
+                ? $this->chunkFaq($text)
+                : $this->chunk($text);
 
             // Remove old chunks
             $doc->chunks()->delete();
@@ -183,7 +187,16 @@ class IndexDocumentJob implements ShouldQueue
             }
         }
 
-        return (string) ($disk->get($path) ?? '');
+        $raw = (string) ($disk->get($path) ?? '');
+
+        // Uploaded FAQ-style JSON files (array of {question, answer}) get the
+        // same clean Q&A text treatment as 'faq' source docs, so they chunk
+        // per-pair instead of as one raw-JSON blob.
+        if ($ext === 'json') {
+            return $this->formatFaq($raw);
+        }
+
+        return $raw;
     }
 
     /**
@@ -276,6 +289,44 @@ class IndexDocumentJob implements ShouldQueue
         }
 
         return '';
+    }
+
+    /**
+     * Chunk FAQ documents one self-contained fact (Q&A pair) at a time,
+     * grouping consecutive pairs up to a small character budget.
+     *
+     * The generic word-window chunker cuts straight through FAQ pairs — the
+     * question lands in one 800-word block and its answer in the next, so
+     * retrieval injects half-facts and the model hedges ("let me confirm with
+     * the team") even though the KB plainly contains the answer.
+     *
+     * @return array<int, string>
+     */
+    private function chunkFaq(string $text, int $maxChars = 600): array
+    {
+        $pairs = preg_split('/\n{2,}/', trim($text)) ?: [];
+        $chunks = [];
+        $current = '';
+
+        foreach ($pairs as $pair) {
+            $pair = trim($pair);
+            if ($pair === '') {
+                continue;
+            }
+
+            if ($current !== '' && mb_strlen($current."\n\n".$pair) > $maxChars) {
+                $chunks[] = $current;
+                $current = $pair;
+            } else {
+                $current = $current === '' ? $pair : $current."\n\n".$pair;
+            }
+        }
+
+        if ($current !== '') {
+            $chunks[] = $current;
+        }
+
+        return array_values($chunks);
     }
 
     private function chunk(string $text, int $size = 800, int $overlap = 100): array

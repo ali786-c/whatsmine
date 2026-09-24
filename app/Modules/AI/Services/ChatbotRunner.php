@@ -195,6 +195,17 @@ class ChatbotRunner
     }
 
     /**
+     * Diagnostic access to the keyword fallback retrieval (the runner's own
+     * method is private; AiDiagnostic replays the exact same logic).
+     *
+     * @return array<int, array{chunk: AiKbChunk, score: float}>
+     */
+    public function keywordChunksForDiagnostic(int $kbId, string $query, int $limit): array
+    {
+        return $this->keywordChunks($kbId, $query, $limit);
+    }
+
+    /**
      * Keyword fallback retrieval for when embeddings are unavailable (no
      * embedding-capable provider configured) or similarity search returns no
      * relevant hit. Matches query words against chunk content — good enough
@@ -213,15 +224,38 @@ class ChatbotRunner
             return [];
         }
 
-        return AiKbChunk::where('kb_id', $kbId)
+        // Rank by how many distinct query keywords each chunk contains, so a
+        // chunk answering "Starter plan price" (matches starter + plan +
+        // price) beats a chunk that merely mentions "plan". Arbitrary
+        // take(5) here was injecting unrelated chunks and the model hedged
+        // even though the KB held the answer.
+        $candidates = AiKbChunk::where('kb_id', $kbId)
             ->where(function ($builder) use ($keywords) {
                 foreach ($keywords as $kw) {
                     $builder->orWhere('content', 'LIKE', '%'.$kw.'%');
                 }
             })
+            ->limit(200)
+            ->get();
+
+        $lowerKeywords = array_map('mb_strtolower', $keywords);
+
+        return $candidates
+            ->map(function (AiKbChunk $chunk) use ($lowerKeywords) {
+                $content = mb_strtolower($chunk->content ?? '');
+                $hits = 0;
+                foreach ($lowerKeywords as $kw) {
+                    if (str_contains($content, $kw)) {
+                        $hits++;
+                    }
+                }
+
+                return ['chunk' => $chunk, 'score' => $hits / max(count($lowerKeywords), 1)];
+            })
+            ->filter(fn (array $r) => $r['score'] > 0)
+            ->sortByDesc('score')
             ->take($limit)
-            ->get()
-            ->map(fn ($chunk) => ['chunk' => $chunk, 'score' => 0.5])
+            ->values()
             ->toArray();
     }
 

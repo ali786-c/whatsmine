@@ -69,6 +69,32 @@ class AiDiagnoseCommand extends Command
             }
         }
 
+        // Knowledge base / RAG layer
+        $kb = $report['kb'] ?? [];
+        $this->line('│ Knowledge base / RAG');
+        if (($kb['note'] ?? null) !== null) {
+            $this->line('│   '.$kb['note']);
+        } else {
+            $botChecked = $kb['bot_checked'] ?? [];
+            $this->line('│   bot: '.($botChecked['id'] ?? '?').':'.($botChecked['name'] ?? '?')."  attached: ".($kb['kb_attached'] ? 'yes' : 'NO  ← bot has no KB'));
+            if ($kb['kb_attached'] ?? false) {
+                $this->line('│   kb: '.($kb['kb_name'] ?? '?')."  status: ".($kb['kb_status'] ?? '?'));
+                $this->line('│   chunks: '.($kb['chunks_total'] ?? 0).'  with embedding: '.($kb['chunks_with_embedding'] ?? 0).(($kb['chunks_with_embedding'] ?? 0) === 0 ? '  ← no vectors; keyword fallback only' : ''));
+                foreach (($kb['docs'] ?? []) as $d) {
+                    $this->line("│     doc #{$d['id']} [{$d['status']}] {$d['source_type']}: " . mb_substr((string) $d['title'], 0, 50));
+                }
+                $p = $kb['retrieval_probe'] ?? [];
+                if (($p['error'] ?? null) !== null) {
+                    $this->line('│   retrieval probe ERROR: '.$p['error']);
+                } else {
+                    $this->line('│   retrieval probe: '.($p['chunks_found'] ?? 0).' found / '.($p['chunks_injected'] ?? 0).' injected  via '.($p['via'] ?? 'n/a').'  top_score: '.($p['top_score'] ?? 'n/a'));
+                    if (($p['preview'] ?? null) !== null) {
+                        $this->line('│       preview: '.preg_replace('/\s+/', ' ', $p['preview']));
+                    }
+                }
+            }
+        }
+
         $this->line('│ Diagnosis');
         $this->line('│   '.$report['diagnosis']);
         $this->info('└──────────────────────────────────────────────────────');

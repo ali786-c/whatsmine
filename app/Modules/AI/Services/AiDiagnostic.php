@@ -41,9 +41,10 @@ class AiDiagnostic
         $code = $this->codeMarkers();
         $probes = $this->probes($settings);
         $workspaceLayer = $this->workspaceLayer();
+        $kbLayer = $this->kbLayer();
 
         if ($this->diagnosis === null) {
-            $this->diagnosis = $this->defaultDiagnosis($code, $probes, $workspaceLayer);
+            $this->diagnosis = $this->defaultDiagnosis($code, $probes, $workspaceLayer, $kbLayer);
         }
 
         return [
@@ -51,6 +52,7 @@ class AiDiagnostic
             'code' => $code,
             'probes' => $probes,
             'workspace' => $workspaceLayer,
+            'kb' => $kbLayer,
             'diagnosis' => $this->diagnosis,
         ];
     }
@@ -241,6 +243,151 @@ class AiDiagnostic
         ];
     }
 
+    // ── 3c. Knowledge-base / RAG layer (why the bot ignores the KB) ──────
+
+    /**
+     * "Bot replies generic / ignores the KB" has exactly four causes, checked here:
+     *  1. No KB attached to the bot (ai_kb_id null).
+     *  2. KB attached but has zero chunks (document never indexed — usually the
+     *     'ai' queue worker is not running on the VPS).
+     *  3. Chunks exist but zero embeddings (no embed-capable provider when the
+     *     document was indexed) AND the keyword fallback misses the query.
+     *  4. Retrieval works but the model drifts anyway (guardrails/model issue).
+     *
+     * A live retrieval probe replays the exact ChatbotRunner logic so whatever
+     * the bot would fetch for the canary question is printed verbatim.
+     */
+    private function kbLayer(): array
+    {
+        $bot = \App\Modules\AI\Models\AiChatbot::query()->orderBy('id')->first();
+
+        if ($bot === null) {
+            return ['note' => 'No chatbots exist.'];
+        }
+
+        $layer = [
+            'bot_checked' => ['id' => $bot->id, 'name' => $bot->name],
+            'kb_attached' => $bot->ai_kb_id !== null,
+        ];
+
+        if ($bot->ai_kb_id === null) {
+            $this->diagnose(
+                "Bot [{$bot->name}] has NO knowledge base attached. It answers from general knowledge, so it cannot know your company details. ".
+                'Fix: Client → AI Chatbots → edit the bot → attach the Knowledge Base, save, then test again.'
+            );
+
+            return $layer;
+        }
+
+        $kb = \App\Modules\AI\Models\AiKnowledgeBase::find($bot->ai_kb_id);
+        $layer['kb_id'] = $bot->ai_kb_id;
+        $layer['kb_name'] = $kb?->name;
+        $layer['kb_status'] = $kb?->status;
+
+        if ($kb === null) {
+            $this->diagnose("Bot [{$bot->name}] points at KB {$bot->ai_kb_id} which no longer exists (deleted KB). Re-attach or recreate the KB.");
+
+            return $layer;
+        }
+
+        $totalChunks = \App\Modules\AI\Models\AiKbChunk::where('kb_id', $kb->id)->count();
+        $embeddedChunks = \App\Modules\AI\Models\AiKbChunk::where('kb_id', $kb->id)->whereNotNull('embedding')->count();
+        $layer['chunks_total'] = $totalChunks;
+        $layer['chunks_with_embedding'] = $embeddedChunks;
+        $layer['docs'] = \App\Modules\AI\Models\AiKbDocument::where('kb_id', $kb->id)
+            ->get(['id', 'title', 'source_type', 'status'])
+            ->toArray();
+
+        if ($totalChunks === 0) {
+            $this->diagnose(
+                "KB [{$kb->name}] has ZERO chunks — the document was never indexed. On the VPS this is almost always the 'ai' queue worker not running. ".
+                'Fix: php artisan queue:restart && verify a worker is consuming the ai queue (php artisan queue:failed / supervisor config), then re-save the document in the KB UI to re-dispatch IndexDocumentJob.'
+            );
+
+            return $layer;
+        }
+
+        // Live retrieval probe — replay ChatbotRunner's exact pipeline.
+        $retrieval = $this->kbRetrievalProbe($bot, $kb->id, $embeddedChunks);
+        $layer['retrieval_probe'] = $retrieval;
+
+        if (($retrieval['chunks_found'] ?? 0) === 0) {
+            if ($embeddedChunks === 0) {
+                $this->diagnose(
+                    "KB [{$kb->name}] has {$totalChunks} chunks but ZERO embeddings, and the keyword fallback found nothing relevant for the probe query — so the bot's prompt contains no KB context and it answers generically. ".
+                    'Fix: configure an embedding-capable provider (OpenAI or Gemini) for the workspace, then re-index the KB document (re-save it in the KB UI).'
+                );
+            } else {
+                $this->diagnose(
+                    "KB [{$kb->name}] is attached and embedded, but live retrieval returned NOTHING for the probe query — embeddings exist yet do not match. ".
+                    'Fix: check that the KB content actually answers the probe question below, or lower the relevance threshold.'
+                );
+            }
+
+            return $layer;
+        }
+
+        if (! ($retrieval['injected'] ?? false)) {
+            $this->diagnose(
+                "Retrieval found chunks but they were dropped by the context budget (KbContextTrimmer) — prompt received no KB context. ".
+                'Fix: this is a bug/edge case; check chunk sizes in the KB.'
+            );
+        } elseif ($this->diagnosis === null) {
+            $this->diagnose(
+                "KB pipeline is healthy for bot [{$bot->name}]: retrieval returned {$retrieval['chunks_found']} chunk(s) and context was injected. ".
+                'If the bot STILL ignores the KB in the playground, the cause is model drift — see the probes/workspace layers above (dead upstream or a weak model).'
+            );
+        }
+
+        return $layer;
+    }
+
+    /**
+     * Replay the ChatbotRunner retrieval path (embed query → vector search →
+     * keyword fallback → context trimmer) for the canary question.
+     */
+    private function kbRetrievalProbe(\App\Modules\AI\Models\AiChatbot $bot, int $kbId, int $embeddedChunks): array
+    {
+        $query = self::CANARY;
+        $topK = $bot->max_context_chunks ?? 5;
+
+        try {
+            $queryEmbedding = [];
+            try {
+                $embeddings = app(LlmGateway::class)->embed($bot->workspace_id, [$query]);
+                $queryEmbedding = $embeddings[0] ?? [];
+            } catch (\Throwable) {
+                $queryEmbedding = []; // same swallow as ChatbotRunner
+            }
+
+            $results = [];
+            $via = null;
+            if (! empty($queryEmbedding)) {
+                $results = app(EmbeddingStore::class)->search($kbId, $queryEmbedding, $topK);
+                $via = 'embedding';
+            }
+            if (empty($results)) {
+                $results = app(ChatbotRunner::class)->keywordChunksForDiagnostic($kbId, $query, $topK);
+                $via = $via === null ? 'keyword (no query embedding)' : 'keyword (embedding search empty)';
+            }
+
+            $kept = app(KbContextTrimmer::class)->fit($results);
+
+            return [
+                'query' => $query,
+                'query_embedded' => $queryEmbedding !== [],
+                'via' => $via,
+                'chunks_found' => count($results),
+                'chunks_injected' => count($kept),
+                'injected' => count($kept) > 0,
+                'top_score' => isset($results[0]['score']) ? round((float) $results[0]['score'], 3) : null,
+                'preview' => isset($kept[0]['chunk']) ? Str::limit(trim($kept[0]['chunk']->content ?? ''), 200) : null,
+            ];
+        } catch (\Throwable $e) {
+            return ['query' => $query, 'error' => $e->getMessage()];
+        }
+    }
+
     // ── 4. Diagnosis ──────────────────────────────────────────────────────
 
     private function diagnose(string $text): void
@@ -249,7 +396,7 @@ class AiDiagnostic
     }
 
     /** Verdict when nothing else fired: everything healthy, or old code on a healthy gateway. */
-    private function defaultDiagnosis(array $code, array $probes, array $workspaceLayer = []): string
+    private function defaultDiagnosis(array $code, array $probes, array $workspaceLayer = [], array $kbLayer = []): string
     {
         if ($probes !== [] && collect($probes)->contains(fn ($p) => ($p['ok'] ?? false) === true) && ! $code['defense_active']) {
             return 'Gateway and model are healthy, but the DEPLOYED CODE IS OLD (guards missing). '.
@@ -267,7 +414,20 @@ class AiDiagnostic
                     'Fix: Admin/Client AI Providers — either disable the workspace-level provider (so the system gateway serves it) or set its chat model to auto/chat.';
             }
 
-            return 'All checks passed — gateway reachable, model healthy, guards active, workspace resolution clean. '.
+            // System layer green — the KB layer is the next most common culprit
+            // for "bot ignores our KB" complaints.
+            $kbAttached = $kbLayer['kb_attached'] ?? null;
+            $kbChunks = $kbLayer['chunks_total'] ?? null;
+            if ($kbAttached === false) {
+                return 'Gateway and model are healthy, but the chatbot has NO knowledge base attached — it can only answer from general knowledge. '.
+                    'Fix: attach the KB to the bot (AI Chatbots → edit → Knowledge Base), save, then re-run this diagnostic.';
+            }
+            if (is_int($kbChunks) && $kbChunks === 0) {
+                return 'Gateway and model are healthy, but the KB has zero indexed chunks — the indexing job never ran. '.
+                    'Fix: ensure the queue worker is running (it processes the ai queue), then re-save the KB document to re-index.';
+            }
+
+            return 'All checks passed — gateway reachable, model healthy, guards active, workspace resolution clean, KB retrieval healthy. '.
                 'If the playground still misbehaves, send the via-model tag from a bad reply and re-run this diagnostic right after.';
         }
 
