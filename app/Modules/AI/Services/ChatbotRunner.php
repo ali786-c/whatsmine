@@ -4,6 +4,7 @@ namespace App\Modules\AI\Services;
 
 use App\Modules\AI\Models\AiChatbot;
 use App\Modules\AI\Models\AiKbChunk;
+use App\Modules\AI\Services\Llm\DeadUpstreamException;
 use App\Modules\Shared\Models\Message;
 
 class ChatbotRunner
@@ -14,6 +15,9 @@ class ChatbotRunner
     /** Max characters kept per history turn — huge pasted messages get truncated. */
     public const HISTORY_MAX_CHARS = 500;
 
+    /** Sent when no usable reply could be produced and the bot has no fallback_reply set. */
+    public const DEFAULT_FALLBACK = 'Sorry, our assistant is briefly unavailable. Please try again shortly.';
+
     public function __construct(
         private LlmGateway $llmGateway,
         private EmbeddingStore $embedStore,
@@ -21,6 +25,8 @@ class ChatbotRunner
 
     public function run(AiChatbot $bot, Message $inboundMessage, ?array &$meta = null): ?string
     {
+        $meta = $meta ?? [];
+
         if (! $bot->enabled) {
             return null;
         }
@@ -139,8 +145,14 @@ class ChatbotRunner
 
             return $this->cleanReply($response->content, $bot);
         } catch (\Throwable $e) {
-            // Fallback
-            return $bot->fallback_reply ?? null;
+            // Fallback — surface the guard reason to the caller (playground meta,
+            // logs) so dead-upstream routing is visible instead of silent.
+            if ($meta !== null) {
+                $meta['guard'] = $e instanceof DeadUpstreamException ? 'dead_upstream' : 'llm_error';
+                $meta['error'] = mb_substr($e->getMessage(), 0, 160);
+            }
+
+            return $this->fallbackFor($bot);
         }
     }
 
@@ -157,7 +169,7 @@ class ChatbotRunner
         $text = trim((string) $content);
 
         if ($text === '') {
-            return $bot->fallback_reply ?: null;
+            return $this->fallbackFor($bot);
         }
 
         // Strip fenced code blocks, heading markers, and bold/italic emphasis —
@@ -167,7 +179,19 @@ class ChatbotRunner
         $text = str_replace(['**', '__'], '', $text) ?? $text;
         $text = trim($text);
 
-        return $text !== '' ? $text : ($bot->fallback_reply ?: null);
+        return $text !== '' ? $text : $this->fallbackFor($bot);
+    }
+
+    /**
+     * The reply sent when the LLM could not produce anything usable (dead
+     * upstream, network error, empty content). Prefers the bot's own configured
+     * fallback reply; otherwise a sane platform default so the customer is
+     * never left with silence or a canned upstream greeting.
+     */
+    private function fallbackFor(AiChatbot $bot): ?string
+    {
+        return $bot->fallback_reply
+            ?: ($bot->fallback_reply !== null ? $bot->fallback_reply : self::DEFAULT_FALLBACK);
     }
 
     /**
@@ -371,7 +395,7 @@ class ChatbotRunner
                 'tokens_used' => $response->promptTokens + $response->completionTokens,
             ];
         } catch (\Throwable) {
-            return ['reply' => $bot->fallback_reply ?? null, 'tokens_used' => 0];
+            return ['reply' => $this->fallbackFor($bot), 'tokens_used' => 0];
         }
     }
 }

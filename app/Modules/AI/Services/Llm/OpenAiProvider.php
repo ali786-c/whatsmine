@@ -37,8 +37,18 @@ class OpenAiProvider implements LlmProviderInterface
         $json = $resp->json();
         $latency = (int) ((microtime(true) - $start) * 1000);
 
+        $content = $json['choices'][0]['message']['content'] ?? '';
+
+        // Dead-upstream detection (scraped OmniRoute upstreams behind an
+        // OpenAI-compatible API): canned greeting loops and 200-wrapped errors.
+        $guard = DeadUpstreamGuard::inspect($json, $content, DeadUpstreamGuard::lastUserMessage($messages));
+        if ($guard !== null) {
+            $upstreamModel = $json['model'] ?? $this->chatModel;
+            throw new DeadUpstreamException("Dead upstream ({$upstreamModel}): {$guard}");
+        }
+
         return new LlmResponse(
-            content: $json['choices'][0]['message']['content'] ?? '',
+            content: $content,
             promptTokens: $json['usage']['prompt_tokens'] ?? 0,
             completionTokens: $json['usage']['completion_tokens'] ?? 0,
             model: $json['model'] ?? $this->chatModel,

@@ -83,6 +83,15 @@ class OmniRouteProvider implements LlmProviderInterface
             $content = $json['choices'][0]['message']['reasoning_content'] ?? '';
         }
 
+        // Dead-upstream detection: scraped upstreams (ddgw/*, IDE sessions) either
+        // wrap 4xx failures in HTTP 200 "error" bodies or greet every prompt with
+        // the same canned line while ignoring the system prompt entirely.
+        $guard = DeadUpstreamGuard::inspect($json, $content, DeadUpstreamGuard::lastUserMessage($messages));
+        if ($guard !== null) {
+            $upstreamModel = $json['model'] ?? $this->chatModel;
+            throw new DeadUpstreamException("Dead upstream ({$upstreamModel}): {$guard}");
+        }
+
         if ($this->workspaceId) {
             UsageMeter::track($this->workspaceId, 'ai_tokens_per_month', $promptTokens + $completionTokens);
         }
