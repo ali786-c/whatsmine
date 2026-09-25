@@ -2655,14 +2655,14 @@ export default function InboxShow({
                                     <input ref={fileRef} type="file" className="hidden" onChange={handleFileChange} />
                                 </div>
 
-                                {/* Text input + send */}
-                                <div className="flex gap-2 items-end">
-                                    {/* Voice note mic — WhatsApp-style, left of the input */}
+                                {/* WhatsApp-style composer: mic, text field and send all inside ONE bordered field */}
+                                <div className="flex items-end gap-1 rounded-xl border border-neutral-300 dark:border-neutral-600 bg-neutral-50 dark:bg-neutral-800 px-1.5 py-1.5 focus-within:ring-2 focus-within:ring-brand-500">
+                                    {/* Voice note mic — embedded left, inside the field */}
                                     <button type="button" onClick={startRecording}
                                         title={recording ? t('inbox.stop_recording') : t('inbox.record_voice')}
-                                        className={`self-end shrink-0 rounded-xl p-2.5 transition ${recording
+                                        className={`self-end shrink-0 rounded-lg p-2 transition ${recording
                                             ? 'bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-300 animate-pulse'
-                                            : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-500 hover:text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-900/30'}`}>
+                                            : 'text-neutral-400 hover:text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-900/30'}`}>
                                         {recording ? <Square className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
                                     </button>
                                     <textarea
@@ -2676,12 +2676,12 @@ export default function InboxShow({
                                         }
                                         rows={2}
                                         disabled={isWhatsApp && !isWindowOpen && !attachPreview}
-                                        className="flex-1 rounded-xl border border-neutral-300 dark:border-neutral-600 bg-neutral-50 dark:bg-neutral-800 px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60 disabled:cursor-not-allowed"
+                                        className="flex-1 border-0 bg-transparent px-1 py-1.5 text-sm resize-none focus:outline-none focus:ring-0 disabled:opacity-60 disabled:cursor-not-allowed"
                                     />
                                     <button
                                         type="submit"
                                         disabled={sending || (!data.body.trim() && !attachPreview) || (isWhatsApp && !isWindowOpen && !attachPreview)}
-                                        className="self-end rounded-xl bg-brand-600 p-2.5 text-white hover:bg-brand-700 disabled:opacity-50 transition">
+                                        className="self-end shrink-0 rounded-lg bg-brand-600 p-2 text-white hover:bg-brand-700 disabled:opacity-50 transition">
                                         {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                                     </button>
                                 </div>
