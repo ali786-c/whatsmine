@@ -7,7 +7,7 @@ import {
     RefreshCw, Search, Inbox, User, CheckCircle, Clock, X, Smile,
     Paperclip, Image as ImageIcon, ChevronDown, UserCheck,
     LayoutTemplate, Plus, Loader2, Bot, Calendar, BarChart2, PhoneMissed,
-    Volume2, VolumeX, ShoppingBag,
+    Volume2, VolumeX, ShoppingBag, CornerUpLeft,
 } from 'lucide-react';
 import { ChannelBrandIcon, CHANNEL_LABELS } from '@/Components/BrandIcons';
 import { formatTimeTz, formatInTz } from '@/Utils/datetime';
@@ -651,6 +651,91 @@ function IgTemplateBody({ payload, isOut = false }) {
     );
 }
 
+/* ─── Quoted message (WhatsApp reply) ────────────────── */
+
+/**
+ * Extract the quoted-message reference from a stored webhook payload.
+ *
+ * Both drivers already persist the raw payload, so no schema change is
+ * needed — only parsing:
+ *   • Meta Cloud API: payload.context { id, from, quoted_message? }
+ *   • QR / Baileys bridges: payload.quotedMsg / quotedMessage plus
+ *     stanzaId / quotedStanzaID (shape varies by bridge).
+ */
+function extractQuoted(msg) {
+    const p = msg.payload ?? null;
+    if (!p || typeof p !== 'object') return null;
+
+    const fromQuoted = (q, id) => {
+        if (!id && !q) return null;
+        const body = typeof q === 'string' ? q
+            : (q?.body ?? q?.text ?? q?.conversation ?? q?.caption
+                ?? q?.imageMessage?.caption ?? q?.videoMessage?.caption
+                ?? q?.documentMessage?.title ?? null);
+        return { id: id ?? null, body };
+    };
+
+    // Meta Cloud API: context { id, from, quoted_message? }
+    if (p.context?.id || p.context?.quoted_message) {
+        const q = p.context.quoted_message ?? null;
+        return {
+            id: p.context.id ?? null,
+            body: typeof q === 'string' ? q : (q?.body ?? q?.text ?? null),
+        };
+    }
+
+    // QR / Baileys bridges: flattened keys…
+    let r = fromQuoted(p.quotedMsg ?? p.quotedMessage, p.stanzaId ?? p.quotedStanzaID);
+    if (r) return r;
+
+    // …or the raw Baileys shape with contextInfo nested under the type key
+    const ctx = p.extendedTextMessage?.contextInfo ?? p.imageMessage?.contextInfo
+        ?? p.videoMessage?.contextInfo ?? p.documentMessage?.contextInfo
+        ?? p.audioMessage?.contextInfo ?? p.stickerMessage?.contextInfo
+        ?? p.contextInfo ?? null;
+    if (ctx) {
+        r = fromQuoted(ctx.quotedMessage ?? ctx.quotedMsg, ctx.stanzaId ?? ctx.quotedStanzaID);
+        if (r) return r;
+    }
+
+    return null;
+}
+
+const QUOTED_TYPE_LABELS = {
+    image: '🖼 Photo',
+    video: '🎬 Video',
+    audio: '🎤 Voice message',
+    document: '📄 Document',
+    sticker: '😊 Sticker',
+    location: '📍 Location',
+    contacts: '👤 Contact',
+    poll: '📊 Poll',
+};
+
+/** Resolve the quoted text from the already-loaded conversation messages. */
+function findQuotedBody(quotedId, allMessages) {
+    if (!quotedId) return null;
+    const source = (allMessages ?? []).find(m => m.provider_message_id === quotedId);
+    if (!source) return null;
+    return source.body || QUOTED_TYPE_LABELS[source.type] || 'Message';
+}
+
+function QuotedPreview({ text, isOut, hasRef }) {
+    return (
+        <div
+            title={hasRef ? undefined : 'Original message not found'}
+            className={`mb-1.5 flex items-start gap-1.5 rounded-md border-l-[3px] px-2 py-1 text-[11px] leading-snug ${
+                isOut
+                    ? 'border-white/70 bg-white/10 text-white/85'
+                    : 'border-brand-500 bg-neutral-100 dark:bg-neutral-700/60 text-neutral-600 dark:text-neutral-300'
+            }`}
+        >
+            <CornerUpLeft className="mt-0.5 h-3 w-3 shrink-0 opacity-70" />
+            <span className="line-clamp-2 whitespace-pre-wrap break-words">{text}</span>
+        </div>
+    );
+}
+
 /* ─── main MessageBubble ─────────────────────────────── */
 
 function SoundPrefsMenu() {
@@ -712,11 +797,18 @@ function SoundPrefsMenu() {
     );
 }
 
-function MessageBubble({ msg, conversationId }) {
+function MessageBubble({ msg, conversationId, allMessages = [] }) {
+    const { t } = useTranslation();
     const { props: pageProps } = usePage();
     const bubbleTz = pageProps.timezone || 'Asia/Dhaka';
     const isOut = msg.direction === 'out';
     const p     = msg.payload ?? {};
+
+    // Quoted message (customer replied to a specific message)
+    const quoted = extractQuoted(msg);
+    const quotedText = quoted
+        ? (quoted.body ?? findQuotedBody(quoted.id, allMessages) ?? (quoted.id ? t('inbox.quoted_message', 'Quoted message') : null))
+        : null;
 
     // Resolve media source: outbound has preview_url directly; inbound raw webhook nests under type key
     const mediaType   = msg.type ?? 'text';
@@ -789,6 +881,9 @@ function MessageBubble({ msg, conversationId }) {
                 )}
 
                 <div className="px-3 py-2.5">
+                    {/* QUOTED MESSAGE (reply reference) */}
+                    {quotedText && <QuotedPreview text={quotedText} isOut={isOut} hasRef={Boolean(quoted.body || findQuotedBody(quoted.id, allMessages))} />}
+
                     {/* IMAGE */}
                     {mediaType === 'image' && (
                         <MediaImage src={mediaSrc} alt={caption} conversationId={conversationId} messageId={msg.id} isOut={isOut} />
@@ -2254,7 +2349,7 @@ export default function InboxShow({
                             {groupMessagesForRender(messages).map(item => (
                                 item.kind === 'album'
                                     ? <ImageGallery key={item.key} messages={item.messages} conversationId={conversation.uuid} />
-                                    : <MessageBubble key={item.key} msg={item.msg} conversationId={conversation.uuid} />
+                                    : <MessageBubble key={item.key} msg={item.msg} conversationId={conversation.uuid} allMessages={messages} />
                             ))}
                             {messages.length === 0 && (
                                 <div className="py-8"><EmptyState icon={<MessageSquare className="h-8 w-8" />} title={t('inbox.no_messages_yet')} description={t('inbox.no_messages_desc')} /></div>
