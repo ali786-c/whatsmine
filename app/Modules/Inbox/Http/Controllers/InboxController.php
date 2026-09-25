@@ -35,6 +35,9 @@ class InboxController extends Controller
         private StorageManager $storageManager,
     ) {}
 
+    /** Human-readable reason for the last transcodeAudioToOgg() failure. */
+    private ?string $transcodeReason = null;
+
     public function index(Request $request): Response
     {
         $workspaceId = $request->user()->current_workspace_id ?? $request->user()->workspace_id;
@@ -194,6 +197,13 @@ class InboxController extends Controller
                     $uploadPath = $converted['path'];
                     $uploadMime = $converted['mime'];
                     $mimeType = $converted['mime'];
+                } else {
+                    // Meta rejects audio/webm outright ("Received file of type
+                    // 'video/webm'"), which surfaced as a cryptic 500. Fail
+                    // fast with the precise server-side reason instead.
+                    return response()->json([
+                        'error' => 'Voice note needs server transcoding (Chrome records webm, WhatsApp needs ogg/opus) but it failed: '.($this->transcodeReason ?? 'unknown reason'),
+                    ], 422);
                 }
             }
 
@@ -676,11 +686,12 @@ class InboxController extends Controller
     {
         // shell_exec/proc_open are commonly in disable_functions on hardened
         // hosts (aaPanel default) — calling a disabled function throws a fatal
-        // \Error, so every execution path must be guarded and fall back to
-        // "no transcode" (the driver surfaces a clear error if Meta rejects).
+        // \Error, so every execution path must be guarded. Failure reasons are
+        // recorded in $this->transcodeReason for a clear client-side error.
         $ffmpeg = $this->findFfmpeg();
         if ($ffmpeg === null) {
-            \Illuminate\Support\Facades\Log::warning('Inbox audio: ffmpeg unavailable (not installed or exec functions disabled) — cannot transcode webm voice note to ogg.');
+            $this->transcodeReason = $this->transcodeReason ?? 'ffmpeg binary not found (not in PATH, /usr/local/bin or /usr/bin)';
+            \Illuminate\Support\Facades\Log::warning('Inbox audio: '.$this->transcodeReason);
 
             return null;
         }
@@ -694,15 +705,26 @@ class InboxController extends Controller
             ], sys_get_temp_dir(), null, null, 60.0);
             $process->run();
         } catch (\Throwable $e) {
-            // proc_open disabled or process launch failed — treat as no ffmpeg.
+            // proc_open disabled or process launch failed — record why.
             @unlink($out);
-            \Illuminate\Support\Facades\Log::warning('Inbox audio: ffmpeg transcode failed to launch: '.$e->getMessage());
+            $this->transcodeReason = 'process launch failed (is proc_open in PHP disable_functions?): '.$e->getMessage();
+            \Illuminate\Support\Facades\Log::warning('Inbox audio: '.$this->transcodeReason);
+
+            return null;
+        }
+
+        if (! $process->isSuccessful()) {
+            @unlink($out);
+            $this->transcodeReason = 'ffmpeg exited with code '.$process->getExitCode().': '.substr(trim($process->getErrorOutput() ?: $process->getOutput()), 0, 300);
+            \Illuminate\Support\Facades\Log::warning('Inbox audio: transcode failed — '.$this->transcodeReason);
 
             return null;
         }
 
         if (! file_exists($out) || filesize($out) === 0) {
             @unlink($out);
+            $this->transcodeReason = 'ffmpeg produced no output (open_basedir or temp dir restriction?)';
+            \Illuminate\Support\Facades\Log::warning('Inbox audio: '.$this->transcodeReason);
 
             return null;
         }
@@ -722,7 +744,7 @@ class InboxController extends Controller
     private function findFfmpeg(): ?string
     {
         foreach ([trim((string) config('services.ffmpeg.path')), '/usr/local/bin/ffmpeg', '/usr/bin/ffmpeg'] as $candidate) {
-            if ($candidate !== '' && is_executable($candidate) && is_file($candidate)) {
+            if ($candidate !== '' && is_file($candidate) && is_executable($candidate)) {
                 return $candidate;
             }
         }
@@ -731,6 +753,11 @@ class InboxController extends Controller
             $found = (new \Symfony\Component\Process\ExecutableFinder)->find('ffmpeg');
         } catch (\Throwable) {
             $found = false;
+        }
+
+        if (! $found) {
+            $this->transcodeReason = 'ffmpeg not found — checked FFMPEG_PATH, /usr/local/bin, /usr/bin and PATH'
+                .(ini_get('open_basedir') ? ' (PHP open_basedir is active: '.ini_get('open_basedir').' — add /usr/local/bin to it in the site PHP settings, or clear it)' : '');
         }
 
         return $found ?: null;
