@@ -2826,7 +2826,7 @@
         "mic_permission_denied": "माइक की अनुमति नहीं मिली — वॉइस नोट के लिए माइक एक्सेस दें।",
         "voice_too_short": "रिकॉर्डिंग बहुत छोटी है — बोलें फिर रोकें।",
         "https_required": "HTTPS आवश्यक है — वॉइस नोट के लिए सुरक्षित (https://) कनेक्शन चाहिए।",
-        "mic_blocked_site": "माइक्रोफ़ोन इस साइट के लिए BLOCKED है। एड्रेस बार में लॉक आइकन → Site settings → Microphone → Allow करें, फिर रीलोड करें।",
+        "mic_blocked_site": "माइक्रोफ़ोन BLOCKED है। क्रोम: लॉक आइकन → Site settings → Microphone → Allow। पहले से Allow है तो OS माइक ब्लॉक कर रहा है (Windows: Settings → Privacy & security → Microphone) — फिर रीलोड करें।",
         "mic_not_found": "इस डिवाइस पर माइक्रोफ़ोन नहीं मिला। माइक जोड़ें या सिस्टम सेटिंग्स में चालू करें।",
         "mic_in_use": "माइक्रोफ़ोन किसी और ऐप (Zoom/Meet) में उपयोग में है — बंद करके फिर कोशिश करें।"
     },

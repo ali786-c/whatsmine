@@ -2826,7 +2826,7 @@
         "mic_permission_denied": "মাইক্রোফোন অনুমতি অস্বীকৃত — ভয়েস নোটের জন্য মাইক অ্যাক্সেস দিন।",
         "voice_too_short": "রেকর্ডিং খুব ছোট — কথা বলে থামান।",
         "https_required": "HTTPS প্রয়োজন — ভয়েস নোটের জন্য নিরাপদ (https://) সংযোগ দরকার।",
-        "mic_blocked_site": "এই সাইটের জন্য মাইক্রোফোন BLOCKED। ঠিকানা বারে লক আইকন → Site settings → Microphone → Allow করুন, তারপর রিলোড করুন।",
+        "mic_blocked_site": "মাইক্রোফোন BLOCKED। ক্রোম: লক আইকন → Site settings → Microphone → Allow। আগে থেকেই Allow থাকলে OS মাইক ব্লক করছে (Windows: Settings → Privacy & security → Microphone) — তারপর রিলোড করুন।",
         "mic_not_found": "এই ডিভাইসে মাইক্রোফোন পাওয়া যায়নি। মাইক সংযুক্ত করুন বা সিস্টেম সেটিংসে চালু করুন।",
         "mic_in_use": "মাইক্রোফোন অন্য অ্যাপে (Zoom/Meet) ব্যবহৃত — বন্ধ করে আবার চেষ্টা করুন।"
     },
