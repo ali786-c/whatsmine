@@ -314,7 +314,7 @@ class AiDiagnostic
         if (($retrieval['chunks_found'] ?? 0) === 0) {
             if ($embeddedChunks === 0) {
                 $this->diagnose(
-                    "KB [{$kb->name}] has {$totalChunks} chunks but ZERO embeddings, and the keyword fallback found nothing relevant for the probe query — so the bot's prompt contains no KB context and it answers generically. ".
+                    "KB [{$kb->name}] has {$totalChunks} chunks but ZERO embeddings, and both retrieval channels (embedding + keyword) found nothing relevant for the probe query — so the bot's prompt contains no KB context and it answers generically. ".
                     'Fix: configure an embedding-capable provider (OpenAI or Gemini) for the workspace, then re-index the KB document (re-save it in the KB UI).'
                 );
             } else {
@@ -360,32 +360,52 @@ class AiDiagnostic
                 $queryEmbedding = []; // same swallow as ChatbotRunner
             }
 
-            $results = [];
-            $via = null;
+            // Replay ChatbotRunner's hybrid pipeline exactly: embedding channel
+            // + keyword channel merged with rank fusion, then the trimmer.
+            $embedResults = [];
             if (! empty($queryEmbedding)) {
-                $results = app(EmbeddingStore::class)->search($kbId, $queryEmbedding, $topK);
-                $via = 'embedding';
+                $embedResults = app(EmbeddingStore::class)->search(
+                    $kbId,
+                    $queryEmbedding,
+                    max($topK, 5),
+                    ChatbotRunner::HYBRID_MIN_EMBED_SCORE,
+                );
             }
-            if (empty($results)) {
-                $results = app(ChatbotRunner::class)->keywordChunksForDiagnostic($kbId, $query, $topK);
-                $via = $via === null ? 'keyword (no query embedding)' : 'keyword (embedding search empty)';
-            }
+            $keywordResults = app(ChatbotRunner::class)->keywordChunksForDiagnostic($kbId, $query, max($topK, 5));
+            $results = app(ChatbotRunner::class)->fuseForDiagnostic($embedResults, $keywordResults, $topK);
 
             $kept = app(KbContextTrimmer::class)->fit($results);
 
             return [
                 'query' => $query,
                 'query_embedded' => $queryEmbedding !== [],
-                'via' => $via,
+                'via' => $this->hybridVia($embedResults, $keywordResults),
+                'embedding_hits' => count($embedResults),
+                'keyword_hits' => count($keywordResults),
                 'chunks_found' => count($results),
                 'chunks_injected' => count($kept),
                 'injected' => count($kept) > 0,
-                'top_score' => isset($results[0]['score']) ? round((float) $results[0]['score'], 3) : null,
+                'top_score' => isset($results[0]['score']) ? round((float) $results[0]['score'], 4) : null,
                 'preview' => isset($kept[0]['chunk']) ? Str::limit(trim($kept[0]['chunk']->content ?? ''), 200) : null,
             ];
         } catch (\Throwable $e) {
             return ['query' => $query, 'error' => $e->getMessage()];
         }
+    }
+
+    /** Human label for which hybrid retrieval channels produced hits.
+     *
+     * @param  array<int, array{chunk: \App\Modules\AI\Models\AiKbChunk, score: float}>  $embedResults
+     * @param  array<int, array{chunk: \App\Modules\AI\Models\AiKbChunk, score: float}>  $keywordResults
+     */
+    private function hybridVia(array $embedResults, array $keywordResults): string
+    {
+        return match (true) {
+            $embedResults !== [] && $keywordResults !== [] => 'hybrid (embedding + keyword, rank-fused)',
+            $embedResults !== [] => 'embedding only',
+            $keywordResults !== [] => 'keyword only',
+            default => 'no hits in either channel',
+        };
     }
 
     // ── 4. Diagnosis ──────────────────────────────────────────────────────

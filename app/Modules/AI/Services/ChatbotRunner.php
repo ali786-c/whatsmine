@@ -5,6 +5,7 @@ namespace App\Modules\AI\Services;
 use App\Modules\AI\Models\AiChatbot;
 use App\Modules\AI\Models\AiKbChunk;
 use App\Modules\AI\Services\Llm\DeadUpstreamException;
+use App\Modules\AI\Services\Llm\LlmResponse;
 use App\Modules\Shared\Models\Message;
 
 class ChatbotRunner
@@ -17,6 +18,57 @@ class ChatbotRunner
 
     /** Sent when no usable reply could be produced and the bot has no fallback_reply set. */
     public const DEFAULT_FALLBACK = 'Sorry, our assistant is briefly unavailable. Please try again shortly.';
+
+    /**
+     * Hybrid retrieval keeps embedding hits down to this cosine score instead of
+     * the strict MIN_RELEVANCE_SCORE cutoff: the rank fusion decides what makes
+     * the final cut, and a chunk the keyword channel ranks first must not be
+     * crowded out just because the embedding channel scored it 0.2.
+     */
+    public const HYBRID_MIN_EMBED_SCORE = 0.15;
+
+    /** Standard Reciprocal Rank Fusion constant. */
+    private const RRF_K = 60;
+
+    /** System nudge for the single grounded-answer retry. */
+    private const GROUNDING_NUDGE = 'The Knowledge Base context included above DOES contain the information needed to answer. Reply again using the exact plan names, prices, currencies and figures from that context. Do not offer to confirm with the team, do not say the information is missing, and do not invent anything that is not in the context.';
+
+    /** Reply patterns that mean "the model hedged although it had context". */
+    private const HEDGE_PATTERNS = [
+        '/confirm (it|this|them)? ?with (our |the )?team/i',
+        "/(i|we) (do not|don't|cannot|can't) have (the |that |your |this )?(specific |exact )?(information|details|pricing|price|rates)/i",
+        '/not able to share/i',
+        "/(i|we) (will|'ll) (confirm|check|find out)( that| this)? (for you|with our team)/i",
+        "/(i|we) (do not|don't) know the exact/i",
+    ];
+
+    /**
+     * Domain synonyms bridging the words customers use with the words KBs use
+     * ("which plan is the cheapest" ↔ "our lowest-priced option"). Synonyms
+     * participate in scoring like regular keywords.
+     */
+    private const SYNONYMS = [
+        'cheapest' => ['lowest', 'budget', 'affordable', 'economy'],
+        'cheap' => ['lowest', 'budget', 'affordable'],
+        'lowest' => ['cheapest', 'budget'],
+        'price' => ['pricing', 'cost', 'rate', 'rates'],
+        'pricing' => ['price', 'cost', 'rate', 'rates'],
+        'cost' => ['price', 'pricing'],
+        'rate' => ['price', 'pricing'],
+        'plan' => ['package', 'offer'],
+        'package' => ['plan'],
+        'unlimited' => ['unmetered'],
+        'unmetered' => ['unlimited'],
+        'storage' => ['disk', 'space'],
+        'bandwidth' => ['traffic'],
+        'buy' => ['order', 'purchase'],
+        'order' => ['buy', 'purchase'],
+        'discount' => ['sale', 'offer'],
+        'delivery' => ['shipping'],
+        'shipping' => ['delivery'],
+        'refund' => ['money back', 'return'],
+        'support' => ['help'],
+    ];
 
     public function __construct(
         private LlmGateway $llmGateway,
@@ -46,19 +98,10 @@ class ChatbotRunner
             }
         }
 
-        // 2. Retrieve top-k relevant chunks (embedding search, with keyword fallback)
+        // 2. Retrieve top-k relevant chunks (hybrid: embedding + keyword, rank-fused)
         $contextChunks = [];
         if ($bot->ai_kb_id) {
-            $results = [];
-            if (! empty($queryEmbedding)) {
-                $results = $this->embedStore->search($bot->ai_kb_id, $queryEmbedding, $bot->max_context_chunks ?? 5);
-            }
-            if (empty($results)) {
-                // Embedding unavailable (no embed-capable provider) or no relevant hit —
-                // fall back to keyword search so the bot still answers from the KB
-                // instead of drifting into general knowledge.
-                $results = $this->keywordChunks($bot->ai_kb_id, $body, $bot->max_context_chunks ?? 5);
-            }
+            $results = $this->retrieveHybrid($bot->ai_kb_id, $body, $queryEmbedding, $bot->max_context_chunks ?? 5);
             $contextChunks = array_column(app(KbContextTrimmer::class)->fit($results), 'chunk');
         }
 
@@ -121,27 +164,25 @@ class ChatbotRunner
             [['role' => 'user', 'content' => $augmentedUserMessage]],
         );
 
-        // 4. Call LLM
-        try {
-            $response = $this->llmGateway->chat(
-                $workspaceId,
-                $messages,
-                [
-                    'max_tokens' => $bot->max_tokens ?? 512,
-                    'num_ctx' => $bot->num_ctx ?? 2048,
-                    'keep_alive' => $bot->keep_alive ?? '10m',
-                    'temperature' => (float) ($bot->temperature ?? 0.3),
-                ],
-                $bot->id,
-                $conversation->id,
-            );
+        // 4. Call LLM — with one grounded-answer retry when the KB had context
+        // but the model hedged anyway ("I'll confirm with our team").
+        $opts = [
+            'max_tokens' => $bot->max_tokens ?? 512,
+            'num_ctx' => $bot->num_ctx ?? 2048,
+            'keep_alive' => $bot->keep_alive ?? '10m',
+            'temperature' => (float) ($bot->temperature ?? 0.3),
+        ];
 
-            $meta = [
+        try {
+            $response = $this->llmGateway->chat($workspaceId, $messages, $opts, $bot->id, $conversation->id);
+            $response = $this->groundedRetry($response, $messages, $workspaceId, $opts, $bot->id, $hasContext, $meta);
+
+            $meta = array_merge([
                 'model' => $response->model,
                 'latency_ms' => $response->latencyMs,
                 'prompt_tokens' => $response->promptTokens,
                 'completion_tokens' => $response->completionTokens,
-            ];
+            ], $meta);
 
             return $this->cleanReply($response->content, $bot);
         } catch (\Throwable $e) {
@@ -195,8 +236,8 @@ class ChatbotRunner
     }
 
     /**
-     * Diagnostic access to the keyword fallback retrieval (the runner's own
-     * method is private; AiDiagnostic replays the exact same logic).
+     * Diagnostic access to the keyword retrieval (the runner's own method is
+     * private; AiDiagnostic replays the exact same logic).
      *
      * @return array<int, array{chunk: AiKbChunk, score: float}>
      */
@@ -206,57 +247,109 @@ class ChatbotRunner
     }
 
     /**
-     * Keyword fallback retrieval for when embeddings are unavailable (no
-     * embedding-capable provider configured) or similarity search returns no
-     * relevant hit. Matches query words against chunk content — good enough
-     * for FAQ-style knowledge bases where the question text is in the chunk.
+     * Diagnostic access to the rank fusion so AiDiagnostic can replay the
+     * exact hybrid pipeline (embed → search, keyword → fuse) and show what
+     * the bot would really retrieve.
+     *
+     * @param  array<int, array{chunk: AiKbChunk, score: float}>  $embedResults
+     * @param  array<int, array{chunk: AiKbChunk, score: float}>  $keywordResults
+     * @return array<int, array{chunk: AiKbChunk, score: float}>
+     */
+    public function fuseForDiagnostic(array $embedResults, array $keywordResults, int $limit): array
+    {
+        return $this->fuseRrf($embedResults, $keywordResults, $limit);
+    }
+
+    /**
+     * Keyword retrieval — the channel that saves the bot when embeddings are
+     * unavailable OR loosely matched. Upgraded beyond the old hit-ratio:
+     *
+     *  - synonyms: "cheapest" also matches "lowest", "price" matches "cost"...
+     *  - phrase bonus: the full query phrase inside a chunk out-ranks scattered words
+     *  - number bonus: figures from the query (1999, 3999...) found literally in a
+     *    chunk are a strong signal — customers and KBs both price with numbers
      *
      * @return array<int, array{chunk: AiKbChunk, score: float}>
      */
     private function keywordChunks(int $kbId, string $query, int $limit): array
     {
-        $clean = preg_replace('/[^a-zA-Z0-9\s]/', ' ', mb_strtolower($query)) ?? '';
-        $words = array_filter(explode(' ', $clean), fn ($w) => mb_strlen(trim($w)) > 2);
-        $stopWords = ['the', 'and', 'for', 'you', 'have', 'with', 'this', 'that', 'are', 'what', 'how', 'much', 'can', 'get', 'want'];
+        $clean = preg_replace('/[^a-z0-9\s]/', ' ', str_replace(',', '', mb_strtolower($query))) ?? '';
+        $words = array_values(array_filter(explode(' ', $clean), fn ($w) => mb_strlen(trim($w)) > 2));
+        $stopWords = ['the', 'and', 'for', 'you', 'have', 'with', 'this', 'that', 'are', 'what', 'how', 'much', 'can', 'get', 'want', 'any', 'which', 'your', 'offer'];
         $keywords = array_values(array_diff($words, $stopWords));
 
         if (empty($keywords)) {
             return [];
         }
 
-        // Rank by how many distinct query keywords each chunk contains, so a
-        // chunk answering "Starter plan price" (matches starter + plan +
-        // price) beats a chunk that merely mentions "plan". Arbitrary
-        // take(5) here was injecting unrelated chunks and the model hedged
-        // even though the KB held the answer.
+        $expanded = $this->expandKeywords($keywords);
+        $numbers = array_values(array_filter($words, fn ($w) => ctype_digit($w) && mb_strlen($w) >= 2));
+        $phrase = implode(' ', $keywords);
+
         $candidates = AiKbChunk::where('kb_id', $kbId)
-            ->where(function ($builder) use ($keywords) {
-                foreach ($keywords as $kw) {
+            ->where(function ($builder) use ($expanded) {
+                foreach ($expanded as $kw) {
                     $builder->orWhere('content', 'LIKE', '%'.$kw.'%');
                 }
             })
             ->limit(200)
             ->get();
 
-        $lowerKeywords = array_map('mb_strtolower', $keywords);
-
         return $candidates
-            ->map(function (AiKbChunk $chunk) use ($lowerKeywords) {
+            ->map(function (AiKbChunk $chunk) use ($expanded, $numbers, $phrase, $keywords) {
                 $content = mb_strtolower($chunk->content ?? '');
-                $hits = 0;
-                foreach ($lowerKeywords as $kw) {
+                $matched = 0;
+                foreach ($expanded as $kw) {
                     if (str_contains($content, $kw)) {
-                        $hits++;
+                        $matched++;
                     }
                 }
 
-                return ['chunk' => $chunk, 'score' => $hits / max(count($lowerKeywords), 1)];
+                // Base score: matched keywords / original query keywords — a
+                // chunk can only score 1.0 by matching every real query word
+                // (synonyms merely unlock the LIKE candidates and shared hits).
+                $score = $matched > 0 ? $matched / max(count($keywords), 1) : 0.0;
+
+                // Phrase bonus — the whole query verbatim is the strongest match.
+                if ($phrase !== '' && str_contains($content, $phrase)) {
+                    $score += 0.5;
+                }
+
+                // Number bonus — every literal figure hit is a strong signal.
+                foreach ($numbers as $num) {
+                    if (str_contains($content, $num)) {
+                        $score += 0.3;
+                    }
+                }
+
+                return ['chunk' => $chunk, 'score' => $score];
             })
             ->filter(fn (array $r) => $r['score'] > 0)
             ->sortByDesc('score')
             ->take($limit)
             ->values()
             ->toArray();
+    }
+
+    /**
+     * Query keywords plus their synonym expansions (deduped, lowercase).
+     *
+     * @param  list<string>  $keywords
+     * @return list<string>
+     */
+    private function expandKeywords(array $keywords): array
+    {
+        $expanded = [];
+        foreach ($keywords as $kw) {
+            $expanded[] = $kw;
+            foreach (self::SYNONYMS[$kw] ?? [] as $syn) {
+                if (! in_array($syn, $expanded, true)) {
+                    $expanded[] = $syn;
+                }
+            }
+        }
+
+        return $expanded;
     }
 
     /**
@@ -366,6 +459,143 @@ class ChatbotRunner
     }
 
     /**
+     * Hybrid retrieval: embedding search and keyword search run side by side and
+     * are merged with Reciprocal Rank Fusion, then top-k is taken.
+     *
+     * The previous one-or-the-other logic had a blind spot: once the embedding
+     * search returned ANY hit above the relevance threshold, the keyword channel
+     * never ran — so the chunk that literally contained the answer (e.g. reseller
+     * pricing) could be crowded out by loosely-related chunks the embedder liked.
+     *
+     * @param  array<int, float>  $queryEmbedding
+     * @return array<int, array{chunk: AiKbChunk, score: float}> RRF-fused results
+     */
+    private function retrieveHybrid(int $kbId, string $query, array $queryEmbedding, int $limit): array
+    {
+        $embedResults = [];
+        if (! empty($queryEmbedding)) {
+            $embedResults = $this->embedStore->search(
+                $kbId,
+                $queryEmbedding,
+                max($limit, 5),
+                self::HYBRID_MIN_EMBED_SCORE,
+            );
+        }
+
+        $keywordResults = $this->keywordChunks($kbId, $query, max($limit, 5));
+
+        return $this->fuseRrf($embedResults, $keywordResults, $limit);
+    }
+
+    /**
+     * Reciprocal Rank Fusion over the two retrieval channels. RRF only uses
+     * channel RANKS, so cosine scores and keyword hit-ratios — which are not
+     * comparable scales — never need normalising.
+     *
+     * @param  array<int, array{chunk: AiKbChunk, score: float}>  $embedResults
+     * @param  array<int, array{chunk: AiKbChunk, score: float}>  $keywordResults
+     * @return array<int, array{chunk: AiKbChunk, score: float}>
+     */
+    private function fuseRrf(array $embedResults, array $keywordResults, int $limit): array
+    {
+        $fused = [];
+
+        foreach ([$embedResults, $keywordResults] as $channel) {
+            foreach (array_values($channel) as $rank => $result) {
+                $chunkId = $result['chunk']->id ?? spl_object_id($result['chunk']);
+                $fused[$chunkId] = ($fused[$chunkId] ?? 0.0) + 1.0 / (self::RRF_K + $rank + 1);
+            }
+        }
+
+        arsort($fused);
+
+        $byId = collect($embedResults)
+            ->merge($keywordResults)
+            ->keyBy(fn ($r) => $r['chunk']->id ?? spl_object_id($r['chunk']));
+
+        return collect($fused)
+            ->take($limit)
+            ->map(fn (float $score, $chunkId) => [
+                'chunk' => $byId[$chunkId]['chunk'],
+                'score' => $score,
+            ])
+            ->values()
+            ->toArray();
+    }
+
+    /**
+     * One retry with a grounding nudge, but ONLY when the KB actually supplied
+     * context and the first reply still hedged ("I'll confirm with our team").
+     * A retry whose first message still carries the hedged reply as history
+     * gives the model a concrete example to overwrite — models recover far
+     * more reliably this way than from a system instruction alone.
+     *
+     * @param  array<int, array{role: string, content: string}>  $messages
+     * @param  array<string, mixed>  $opts
+     * @param  array<string, mixed>|null  $meta
+     */
+    private function groundedRetry(
+        LlmResponse $response,
+        array $messages,
+        int $workspaceId,
+        array $opts,
+        ?int $chatbotId,
+        bool $hadContext,
+        ?array &$meta = null,
+    ): LlmResponse {
+        if (! $hadContext || ! $this->looksHedged($response->content)) {
+            return $response;
+        }
+
+        $retryMessages = $messages;
+        $lastIndex = count($retryMessages) - 1;
+        if (isset($retryMessages[$lastIndex]) && $retryMessages[$lastIndex]['role'] === 'user') {
+            $retryMessages[$lastIndex] = [
+                'role' => 'user',
+                'content' => $retryMessages[$lastIndex]['content']."\n\n[Your previous draft hedged: \"".
+                    mb_substr(trim((string) $response->content), 0, 300).
+                    "\" — answer it properly now.]",
+            ];
+        }
+        $retryMessages[] = ['role' => 'assistant', 'content' => (string) $response->content];
+        $retryMessages[] = ['role' => 'system', 'content' => self::GROUNDING_NUDGE];
+
+        try {
+            $retry = $this->llmGateway->chat($workspaceId, $retryMessages, $opts, $chatbotId);
+        } catch (\Throwable) {
+            return $response; // keep the hedged reply — never lose a reply over a retry
+        }
+
+        // Accept only if the retry is a real answer, not another hedge.
+        if ($this->looksHedged($retry->content)) {
+            return $response;
+        }
+
+        if ($meta !== null) {
+            $meta['grounded_retry'] = true;
+        }
+
+        return $retry;
+    }
+
+    /** True when the reply offers to "confirm with the team" or claims missing info. */
+    private function looksHedged(?string $content): bool
+    {
+        $text = trim((string) $content);
+        if ($text === '') {
+            return false;
+        }
+
+        foreach (self::HEDGE_PATTERNS as $pattern) {
+            if (preg_match($pattern, $text)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
      * API-friendly variant: run the chatbot with a plain text message.
      * Does not require an existing Message/Conversation model.
      *
@@ -384,16 +614,10 @@ class ChatbotRunner
             }
         }
 
-        // 2. Retrieve top-k relevant chunks (embedding search, with keyword fallback)
+        // 2. Retrieve top-k relevant chunks (hybrid: embedding + keyword, rank-fused)
         $contextChunks = [];
         if ($bot->ai_kb_id) {
-            $results = [];
-            if (! empty($queryEmbedding)) {
-                $results = $this->embedStore->search($bot->ai_kb_id, $queryEmbedding, $bot->max_context_chunks ?? 5);
-            }
-            if (empty($results)) {
-                $results = $this->keywordChunks($bot->ai_kb_id, $message, $bot->max_context_chunks ?? 5);
-            }
+            $results = $this->retrieveHybrid($bot->ai_kb_id, $message, $queryEmbedding, $bot->max_context_chunks ?? 5);
             $contextChunks = array_column(app(KbContextTrimmer::class)->fit($results), 'chunk');
         }
 
@@ -415,14 +639,13 @@ class ChatbotRunner
             [['role' => 'user', 'content' => $augmentedUserMessage]],
         );
 
-        // 4. Call LLM
+        // 4. Call LLM — with the same grounded-answer retry as run().
+        $opts = ['max_tokens' => 512, 'temperature' => (float) ($bot->temperature ?? 0.3)];
+
         try {
-            $response = $this->llmGateway->chat(
-                $workspaceId,
-                $messages,
-                ['max_tokens' => 512, 'temperature' => (float) ($bot->temperature ?? 0.3)],
-                $bot->id,
-            );
+            $response = $this->llmGateway->chat($workspaceId, $messages, $opts, $bot->id);
+            $retryMeta = [];
+            $response = $this->groundedRetry($response, $messages, $workspaceId, $opts, $bot->id, $contextChunks !== [], $retryMeta);
 
             return [
                 'reply' => $this->cleanReply($response->content, $bot),

@@ -80,15 +80,17 @@ class ChatbotRunnerTest extends TestCase
         $message->setRelation('conversation', $conv);
 
         $capturedSystemPrompt = null;
+        $capturedUserMessage = null;
 
         // Fake both embedding and chat OpenAI calls using URL-keyed closures
         Http::fake([
             'api.openai.com/v1/embeddings' => Http::response([
                 'data' => [['embedding' => [0.1, 0.2, 0.3]]],
             ], 200),
-            'api.openai.com/v1/chat/completions' => function ($request) use (&$capturedSystemPrompt) {
+            'api.openai.com/v1/chat/completions' => function ($request) use (&$capturedSystemPrompt, &$capturedUserMessage) {
                 $body = json_decode($request->body(), true);
                 $capturedSystemPrompt = collect($body['messages'] ?? [])->firstWhere('role', 'system')['content'] ?? '';
+                $capturedUserMessage = collect($body['messages'] ?? [])->where('role', 'user')->pluck('content')->implode("\n");
 
                 return Http::response([
                     'choices' => [['message' => ['content' => 'Our refund policy is 30 days.']]],
@@ -113,8 +115,9 @@ class ChatbotRunnerTest extends TestCase
 
         $this->assertNotNull($reply, 'ChatbotRunner should return a reply');
         $this->assertStringContainsString('refund', strtolower($reply));
-        // Assert that context chunks were included in the system prompt sent to OpenAI
+        // KB context is injected into the final USER message (LlamaIndex-style,
+        // see docs) — not the system prompt. Assert it reached the LLM call.
         $this->assertNotNull($capturedSystemPrompt, 'System prompt should have been captured');
-        $this->assertStringContainsString('refund policy is 30 days', $capturedSystemPrompt);
+        $this->assertStringContainsString('refund policy is 30 days', (string) $capturedUserMessage);
     }
 }
