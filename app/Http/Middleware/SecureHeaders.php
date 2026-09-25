@@ -17,7 +17,11 @@ class SecureHeaders
         $response->headers->set('X-Content-Type-Options', 'nosniff');
         $response->headers->set('X-XSS-Protection', '1; mode=block');
         $response->headers->set('Referrer-Policy', 'strict-origin-when-cross-origin');
-        $response->headers->set('Permissions-Policy', 'geolocation=(), microphone=(), camera=()');
+        // microphone=(self): the same-origin inbox needs getUserMedia for voice
+        // notes, while third-party embeds stay blocked. microphone=() here would
+        // make Chrome fail every getUserMedia with an instant NotAllowedError —
+        // no permission prompt — regardless of the user's site settings.
+        $response->headers->set('Permissions-Policy', 'geolocation=(), microphone=(self), camera=()');
 
         // Prevent the browser from caching authenticated pages. Without this, the
         // back button after logout restores a cached/bfcache copy of the dashboard,
