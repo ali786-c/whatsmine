@@ -109,7 +109,8 @@ class AiChatbotController extends Controller
             $fakeMessage->setRelation('conversation', $fakeConversation);
 
             $meta = null;
-            $reply = app(ChatbotRunner::class)->run($chatbot, $fakeMessage, $meta);
+            $history = $this->sanitizeHistory($request->input('history'));
+            $reply = app(ChatbotRunner::class)->run($chatbot, $fakeMessage, $meta, $history);
 
             return response()->json([
                 'reply' => $reply ?? $chatbot->fallback_reply ?? 'No response.',
@@ -123,5 +124,47 @@ class AiChatbotController extends Controller
     private function authorise(Request $request, AiChatbot $chatbot): void
     {
         abort_unless((int) $chatbot->workspace_id === $this->workspaceId($request), 403);
+    }
+
+    /**
+     * Sanitize client-supplied playground history before it reaches the LLM.
+     *
+     * The playground UI replays its own message list, but the client is never
+     * trusted: roles are whitelisted, contents are clamped to the same per-turn
+     * cap as production history, and the turn count is capped so a crafted
+     * payload cannot bloat the prompt.
+     *
+     * @return array<int, array{role: string, content: string}>
+     */
+    private function sanitizeHistory(mixed $history): array
+    {
+        if (! is_array($history)) {
+            return [];
+        }
+
+        $clean = [];
+        foreach ($history as $turn) {
+            if (! is_array($turn)) {
+                continue;
+            }
+
+            $role = $turn['role'] ?? null;
+            $content = trim((string) ($turn['content'] ?? ''));
+
+            if (! in_array($role, ['user', 'assistant'], true) || $content === '') {
+                continue;
+            }
+
+            $clean[] = [
+                'role' => $role,
+                'content' => mb_substr($content, 0, ChatbotRunner::HISTORY_MAX_CHARS),
+            ];
+
+            if (count($clean) >= ChatbotRunner::HISTORY_TURNS * 2) {
+                break;
+            }
+        }
+
+        return $clean;
     }
 }

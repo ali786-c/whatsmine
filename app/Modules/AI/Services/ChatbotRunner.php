@@ -75,7 +75,12 @@ class ChatbotRunner
         private EmbeddingStore $embedStore,
     ) {}
 
-    public function run(AiChatbot $bot, Message $inboundMessage, ?array &$meta = null): ?string
+    /**
+     * Run the chatbot for one inbound message.
+     *
+     * @param  array<int, array{role: string, content: string}>|null  $clientHistory  Pre-sanitized prior turns (playground); null → load from DB conversation
+     */
+    public function run(AiChatbot $bot, Message $inboundMessage, ?array &$meta = null, ?array $clientHistory = null): ?string
     {
         $meta = $meta ?? [];
 
@@ -86,6 +91,10 @@ class ChatbotRunner
         $conversation = $inboundMessage->conversation;
         $body = $inboundMessage->body ?? '';
         $workspaceId = $conversation->workspace_id;
+
+        // Playground runs a synthetic conversation (id 0) with no DB messages,
+        // so the caller supplies sanitized prior turns instead. Production
+        // (WhatsApp inbox) passes null and history is loaded from the DB below.
 
         // 1. Embed the user query
         $queryEmbedding = [];
@@ -109,25 +118,29 @@ class ChatbotRunner
         $systemPrompt = app(AiSystemPrompt::class)->build($bot);
 
         // Load recent conversation turns as context (capped — see HISTORY_TURNS)
-        $historyLimit = min($bot->history_limit ?? 5, self::HISTORY_TURNS);
-        $history = [];
-        $recentMessages = $conversation->messages()
-            ->whereIn('type', ['text', 'template'])
-            ->where('id', '!=', $inboundMessage->id)
-            ->orderByDesc('sent_at')
-            ->take($historyLimit)
-            ->get()
-            ->reverse()
-            ->values();
+        // unless the caller already supplied them (playground).
+        $history = $clientHistory ?? [];
 
-        foreach ($recentMessages as $m) {
-            if (! $m->body) {
-                continue;
+        if ($clientHistory === null) {
+            $historyLimit = min($bot->history_limit ?? 5, self::HISTORY_TURNS);
+            $recentMessages = $conversation->messages()
+                ->whereIn('type', ['text', 'template'])
+                ->where('id', '!=', $inboundMessage->id)
+                ->orderByDesc('sent_at')
+                ->take($historyLimit)
+                ->get()
+                ->reverse()
+                ->values();
+
+            foreach ($recentMessages as $m) {
+                if (! $m->body) {
+                    continue;
+                }
+                $history[] = [
+                    'role' => $m->direction === 'out' ? 'assistant' : 'user',
+                    'content' => mb_substr($m->body, 0, self::HISTORY_MAX_CHARS),
+                ];
             }
-            $history[] = [
-                'role' => $m->direction === 'out' ? 'assistant' : 'user',
-                'content' => mb_substr($m->body, 0, self::HISTORY_MAX_CHARS),
-            ];
         }
 
         // Build the augmented user message with context
@@ -182,6 +195,7 @@ class ChatbotRunner
                 'latency_ms' => $response->latencyMs,
                 'prompt_tokens' => $response->promptTokens,
                 'completion_tokens' => $response->completionTokens,
+                'history_turns' => intdiv(count($history), 2),
             ], $meta);
 
             return $this->cleanReply($response->content, $bot);
