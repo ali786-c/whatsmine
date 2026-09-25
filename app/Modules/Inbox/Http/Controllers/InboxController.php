@@ -547,7 +547,7 @@ class InboxController extends Controller
                 $filename = "message-media/{$message->id}.{$ext}";
                 $filename = $this->storageManager->prefixedPath($filename);
                 if ($this->storageManager->disk()->exists($filename)) {
-                    return redirect($this->storageManager->disk()->url($filename));
+                    return $this->streamStored($filename, $payload['mime_type'] ?? null);
                 }
             }
 
@@ -575,17 +575,18 @@ class InboxController extends Controller
 
                 $payload = array_merge($payload, [
                     'laravel_preview_url' => $laravelPreviewUrl,
-                    'ext' => $ext
+                    'ext' => $ext,
+                    'mime_type' => $mimeType,
                 ]);
                 $message->update(['payload' => $payload]);
 
-                return redirect($laravelPreviewUrl);
+                return $this->streamStored($filename, $mimeType);
             } catch (\Throwable $e) {
                 abort(502, 'Could not fetch QR media: '.$e->getMessage());
             }
         }
 
-        // Already cached locally — verify the file still exists before redirecting
+        // Already cached locally — verify the file still exists before streaming it
         if (! empty($payload['preview_url'])) {
             $storagePath = "message-media/{$message->id}";
             $disk = $this->storageManager->disk();
@@ -593,7 +594,7 @@ class InboxController extends Controller
             $cached = collect($files)->first(fn ($f) => str_starts_with($f, $this->storageManager->prefixedPath($storagePath)));
 
             if ($cached && $disk->exists($cached)) {
-                return redirect($disk->url($cached));
+                return $this->streamStored($cached, $payload['mime_type'] ?? null);
             }
 
             // File missing — clear stale preview_url and fall through to re-download
@@ -630,10 +631,43 @@ class InboxController extends Controller
             // Cache for next request
             $message->update(['payload' => array_merge($payload, ['preview_url' => $previewUrl, 'mime_type' => $mimeType])]);
 
-            return redirect($previewUrl);
+            return $this->streamStored($filename, $mimeType);
         } catch (\Throwable $e) {
             abort(502, 'Could not fetch media: '.$e->getMessage());
         }
+    }
+
+    /**
+     * Stream a stored media file inline.
+     *
+     * Redirecting to disk->url() depends on the /storage symlink (and on
+     * signed-URL config for cloud disks); streaming the bytes directly makes
+     * the <img>/<video>/<audio> tags work on every server, symlink or not.
+     */
+    private function streamStored(string $storagePath, ?string $mimeType = null): \Symfony\Component\HttpFoundation\Response
+    {
+        $disk = $this->storageManager->disk();
+        abort_unless($disk->exists($storagePath), 404, 'Media file missing.');
+
+        $mime = $mimeType ?: match (strtolower(pathinfo($storagePath, PATHINFO_EXTENSION))) {
+            'jpg', 'jpeg' => 'image/jpeg',
+            'png' => 'image/png',
+            'webp' => 'image/webp',
+            'gif' => 'image/gif',
+            'mp4' => 'video/mp4',
+            'ogg', 'oga' => 'audio/ogg',
+            'opus' => 'audio/opus',
+            'mp3' => 'audio/mpeg',
+            'm4a' => 'audio/mp4',
+            'pdf' => 'application/pdf',
+            default => 'application/octet-stream',
+        };
+
+        return response($disk->get($storagePath), 200, [
+            'Content-Type' => $mime,
+            'Content-Disposition' => 'inline; filename="'.basename($storagePath).'"',
+            'Cache-Control' => 'private, max-age=86400',
+        ]);
     }
 
     /** Upload a media file to WhatsApp and return the media_id */
