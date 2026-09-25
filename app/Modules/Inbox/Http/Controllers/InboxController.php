@@ -674,21 +674,32 @@ class InboxController extends Controller
      */
     private function transcodeAudioToOgg(string $sourcePath): ?array
     {
-        $ffmpeg = trim((string) shell_exec('which ffmpeg 2>/dev/null'));
-        if ($ffmpeg === '') {
-            \Illuminate\Support\Facades\Log::warning('Inbox audio: ffmpeg not installed — cannot transcode webm voice note to ogg.');
+        // shell_exec/proc_open are commonly in disable_functions on hardened
+        // hosts (aaPanel default) — calling a disabled function throws a fatal
+        // \Error, so every execution path must be guarded and fall back to
+        // "no transcode" (the driver surfaces a clear error if Meta rejects).
+        $ffmpeg = $this->findFfmpeg();
+        if ($ffmpeg === null) {
+            \Illuminate\Support\Facades\Log::warning('Inbox audio: ffmpeg unavailable (not installed or exec functions disabled) — cannot transcode webm voice note to ogg.');
 
             return null;
         }
 
         $out = tempnam(sys_get_temp_dir(), 'voice_').'.ogg';
-        $cmd = sprintf(
-            '%s -y -i %s -c:a libopus -b:a 32k -ar 16000 -ac 1 %s 2>&1',
-            escapeshellarg($ffmpeg),
-            escapeshellarg($sourcePath),
-            escapeshellarg($out),
-        );
-        shell_exec($cmd);
+        try {
+            $process = new \Symfony\Component\Process\Process([
+                $ffmpeg, '-y', '-i', $sourcePath,
+                '-c:a', 'libopus', '-b:a', '32k', '-ar', '16000', '-ac', '1',
+                $out,
+            ], sys_get_temp_dir(), null, null, 60.0);
+            $process->run();
+        } catch (\Throwable $e) {
+            // proc_open disabled or process launch failed — treat as no ffmpeg.
+            @unlink($out);
+            \Illuminate\Support\Facades\Log::warning('Inbox audio: ffmpeg transcode failed to launch: '.$e->getMessage());
+
+            return null;
+        }
 
         if (! file_exists($out) || filesize($out) === 0) {
             @unlink($out);
@@ -697,6 +708,32 @@ class InboxController extends Controller
         }
 
         return ['path' => $out, 'mime' => 'audio/ogg'];
+    }
+
+    /**
+     * Locate the ffmpeg binary without exec functions when disabled.
+     *
+     * shell_exec('which ffmpeg') throws a fatal \Error when shell_exec is in
+     * disable_functions; Symfony's ExecutableFinder works without any exec
+     * call, and common static-build locations cover installs outside PATH.
+     *
+     * @return string|null Absolute binary path, or null when unavailable.
+     */
+    private function findFfmpeg(): ?string
+    {
+        foreach ([trim((string) config('services.ffmpeg.path')), '/usr/local/bin/ffmpeg', '/usr/bin/ffmpeg'] as $candidate) {
+            if ($candidate !== '' && is_executable($candidate) && is_file($candidate)) {
+                return $candidate;
+            }
+        }
+
+        try {
+            $found = (new \Symfony\Component\Process\ExecutableFinder)->find('ffmpeg');
+        } catch (\Throwable) {
+            $found = false;
+        }
+
+        return $found ?: null;
     }
 
     /**

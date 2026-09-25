@@ -18,6 +18,12 @@ return [
         'token' => env('POSTMARK_TOKEN'),
     ],
 
+    // Absolute path to the ffmpeg binary for voice-note transcoding (used by
+    // the inbox composer). Leave empty to auto-detect via PATH / common paths.
+    'ffmpeg' => [
+        'path' => env('FFMPEG_PATH', ''),
+    ],
+
     'ses' => [
         'key' => env('AWS_ACCESS_KEY_ID'),
         'secret' => env('AWS_SECRET_ACCESS_KEY'),
