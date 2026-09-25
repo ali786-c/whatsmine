@@ -157,7 +157,7 @@ class InboxController extends Controller
             // Allow-list of messaging media types (no HTML/SVG/executables).
             'attachment' => [
                 'nullable', 'file', 'max:20480',
-                'mimes:jpg,jpeg,png,webp,mp4,3gp,mov,mp3,aac,m4a,amr,ogg,pdf,doc,docx,xls,xlsx,ppt,pptx,txt',
+                'mimes:jpg,jpeg,png,webp,mp4,3gp,mov,mp3,aac,m4a,amr,ogg,oga,opus,webm,pdf,doc,docx,xls,xlsx,ppt,pptx,txt',
             ],
         ]);
 
@@ -172,7 +172,8 @@ class InboxController extends Controller
             // Derive type from MIME if not explicitly set
             if ($msgType === 'text') {
                 $msgType = str_starts_with($mimeType, 'image/') ? 'image'
-                    : (str_starts_with($mimeType, 'video/') ? 'video' : 'document');
+                    : (str_starts_with($mimeType, 'video/') ? 'video'
+                    : (str_starts_with($mimeType, 'audio/') ? 'audio' : 'document'));
             }
 
             // Upload to WhatsApp so we have a media_id for sending
@@ -181,9 +182,29 @@ class InboxController extends Controller
                 return response()->json(['error' => 'No active WhatsApp account.'], 422);
             }
 
-            $mediaId = $client->uploadMedia($file->getRealPath(), $mimeType);
-            $storedPath = $this->storageManager->prefixedPath('message-media/'.$file->hashName());
-            $this->storageManager->disk()->putFileAs(dirname($storedPath), $file, basename($storedPath));
+            // Voice notes: Chrome's MediaRecorder outputs audio/webm, which the
+            // WhatsApp Cloud API rejects. Transcode to ogg/opus server-side when
+            // ffmpeg is available so the composer works in every browser.
+            $uploadPath = $file->getRealPath();
+            $uploadMime = $mimeType;
+            $converted = null;
+            if ($msgType === 'audio' && str_contains($mimeType, 'webm')) {
+                $converted = $this->transcodeAudioToOgg($file->getRealPath());
+                if ($converted) {
+                    $uploadPath = $converted['path'];
+                    $uploadMime = $converted['mime'];
+                    $mimeType = $converted['mime'];
+                }
+            }
+
+            $mediaId = $client->uploadMedia($uploadPath, $uploadMime);
+            $storedPath = $this->storageManager->prefixedPath('message-media/'.$file->hashName().($converted ? '.ogg' : ''));
+            if ($converted) {
+                $this->storageManager->disk()->put($storedPath, (string) file_get_contents($converted['path']));
+                @unlink($converted['path']);
+            } else {
+                $this->storageManager->disk()->putFileAs(dirname($storedPath), $file, basename($storedPath));
+            }
             $previewUrl = $this->storageManager->disk()->url($storedPath);
 
             $msgPayload = array_merge($msgPayload ?? [], [
@@ -192,6 +213,11 @@ class InboxController extends Controller
                 'caption' => $validated['body'] ?? null,
                 'filename' => $file->getClientOriginalName(),
             ]);
+
+            if ($msgType === 'audio' && str_starts_with($mimeType, 'audio/')) {
+                $msgPayload['mime_type'] = $mimeType;
+                $msgPayload['voice'] = str_contains($mimeType, 'ogg');
+            }
 
             // For image/document the 'body' shown in the chat is the caption or filename
             $validated['body'] = $validated['body'] ?? $file->getClientOriginalName();
@@ -635,6 +661,42 @@ class InboxController extends Controller
         } catch (\Throwable $e) {
             abort(502, 'Could not fetch media: '.$e->getMessage());
         }
+    }
+
+    /**
+     * Convert a browser-recorded voice note (audio/webm) to ogg/opus for WhatsApp.
+     *
+     * Uses ffmpeg when present on the server; returns null when it is not, and
+     * the original file is uploaded as-is (the driver surfaces a clear error
+     * if Meta rejects the mime).
+     *
+     * @return array{path: string, mime: string}|null
+     */
+    private function transcodeAudioToOgg(string $sourcePath): ?array
+    {
+        $ffmpeg = trim((string) shell_exec('which ffmpeg 2>/dev/null'));
+        if ($ffmpeg === '') {
+            \Illuminate\Support\Facades\Log::warning('Inbox audio: ffmpeg not installed — cannot transcode webm voice note to ogg.');
+
+            return null;
+        }
+
+        $out = tempnam(sys_get_temp_dir(), 'voice_').'.ogg';
+        $cmd = sprintf(
+            '%s -y -i %s -c:a libopus -b:a 32k -ar 16000 -ac 1 %s 2>&1',
+            escapeshellarg($ffmpeg),
+            escapeshellarg($sourcePath),
+            escapeshellarg($out),
+        );
+        shell_exec($cmd);
+
+        if (! file_exists($out) || filesize($out) === 0) {
+            @unlink($out);
+
+            return null;
+        }
+
+        return ['path' => $out, 'mime' => 'audio/ogg'];
     }
 
     /**

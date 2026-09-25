@@ -59,7 +59,7 @@ class WhatsappDriver implements ChannelDriverInterface
             'image' => $client->sendMedia($phone, 'image', $payload['media_id'] ?? '', $payload['caption'] ?? null, null, $payload['link'] ?? null),
             'video' => $client->sendMedia($phone, 'video', $payload['media_id'] ?? '', $payload['caption'] ?? null, null, $payload['link'] ?? null),
             'document' => $client->sendMedia($phone, 'document', $payload['media_id'] ?? '', $payload['caption'] ?? null, $payload['filename'] ?? null, $payload['link'] ?? null),
-            'audio' => $client->sendMedia($phone, 'audio', $payload['media_id'] ?? ''),
+            'audio' => $this->sendAudio($client, $phone, $message),
             'location' => $client->sendLocation(
                 $phone,
                 (float) ($payload['location']['latitude'] ?? 0),
@@ -87,6 +87,30 @@ class WhatsappDriver implements ChannelDriverInterface
         }
 
         return $resp->json('messages.0.id', '');
+    }
+
+    /**
+     * Send an audio message (music clip or recorded voice note).
+     *
+     * WhatsApp only renders audio/ogg (opus) as a playable voice-note bubble;
+     * other browser-recorded mimes (audio/webm, audio/mp4) are rejected with
+     * a confusing upstream error. When the stored file is not ogg, we tell
+     * the caller via the exception message — the proper fix is recording in
+     * ogg on the client, which the composer now does where supported.
+     */
+    private function sendAudio(CloudApiClient $client, string $phone, Message $message): \Illuminate\Http\Client\Response
+    {
+        $payload = $message->payload ?? [];
+        $mimeType = $payload['mime_type'] ?? null;
+
+        // Cloud API accepts ogg/opus, mp3, aac, m4a, amr — webm is NOT accepted.
+        if ($mimeType && str_contains($mimeType, 'webm')) {
+            throw new \RuntimeException(
+                'WhatsApp cannot play audio/webm voice notes. Record as audio/ogg (Chrome/Firefox support MediaRecorder ogg) or convert the file first.'
+            );
+        }
+
+        return $client->sendMedia($phone, 'audio', $payload['media_id'] ?? '');
     }
 
     public function receiveWebhook(Request $request): array

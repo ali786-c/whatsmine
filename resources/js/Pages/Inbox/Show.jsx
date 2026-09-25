@@ -7,7 +7,7 @@ import {
     RefreshCw, Search, Inbox, User, CheckCircle, Clock, X, Smile,
     Paperclip, Image as ImageIcon, ChevronDown, UserCheck,
     LayoutTemplate, Plus, Loader2, Bot, Calendar, BarChart2, PhoneMissed,
-    Volume2, VolumeX, ShoppingBag, CornerUpLeft,
+    Volume2, VolumeX, ShoppingBag, CornerUpLeft, Mic, Square, AudioLines,
 } from 'lucide-react';
 import { ChannelBrandIcon, CHANNEL_LABELS } from '@/Components/BrandIcons';
 import { formatTimeTz, formatInTz } from '@/Utils/datetime';
@@ -1932,6 +1932,11 @@ export default function InboxShow({
     const [showProducts, setShowProducts]     = useState(false);
     const [showAgentDrop, setShowAgentDrop]   = useState(false);
     const [attachPreview, setAttachPreview]   = useState(null); // { file, url, type }
+    const [recording, setRecording]           = useState(false);
+    const [recordSecs, setRecordSecs]         = useState(0);
+    const mediaRecorderRef                    = useRef(null);
+    const chunksRef                           = useRef([]);
+    const recTimerRef                         = useRef(null);
     const fileRef = useRef(null);
     const bottomRef = useRef(null);
 
@@ -2141,7 +2146,7 @@ export default function InboxShow({
         if (attachPreview) {
             const fd = new FormData();
             fd.append('body', data.body || attachPreview.file.name);
-            fd.append('type', attachPreview.type === 'image' ? 'image' : 'document');
+            fd.append('type', attachPreview.type === 'image' ? 'image' : (attachPreview.type === 'audio' ? 'audio' : 'document'));
             fd.append('attachment', attachPreview.file);
             axios.post(route('client.inbox.reply', conversation.uuid), fd, {
                 headers: { 'Content-Type': 'multipart/form-data', Accept: 'application/json' },
@@ -2165,9 +2170,45 @@ export default function InboxShow({
         const file = e.target.files?.[0];
         if (!file) return;
         const isImage = file.type.startsWith('image/');
+        const isAudio = file.type.startsWith('audio/');
         const url = URL.createObjectURL(file);
-        setAttachPreview({ file, url, type: isImage ? 'image' : 'document' });
+        setAttachPreview({ file, url, type: isImage ? 'image' : (isAudio ? 'audio' : 'document') });
         e.target.value = '';
+    };
+
+    const stopRecording = useCallback(() => {
+        mediaRecorderRef.current?.state === 'recording' && mediaRecorderRef.current?.stop();
+        setRecording(false);
+        clearInterval(recTimerRef.current);
+    }, []);
+
+    const startRecording = async () => {
+        if (recording) { stopRecording(); return; }
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            // Prefer ogg/opus (WhatsApp-native); Safari falls back to its default.
+            const mime = ['audio/ogg;codecs=opus', 'audio/webm;codecs=opus', 'audio/webm', '']
+                .find(m => m === '' || MediaRecorder.isTypeSupported(m));
+            const rec = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
+            chunksRef.current = [];
+            rec.ondataavailable = (ev) => ev.data.size > 0 && chunksRef.current.push(ev.data);
+            rec.onstop = () => {
+                stream.getTracks().forEach(t => t.stop());
+                const type = rec.mimeType || 'audio/webm';
+                const ext = type.includes('ogg') ? 'ogg' : (type.includes('mp4') ? 'm4a' : 'webm');
+                const blob = new Blob(chunksRef.current, { type });
+                if (blob.size === 0) { setSendError(t('inbox.voice_too_short')); return; }
+                const file = new File([blob], `voice-note-${Date.now()}.${ext}`, { type: type.split(';')[0] });
+                setAttachPreview({ file, url: URL.createObjectURL(blob), type: 'audio' });
+            };
+            rec.start();
+            mediaRecorderRef.current = rec;
+            setRecordSecs(0);
+            setRecording(true);
+            recTimerRef.current = setInterval(() => setRecordSecs(s => s + 1), 1000);
+        } catch {
+            setSendError(t('inbox.mic_permission_denied'));
+        }
     };
 
     const switchHandover = (mode) => {
@@ -2453,12 +2494,25 @@ export default function InboxShow({
 
 
 
+                        {/* Recording indicator */}
+                        {recording && (
+                            <div className="mb-2 flex items-center gap-2 bg-red-50 dark:bg-red-900/20 rounded-xl px-3 py-2 border border-red-200 dark:border-red-800">
+                                <AudioLines className="h-4 w-4 text-red-500 animate-pulse" />
+                                <span className="text-xs font-medium text-red-600 dark:text-red-300">{t('inbox.recording')} — {recordSecs}s</span>
+                                <button type="button" onClick={stopRecording} className="ml-auto text-xs font-medium text-red-600 dark:text-red-300 hover:underline">
+                                    {t('inbox.stop_recording')}
+                                </button>
+                            </div>
+                        )}
+
                         {/* Attachment preview */}
                         {attachPreview && (
                             <div className="mb-2 flex items-center gap-2 bg-neutral-50 dark:bg-neutral-800 rounded-xl p-2 border border-neutral-200 dark:border-neutral-700">
                                 {attachPreview.type === 'image'
                                     ? <img src={attachPreview.url} alt="" className="h-12 w-12 rounded-lg object-cover" />
-                                    : <div className="h-12 w-12 rounded-lg bg-neutral-200 dark:bg-neutral-700 flex items-center justify-center"><Paperclip className="h-5 w-5 text-neutral-500" /></div>
+                                    : attachPreview.type === 'audio'
+                                        ? <audio src={attachPreview.url} controls className="h-10 w-56" />
+                                        : <div className="h-12 w-12 rounded-lg bg-neutral-200 dark:bg-neutral-700 flex items-center justify-center"><Paperclip className="h-5 w-5 text-neutral-500" /></div>
                                 }
                                 <div className="flex-1 min-w-0">
                                     <p className="text-xs font-medium text-neutral-700 dark:text-neutral-300 truncate">{attachPreview.file.name}</p>
@@ -2542,6 +2596,14 @@ export default function InboxShow({
                                         title={t('inbox.attach_image')}
                                         className="p-1.5 rounded-lg text-neutral-400 hover:text-neutral-600 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition">
                                         <ImageIcon className="h-4 w-4" />
+                                    </button>
+                                    {/* Voice note — record mic audio */}
+                                    <button type="button" onClick={startRecording}
+                                        title={recording ? t('inbox.stop_recording') : t('inbox.record_voice')}
+                                        className={`p-1.5 rounded-lg transition ${recording
+                                            ? 'bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-300 animate-pulse'
+                                            : 'text-neutral-400 hover:text-neutral-600 hover:bg-neutral-100 dark:hover:bg-neutral-800'}`}>
+                                        {recording ? <Square className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
                                     </button>
                                     {/* Share product */}
                                     {hasEcommerceStore && (
