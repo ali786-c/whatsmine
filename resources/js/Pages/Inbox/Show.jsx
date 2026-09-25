@@ -2219,15 +2219,18 @@ export default function InboxShow({
             setRecording(true);
             recTimerRef.current = setInterval(() => setRecordSecs(s => s + 1), 1000);
         } catch (err) {
-            // Map getUserMedia failures to actionable messages.
+            // Map getUserMedia failures to actionable messages. Log + append the
+            // raw error name so on-screen text can be verified against reality.
+            console.error('[mic] getUserMedia failed:', err?.name, err?.message, err);
+            const detail = err?.name ? ` [${err.name}]` : '';
             if (err?.name === 'NotAllowedError' || err?.name === 'SecurityError') {
-                setSendError(t('inbox.mic_blocked_site'));
+                setSendError(t('inbox.mic_blocked_site') + detail);
             } else if (err?.name === 'NotFoundError' || err?.name === 'OverconstrainedError') {
-                setSendError(t('inbox.mic_not_found'));
+                setSendError(t('inbox.mic_not_found') + detail);
             } else if (err?.name === 'NotReadableError') {
-                setSendError(t('inbox.mic_in_use'));
+                setSendError(t('inbox.mic_in_use') + detail);
             } else {
-                setSendError(t('inbox.mic_permission_denied'));
+                setSendError(t('inbox.mic_permission_denied') + detail);
             }
         }
     };
