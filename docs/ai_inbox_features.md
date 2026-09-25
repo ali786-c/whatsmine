@@ -1,0 +1,108 @@
+# WhatsMine — AI Chatbot & Inbox Features (Sept 25, 2026)
+
+This release hardens the AI chatbot's answer quality, makes the inbox feel native-WhatsApp (quotes, voice notes, reliable media), and documents every server requirement needed to keep the voice-note pipeline working after deploys.
+
+## 1. Chatbot Knowledge-Base Grounding (Hybrid Retrieval)
+
+The bot no longer hedges ("please confirm with our team") when the knowledge base actually contains the answer.
+
+- **Hybrid retrieval (RRF):** embedding search and keyword search always both run; results are fused with Reciprocal Rank Fusion (`k=60`). Either path alone can miss — together they are resilient.
+- **Keyword scoring upgrades:** a `SYNONYMS` map expands customer phrasing (Urdu/English), exact number matches get a +0.3 bonus, exact phrase matches a +0.5 bonus.
+- **Grounded-answer retry:** if the first LLM reply looks hedged (`HEDGE_PATTERNS`) while retrieval had strong hits, the job retries once with a grounding nudge. `meta['grounded_retry']` records when this happens.
+- **Diagnostics:** `AiDiagnostic` now probes both retrieval paths separately (`embedding_hits`, `keyword_hits`, `via`) so mis-grounding is debuggable in one glance.
+
+## 2. Playground Conversation Memory
+
+The AI playground now remembers the conversation like a real chat.
+
+- The client sends its recent turns; `AiChatbotController::sanitizeHistory()` keeps only `user`/`assistant` roles, clamps each message to `HISTORY_MAX_CHARS` (500), and caps total turns at `HISTORY_TURNS * 2`.
+- `ChatbotRunner::run()` accepts an optional 4th `clientHistory` argument — the production WhatsApp path still loads history from the DB (`meta['history_turns']` reports the count).
+
+## 3. Inbox: Quoted-Reply Display (Inbound)
+
+Customer quote-replies now render WhatsApp-style in the conversation.
+
+- `Show.jsx` `extractQuoted()` parses Cloud API (`payload.context.{id,quoted_message}`) and Baileys (`quotedMsg`/`quotedMessage`/`contextInfo.stanzaId`) shapes.
+- `findQuotedBody()` resolves the quoted `provider_message_id` from already-loaded messages; media quotes show a typed label (`QUOTED_TYPE_LABELS`).
+- `QuotedPreview` renders the familiar grey quoted block inside `MessageBubble`.
+
+## 4. Bot Replies Quote the Customer's Message
+
+Outbound AI replies arrive on the customer's phone as a native quote of their question — the bot feels human.
+
+- `CloudApiClient::sendText(to, body, previewUrl, quotedMessageId)` adds `context.message_id`.
+- `GenerateAiReplyJob` stores `'payload' => ['quoted_message_id' => $message->provider_message_id]`.
+- `WhatsappDriver::send()` retries once **without** the quote if the upstream rejects the context, so the reply is never lost.
+
+## 5. Inbound Media Reliability ("Image unavailable" fix)
+
+`InboxController::serveMedia()` previously redirected to `disk->url()`, which 404s whenever the `/storage` symlink is missing. It now **streams bytes inline** (`streamStored()`: correct Content-Type map, `inline` disposition, 24h Cache-Control) across all three paths (QR cache hit, QR download, Cloud download). Symlink or not, images/audio/video render.
+
+## 6. Voice Notes: Record & Send from the Inbox Composer
+
+Agents can record and send WhatsApp voice notes directly from the inbox.
+
+- **Composer UI:** mic button left of the textarea (MediaRecorder, prefers `audio/ogg;codecs=opus`, falls back to webm), recording indicator with seconds, audio preview player before send.
+- **Server transcode:** Chrome records `audio/webm`, which the WhatsApp Cloud API rejects. `InboxController::transcodeAudioToOgg()` converts to `audio/ogg` (libopus 32k, 16kHz, mono) so it sends as a native voice note.
+- **Graceful errors:** every failure path sets a human-readable reason (see §8) and returns a 422 with that exact reason instead of a cryptic 500 or a Meta rejection.
+
+### Browser permission chain (why mic could "never" prompt)
+
+| Layer | Symptom when blocked | Fix |
+|---|---|---|
+| `Permissions-Policy` header | Instant `NotAllowedError`, no prompt, site settings irrelevant | App must send `microphone=(self)` (see §7) |
+| Chrome global default | No prompt anywhere | `chrome://settings/content/microphone` → "Sites can ask" |
+| Chrome site setting | Prompt never re-appears | Lock icon → Site settings → Microphone → Allow |
+| Windows privacy | Works in other apps, not browser | Settings → Privacy & security → Microphone → allow apps + desktop apps |
+
+> The `permissions.query()` pre-check was removed: Chrome can report `denied` even when the site toggle is Allow. `getUserMedia`'s own error is the only authoritative signal, and its raw error name is now appended to the UI message (e.g. `[NotAllowedError]`) plus `console.error` for debugging.
+
+## 7. Security Header Change: `microphone=(self)`
+
+**Root cause of the site-wide mic failure:** `app/Http/Middleware/SecureHeaders.php` sent `Permissions-Policy: microphone=()`, which makes Chrome deny every same-origin `getUserMedia` instantly — no prompt, regardless of user settings. It now sends:
+
+```
+Permissions-Policy: geolocation=(), microphone=(self), camera=()
+```
+
+Same-origin inbox recording works; third-party embeds stay blocked. Camera remains `()` — flip it to `(self)` if a video feature ever needs it. Regression test: `tests/Feature/SecureHeadersTest.php`.
+
+## 8. Server Requirements for Voice Notes (aaPanel / AlmaLinux 8)
+
+These three are **mandatory** — miss any one and Chrome voice notes fail with a clear 422 naming the reason:
+
+1. **ffmpeg binary** (static build, no repo needed):
+   ```bash
+   cd /tmp && curl -L -o ffmpeg.tar.xz https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz
+   tar -xf ffmpeg.tar.xz && cp ffmpeg-*-static/ffmpeg /usr/local/bin/ffmpeg && chmod +x /usr/local/bin/ffmpeg
+   ffmpeg -version   # verify
+   ```
+   Optional: pin a custom path via `.env` → `FFMPEG_PATH=/usr/local/bin/ffmpeg` (`config/services.php`).
+
+2. **PHP `disable_functions`:** aaPanel → App Store → PHP 8.2 → Settings → disabled functions → remove **`proc_open`** and **`shell_exec`** → reload PHP. (Calling a disabled function is a fatal `\Error` in PHP 8 — this was the original voice-note 500.)
+
+3. **`open_basedir`:** if set for the site, append `:/usr/local/bin` (or clear it) so PHP can see the binary.
+
+Transcode failure reasons are logged as `Inbox audio: ...` warnings in `storage/logs/laravel.log`.
+
+## 9. Tests Added
+
+| Test | Covers |
+|---|---|
+| `tests/Feature/AI/PlaygroundHistoryTest.php` | Playground history sanitizing + memory |
+| `tests/Feature/AI/WhatsappQuotedReplyTest.php` | Bot quote context + no-quote retry |
+| `tests/Feature/AI/InboxMediaServingTest.php` | Inline media streaming without symlink |
+| `tests/Feature/SecureHeadersTest.php` | `microphone=(self)` in Permissions-Policy |
+| `tests/Feature/AI/VoiceNoteSendTest.php` | Webm voice-note send never 500s on hardened hosts |
+
+Full AI suite reference: 38+ tests green before this doc; voice-note + header tests add 3 more.
+
+## 10. Deploy (copy-paste)
+
+```bash
+cd /www/wwwroot/wa.careerinpak.com && git stash && git pull origin master
+php artisan storage:link        # if not already linked
+php artisan queue:restart       # after PHP job code changes
+```
+
+Hard-refresh the browser (`Ctrl+Shift+R`) after deploying front-end changes — built assets are committed, the server never runs `npm`.

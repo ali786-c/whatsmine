@@ -17,6 +17,7 @@ Sab documentation is folder me hai. **Aage se har nayi guide/plan/changelog yahi
 | `checklist.md` | Setup checklist |
 | `context.md` | Project context |
 | `feature.md` | Feature notes |
+| `ai_inbox_features.md` | **AI Chatbot & Inbox Features (Sept 25, 2026)** — chatbot KB grounding, playground memory, quoted replies, media/voice notes, `microphone=(self)` header, aaPanel voice-note server requirements |
 | `guide.md` | General guide |
 | `setting.md` | Settings notes |
 

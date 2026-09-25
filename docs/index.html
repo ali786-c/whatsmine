@@ -142,6 +142,10 @@ body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Ro
                 <span class="nav-label">New Features (Sept 4, 2026)</span>
                 <span class="nav-file">feature.md</span>
             </a>
+<a class="nav-link" data-target="doc-ai_inbox_features_md" href="#ai_inbox_features">
+                <span class="nav-label">AI Chatbot &amp; Inbox Features (Sept 25, 2026)</span>
+                <span class="nav-file">ai_inbox_features.md</span>
+            </a>
 <a class="nav-link" data-target="doc-context_md" href="#context">
                 <span class="nav-label">Inbox Fix — Context</span>
                 <span class="nav-file">context.md</span>
@@ -206,6 +210,10 @@ body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Ro
 <tr>
 <td><code>feature.md</code></td>
 <td>Feature notes</td>
+</tr>
+<tr>
+<td><code>ai_inbox_features.md</code></td>
+<td><strong>AI Chatbot &amp; Inbox Features (Sept 25, 2026)</strong> — chatbot KB grounding, playground memory, quoted replies, media/voice notes, <code>microphone=(self)</code> header, aaPanel voice-note server requirements</td>
 </tr>
 <tr>
 <td><code>guide.md</code></td>
@@ -2907,6 +2915,138 @@ php artisan instagram:register-webhook &amp;&amp; php artisan instagram:diagnose
 <li><strong>Zero API Sync Cost:</strong> It queries the local <code>ecommerce_products</code> table for matches instead of relying on OpenAI embeddings. This means when stock or prices change, there is NO sync delay and NO embedding API cost.</li>
 <li><strong>Ghost Injection:</strong> The top matching products (with their SKU, precise price, and live stock count) are formatted and silently injected into the LLM system prompt right before the LLM generates a response. This allows the AI to perfectly answer questions like <em>&quot;Do you have the black shirt?&quot;</em> while consuming minimal tokens.</li>
 </ul>
+</div>
+        </section>
+<section class="doc-section" id="doc-ai_inbox_features_md" data-title="WhatsMine — AI Chatbot &amp; Inbox Features (Sept 25, 2026) AI Chatbot &amp; Inbox Features (Sept 25, 2026) This release hardens the AI chatbot's answer quality, makes the inbox feel native WhatsApp (quotes, voice notes, reliable media), and documents every server req">
+            <header class="doc-header"><span class="doc-file">ai_inbox_features.md</span><h1>WhatsMine — AI Chatbot &amp; Inbox Features (Sept 25, 2026)</h1></header>
+            <div class="doc-body"><p>This release hardens the AI chatbot&#39;s answer quality, makes the inbox feel native-WhatsApp (quotes, voice notes, reliable media), and documents every server requirement needed to keep the voice-note pipeline working after deploys.</p>
+<h2>1. Chatbot Knowledge-Base Grounding (Hybrid Retrieval)</h2>
+<p>The bot no longer hedges (&quot;please confirm with our team&quot;) when the knowledge base actually contains the answer.</p>
+<ul>
+<li><strong>Hybrid retrieval (RRF):</strong> embedding search and keyword search always both run; results are fused with Reciprocal Rank Fusion (<code>k=60</code>). Either path alone can miss — together they are resilient.</li>
+<li><strong>Keyword scoring upgrades:</strong> a <code>SYNONYMS</code> map expands customer phrasing (Urdu/English), exact number matches get a +0.3 bonus, exact phrase matches a +0.5 bonus.</li>
+<li><strong>Grounded-answer retry:</strong> if the first LLM reply looks hedged (<code>HEDGE_PATTERNS</code>) while retrieval had strong hits, the job retries once with a grounding nudge. <code>meta[&#39;grounded_retry&#39;]</code> records when this happens.</li>
+<li><strong>Diagnostics:</strong> <code>AiDiagnostic</code> now probes both retrieval paths separately (<code>embedding_hits</code>, <code>keyword_hits</code>, <code>via</code>) so mis-grounding is debuggable in one glance.</li>
+</ul>
+<h2>2. Playground Conversation Memory</h2>
+<p>The AI playground now remembers the conversation like a real chat.</p>
+<ul>
+<li>The client sends its recent turns; <code>AiChatbotController::sanitizeHistory()</code> keeps only <code>user</code>/<code>assistant</code> roles, clamps each message to <code>HISTORY_MAX_CHARS</code> (500), and caps total turns at <code>HISTORY_TURNS * 2</code>.</li>
+<li><code>ChatbotRunner::run()</code> accepts an optional 4th <code>clientHistory</code> argument — the production WhatsApp path still loads history from the DB (<code>meta[&#39;history_turns&#39;]</code> reports the count).</li>
+</ul>
+<h2>3. Inbox: Quoted-Reply Display (Inbound)</h2>
+<p>Customer quote-replies now render WhatsApp-style in the conversation.</p>
+<ul>
+<li><code>Show.jsx</code> <code>extractQuoted()</code> parses Cloud API (<code>payload.context.{id,quoted_message}</code>) and Baileys (<code>quotedMsg</code>/<code>quotedMessage</code>/<code>contextInfo.stanzaId</code>) shapes.</li>
+<li><code>findQuotedBody()</code> resolves the quoted <code>provider_message_id</code> from already-loaded messages; media quotes show a typed label (<code>QUOTED_TYPE_LABELS</code>).</li>
+<li><code>QuotedPreview</code> renders the familiar grey quoted block inside <code>MessageBubble</code>.</li>
+</ul>
+<h2>4. Bot Replies Quote the Customer&#39;s Message</h2>
+<p>Outbound AI replies arrive on the customer&#39;s phone as a native quote of their question — the bot feels human.</p>
+<ul>
+<li><code>CloudApiClient::sendText(to, body, previewUrl, quotedMessageId)</code> adds <code>context.message_id</code>.</li>
+<li><code>GenerateAiReplyJob</code> stores <code>&#39;payload&#39; =&gt; [&#39;quoted_message_id&#39; =&gt; $message-&gt;provider_message_id]</code>.</li>
+<li><code>WhatsappDriver::send()</code> retries once <strong>without</strong> the quote if the upstream rejects the context, so the reply is never lost.</li>
+</ul>
+<h2>5. Inbound Media Reliability (&quot;Image unavailable&quot; fix)</h2>
+<p><code>InboxController::serveMedia()</code> previously redirected to <code>disk-&gt;url()</code>, which 404s whenever the <code>/storage</code> symlink is missing. It now <strong>streams bytes inline</strong> (<code>streamStored()</code>: correct Content-Type map, <code>inline</code> disposition, 24h Cache-Control) across all three paths (QR cache hit, QR download, Cloud download). Symlink or not, images/audio/video render.</p>
+<h2>6. Voice Notes: Record &amp; Send from the Inbox Composer</h2>
+<p>Agents can record and send WhatsApp voice notes directly from the inbox.</p>
+<ul>
+<li><strong>Composer UI:</strong> mic button left of the textarea (MediaRecorder, prefers <code>audio/ogg;codecs=opus</code>, falls back to webm), recording indicator with seconds, audio preview player before send.</li>
+<li><strong>Server transcode:</strong> Chrome records <code>audio/webm</code>, which the WhatsApp Cloud API rejects. <code>InboxController::transcodeAudioToOgg()</code> converts to <code>audio/ogg</code> (libopus 32k, 16kHz, mono) so it sends as a native voice note.</li>
+<li><strong>Graceful errors:</strong> every failure path sets a human-readable reason (see §8) and returns a 422 with that exact reason instead of a cryptic 500 or a Meta rejection.</li>
+</ul>
+<h3>Browser permission chain (why mic could &quot;never&quot; prompt)</h3>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Symptom when blocked</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>Permissions-Policy</code> header</td>
+<td>Instant <code>NotAllowedError</code>, no prompt, site settings irrelevant</td>
+<td>App must send <code>microphone=(self)</code> (see §7)</td>
+</tr>
+<tr>
+<td>Chrome global default</td>
+<td>No prompt anywhere</td>
+<td><code>chrome://settings/content/microphone</code> → &quot;Sites can ask&quot;</td>
+</tr>
+<tr>
+<td>Chrome site setting</td>
+<td>Prompt never re-appears</td>
+<td>Lock icon → Site settings → Microphone → Allow</td>
+</tr>
+<tr>
+<td>Windows privacy</td>
+<td>Works in other apps, not browser</td>
+<td>Settings → Privacy &amp; security → Microphone → allow apps + desktop apps</td>
+</tr>
+</tbody></table>
+<blockquote>
+<p>The <code>permissions.query()</code> pre-check was removed: Chrome can report <code>denied</code> even when the site toggle is Allow. <code>getUserMedia</code>&#39;s own error is the only authoritative signal, and its raw error name is now appended to the UI message (e.g. <code>[NotAllowedError]</code>) plus <code>console.error</code> for debugging.</p>
+</blockquote>
+<h2>7. Security Header Change: <code>microphone=(self)</code></h2>
+<p><strong>Root cause of the site-wide mic failure:</strong> <code>app/Http/Middleware/SecureHeaders.php</code> sent <code>Permissions-Policy: microphone=()</code>, which makes Chrome deny every same-origin <code>getUserMedia</code> instantly — no prompt, regardless of user settings. It now sends:</p>
+<pre><code>Permissions-Policy: geolocation=(), microphone=(self), camera=()
+</code></pre>
+<p>Same-origin inbox recording works; third-party embeds stay blocked. Camera remains <code>()</code> — flip it to <code>(self)</code> if a video feature ever needs it. Regression test: <code>tests/Feature/SecureHeadersTest.php</code>.</p>
+<h2>8. Server Requirements for Voice Notes (aaPanel / AlmaLinux 8)</h2>
+<p>These three are <strong>mandatory</strong> — miss any one and Chrome voice notes fail with a clear 422 naming the reason:</p>
+<ol>
+<li><p><strong>ffmpeg binary</strong> (static build, no repo needed):</p>
+<pre><code class="language-bash">cd /tmp &amp;&amp; curl -L -o ffmpeg.tar.xz https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz
+tar -xf ffmpeg.tar.xz &amp;&amp; cp ffmpeg-*-static/ffmpeg /usr/local/bin/ffmpeg &amp;&amp; chmod +x /usr/local/bin/ffmpeg
+ffmpeg -version   # verify
+</code></pre>
+<p>Optional: pin a custom path via <code>.env</code> → <code>FFMPEG_PATH=/usr/local/bin/ffmpeg</code> (<code>config/services.php</code>).</p>
+</li>
+<li><p><strong>PHP <code>disable_functions</code>:</strong> aaPanel → App Store → PHP 8.2 → Settings → disabled functions → remove <strong><code>proc_open</code></strong> and <strong><code>shell_exec</code></strong> → reload PHP. (Calling a disabled function is a fatal <code>\Error</code> in PHP 8 — this was the original voice-note 500.)</p>
+</li>
+<li><p><strong><code>open_basedir</code>:</strong> if set for the site, append <code>:/usr/local/bin</code> (or clear it) so PHP can see the binary.</p>
+</li>
+</ol>
+<p>Transcode failure reasons are logged as <code>Inbox audio: ...</code> warnings in <code>storage/logs/laravel.log</code>.</p>
+<h2>9. Tests Added</h2>
+<table>
+<thead>
+<tr>
+<th>Test</th>
+<th>Covers</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>tests/Feature/AI/PlaygroundHistoryTest.php</code></td>
+<td>Playground history sanitizing + memory</td>
+</tr>
+<tr>
+<td><code>tests/Feature/AI/WhatsappQuotedReplyTest.php</code></td>
+<td>Bot quote context + no-quote retry</td>
+</tr>
+<tr>
+<td><code>tests/Feature/AI/InboxMediaServingTest.php</code></td>
+<td>Inline media streaming without symlink</td>
+</tr>
+<tr>
+<td><code>tests/Feature/SecureHeadersTest.php</code></td>
+<td><code>microphone=(self)</code> in Permissions-Policy</td>
+</tr>
+<tr>
+<td><code>tests/Feature/AI/VoiceNoteSendTest.php</code></td>
+<td>Webm voice-note send never 500s on hardened hosts</td>
+</tr>
+</tbody></table>
+<p>Full AI suite reference: 38+ tests green before this doc; voice-note + header tests add 3 more.</p>
+<h2>10. Deploy (copy-paste)</h2>
+<pre><code class="language-bash">cd /www/wwwroot/wa.careerinpak.com &amp;&amp; git stash &amp;&amp; git pull origin master
+php artisan storage:link        # if not already linked
+php artisan queue:restart       # after PHP job code changes
+</code></pre>
+<p>Hard-refresh the browser (<code>Ctrl+Shift+R</code>) after deploying front-end changes — built assets are committed, the server never runs <code>npm</code>.</p>
 </div>
         </section>
 <section class="doc-section" id="doc-context_md" data-title="WhatsMine Inbox Fix — Context &amp; Summary Inbox Fix — Context Problem Messages were showing in the Node.js terminal ( QR Laravel Forwarding to Laravel: ... text Hi ) but not appearing in the WhatsMine Inbox (Laravel fronte">
