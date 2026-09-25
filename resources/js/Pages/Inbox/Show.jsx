@@ -2184,6 +2184,13 @@ export default function InboxShow({
 
     const startRecording = async () => {
         if (recording) { stopRecording(); return; }
+        // Browsers expose the microphone only in secure contexts (HTTPS or
+        // localhost) — over plain HTTP getUserMedia fails with NotAllowedError
+        // and never even shows the permission prompt.
+        if (!window.isSecureContext) {
+            setSendError(t('inbox.https_required'));
+            return;
+        }
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             // Prefer ogg/opus (WhatsApp-native); Safari falls back to its default.
@@ -2597,14 +2604,6 @@ export default function InboxShow({
                                         className="p-1.5 rounded-lg text-neutral-400 hover:text-neutral-600 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition">
                                         <ImageIcon className="h-4 w-4" />
                                     </button>
-                                    {/* Voice note — record mic audio */}
-                                    <button type="button" onClick={startRecording}
-                                        title={recording ? t('inbox.stop_recording') : t('inbox.record_voice')}
-                                        className={`p-1.5 rounded-lg transition ${recording
-                                            ? 'bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-300 animate-pulse'
-                                            : 'text-neutral-400 hover:text-neutral-600 hover:bg-neutral-100 dark:hover:bg-neutral-800'}`}>
-                                        {recording ? <Square className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
-                                    </button>
                                     {/* Share product */}
                                     {hasEcommerceStore && (
                                         <button type="button" onClick={() => setShowProducts(v => !v)}
@@ -2641,6 +2640,14 @@ export default function InboxShow({
 
                                 {/* Text input + send */}
                                 <div className="flex gap-2 items-end">
+                                    {/* Voice note mic — WhatsApp-style, left of the input */}
+                                    <button type="button" onClick={startRecording}
+                                        title={recording ? t('inbox.stop_recording') : t('inbox.record_voice')}
+                                        className={`self-end shrink-0 rounded-xl p-2.5 transition ${recording
+                                            ? 'bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-300 animate-pulse'
+                                            : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-500 hover:text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-900/30'}`}>
+                                        {recording ? <Square className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+                                    </button>
                                     <textarea
                                         value={data.body}
                                         onChange={e => handleReplyChange(e.target.value)}

@@ -2824,7 +2824,8 @@
         "stop_recording": "إيقاف",
         "recording": "جارٍ التسجيل",
         "mic_permission_denied": "تم رفض إذن الميكروفون — اسمح بالوصول لتسجيل رسالة صوتية.",
-        "voice_too_short": "التسجيل قصير جداً — تحدث ثم أوقف التسجيل."
+        "voice_too_short": "التسجيل قصير جداً — تحدث ثم أوقف التسجيل.",
+        "https_required": "HTTPS مطلوب — الرسائل الصوتية تحتاج اتصالاً آمناً (https://)."
     },
     "notifications": {
         "preferences_title": "تفضيلات الإشعارات",

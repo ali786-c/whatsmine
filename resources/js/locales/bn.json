@@ -2824,7 +2824,8 @@
         "stop_recording": "থামান",
         "recording": "রেকর্ডিং",
         "mic_permission_denied": "মাইক্রোফোন অনুমতি অস্বীকৃত — ভয়েস নোটের জন্য মাইক অ্যাক্সেস দিন।",
-        "voice_too_short": "রেকর্ডিং খুব ছোট — কথা বলে থামান।"
+        "voice_too_short": "রেকর্ডিং খুব ছোট — কথা বলে থামান।",
+        "https_required": "HTTPS প্রয়োজন — ভয়েস নোটের জন্য নিরাপদ (https://) সংযোগ দরকার।"
     },
     "notifications": {
         "preferences_title": "নোটিফিকেশন পছন্দ",

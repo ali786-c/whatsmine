@@ -2898,7 +2898,8 @@
         "stop_recording": "Stop",
         "recording": "Recording",
         "mic_permission_denied": "Microphone permission denied — allow mic access to record a voice note.",
-        "voice_too_short": "Recording too short — hold the mic and speak, then stop."
+        "voice_too_short": "Recording too short — hold the mic and speak, then stop.",
+        "https_required": "HTTPS required — voice notes need a secure (https://) connection."
     },
     "notifications": {
         "preferences_title": "Настройки уведомлений",
