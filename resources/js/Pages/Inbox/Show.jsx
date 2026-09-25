@@ -2191,6 +2191,24 @@ export default function InboxShow({
             setSendError(t('inbox.https_required'));
             return;
         }
+        // If the user (or an earlier accidental click) blocked the mic for this
+        // site, Chrome never prompts again — it fails instantly. Diagnose it
+        // explicitly so the user knows where to unblock.
+        try {
+            const perm = await navigator.permissions?.query?.({ name: 'microphone' });
+            if (perm?.state === 'denied') {
+                setSendError(t('inbox.mic_blocked_site'));
+                return;
+            }
+        } catch { /* permissions API unsupported — getUserMedia will report */ }
+        // No physical/available microphone (remote desktop, disabled device…)
+        try {
+            const devices = await navigator.mediaDevices.enumerateDevices();
+            if (!devices.some(d => d.kind === 'audioinput')) {
+                setSendError(t('inbox.mic_not_found'));
+                return;
+            }
+        } catch { /* fall through — getUserMedia gives the real error */ }
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             // Prefer ogg/opus (WhatsApp-native); Safari falls back to its default.
@@ -2213,8 +2231,17 @@ export default function InboxShow({
             setRecordSecs(0);
             setRecording(true);
             recTimerRef.current = setInterval(() => setRecordSecs(s => s + 1), 1000);
-        } catch {
-            setSendError(t('inbox.mic_permission_denied'));
+        } catch (err) {
+            // Map getUserMedia failures to actionable messages.
+            if (err?.name === 'NotAllowedError' || err?.name === 'SecurityError') {
+                setSendError(t('inbox.mic_blocked_site'));
+            } else if (err?.name === 'NotFoundError' || err?.name === 'OverconstrainedError') {
+                setSendError(t('inbox.mic_not_found'));
+            } else if (err?.name === 'NotReadableError') {
+                setSendError(t('inbox.mic_in_use'));
+            } else {
+                setSendError(t('inbox.mic_permission_denied'));
+            }
         }
     };
 

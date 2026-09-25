@@ -2901,7 +2901,10 @@
         "recording": "Recording",
         "mic_permission_denied": "Microphone permission denied — allow mic access to record a voice note.",
         "voice_too_short": "Recording too short — hold the mic and speak, then stop.",
-        "https_required": "HTTPS required — voice notes need a secure (https://) connection."
+        "https_required": "HTTPS required — voice notes need a secure (https://) connection.",
+        "mic_blocked_site": "Microphone is BLOCKED for this site. Click the lock icon in the address bar → Site settings → Microphone → Allow, then reload.",
+        "mic_not_found": "No microphone found on this device. Connect a mic or enable it in system settings.",
+        "mic_in_use": "Microphone is in use by another app (Zoom/Meet etc.) — close it and try again."
     },
     "notifications": {
         "preferences_title": "Préférences de notification",
