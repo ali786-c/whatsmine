@@ -108,15 +108,26 @@ class CloudApiClient
         return $this->phoneNumberId;
     }
 
-    /** Send a text message. */
-    public function sendText(string $to, string $body, bool $previewUrl = false): Response
+    /**
+     * Send a text message.
+     *
+     * @param  string|null  $quotedMessageId  WhatsApp message ID (wamid…) to reply to —
+     *                                        renders as a native quote-reply on the customer's phone.
+     */
+    public function sendText(string $to, string $body, bool $previewUrl = false, ?string $quotedMessageId = null): Response
     {
-        return $this->post("/{$this->phoneNumberId}/messages", [
+        $payload = [
             'messaging_product' => 'whatsapp',
             'to' => $to,
             'type' => 'text',
             'text' => ['body' => $body, 'preview_url' => $previewUrl],
-        ]);
+        ];
+
+        if ($quotedMessageId) {
+            $payload['context'] = ['message_id' => $quotedMessageId];
+        }
+
+        return $this->post("/{$this->phoneNumberId}/messages", $payload);
     }
 
     /** Send a template message. */

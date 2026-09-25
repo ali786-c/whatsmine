@@ -64,7 +64,13 @@ class GenerateAiReplyJob implements ShouldQueue
                 'channel'         => $message->channel,
                 'type'            => 'text',
                 'body'            => $reply,
-                'payload'         => [],
+                // Quote-reply: reference the inbound WhatsApp message so the
+                // customer sees the bot replying TO their message, like a human
+                // agent would. The driver drops this gracefully if the upstream
+                // rejects the context (expired window, etc.).
+                'payload'         => $message->provider_message_id
+                    ? ['quoted_message_id' => $message->provider_message_id]
+                    : [],
                 'status'          => 'queued',
                 'sent_by'         => 'bot',
                 'sent_at'         => now(),

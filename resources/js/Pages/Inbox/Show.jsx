@@ -675,13 +675,19 @@ function extractQuoted(msg) {
         return { id: id ?? null, body };
     };
 
-    // Meta Cloud API: context { id, from, quoted_message? }
+    // Meta Cloud API: context { id, from, quoted_message? } (inbound)
     if (p.context?.id || p.context?.quoted_message) {
         const q = p.context.quoted_message ?? null;
         return {
             id: p.context.id ?? null,
             body: typeof q === 'string' ? q : (q?.body ?? q?.text ?? null),
         };
+    }
+
+    // Our own quoted outbound (bot/human reply with context): context.message_id
+    // references a message in THIS conversation — resolve its text below.
+    if (p.context?.message_id) {
+        return { id: p.context.message_id, body: null };
     }
 
     // QR / Baileys bridges: flattened keys…
@@ -710,6 +716,8 @@ const QUOTED_TYPE_LABELS = {
     location: '📍 Location',
     contacts: '👤 Contact',
     poll: '📊 Poll',
+    template: '📋 Template',
+    interactive: '💬 Interactive',
 };
 
 /** Resolve the quoted text from the already-loaded conversation messages. */

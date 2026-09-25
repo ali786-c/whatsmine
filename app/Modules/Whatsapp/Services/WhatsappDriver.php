@@ -67,8 +67,20 @@ class WhatsappDriver implements ChannelDriverInterface
                 $payload['location']['name'] ?? null,
                 $payload['location']['address'] ?? null,
             ),
-            default => $client->sendText($phone, $message->body ?? ''),
+            default => $client->sendText($phone, $message->body ?? '', false, $payload['quoted_message_id'] ?? null),
         };
+
+        // A quoted send can be rejected (context message out of window / not found).
+        // Retry once WITHOUT the quote so the reply still goes out.
+        if (! $resp->successful() && ! empty($payload['quoted_message_id']) && ($resp->json('error.code') ?? 0) != 0) {
+            Log::warning('WhatsApp quoted send rejected — retrying without quote context', [
+                'message_id' => $message->id,
+                'quoted_message_id' => $payload['quoted_message_id'],
+                'error' => mb_substr($resp->body(), 0, 200),
+            ]);
+
+            $resp = $client->sendText($phone, $message->body ?? '');
+        }
 
         if (! $resp->successful()) {
             throw new \RuntimeException('WhatsApp send failed: '.$resp->body());
