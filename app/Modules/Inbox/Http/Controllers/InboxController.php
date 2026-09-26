@@ -314,6 +314,18 @@ class InboxController extends Controller
             'sent_at' => now(),
         ]);
 
+        // Echo the composer's optimistic client_id back inside the payload so
+        // the UI can swap its temporary bubble for this stored one without a
+        // flicker or duplicate (the broadcast carries the same key).
+        $clientId = (string) $request->input('client_id');
+        if ($clientId !== '') {
+            $payload = $message->getAttribute('payload');
+            if (is_array($payload)) {
+                $payload['client_id'] = $clientId;
+                $message->forceFill(['payload' => $payload])->save();
+            }
+        }
+
         // Send via the channel driver
         $channel = $conversation->channelAccount?->channel ?? 'whatsapp';
         $sendError = null;

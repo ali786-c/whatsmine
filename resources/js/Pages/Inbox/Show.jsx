@@ -1958,7 +1958,12 @@ export default function InboxShow({
                 const local = prev.find(p => p.id === m.id);
                 return local ? { ...m, status: local.status ?? m.status } : m;
             });
-            return [...merged, ...localOnly];
+            // Drop optimistic twins the server snapshot now contains (same
+            // direction + body) — covers a lost POST response where the poll
+            // reveals the stored message, preventing a visible duplicate.
+            const cleanedLocal = localOnly.filter(o => !o._optimistic
+                || !merged.some(s => s.direction === o.direction && s.body === o.body));
+            return [...merged, ...cleanedLocal];
         });
     }, [initialMessages]);
     const [viewers, setViewers]             = useState([]);
@@ -1983,13 +1988,22 @@ export default function InboxShow({
     // re-used, so seed local state from the new server props on conversation
     // change. The websocket listeners dedupe by `id` so any freshly broadcast
     // message that already lives in local state is not duplicated.
+    // NOTE: reset ONLY when the conversation actually changes — resetting on
+    // every initialMessages refresh would clobber optimistic sends that the
+    // server snapshot doesn't contain yet (in-flight POSTs, slow Instagram
+    // retries), making the agent's own message "disappear" until some other
+    // event refreshed the thread.
+    const prevConvIdRef = useRef(conversation.id);
     useEffect(() => {
+        if (prevConvIdRef.current === conversation.id) return;
+        prevConvIdRef.current = conversation.id;
         setMessages(initialMessages ?? []);
         setConvLabels(conversation.labels ?? []);
         setAssignedTo(conversation.assigned_to ?? 'bot');
         setAssignedUserId(conversation.assigned_user_id ?? null);
         setSendError(null);
-    }, [conversation.id, initialMessages]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- seed only on conversation switch; initialMessages refreshes are merged by id above
+    }, [conversation.id]);
 
     useEffect(() => {
         setConversations(initialConversations);
@@ -2195,7 +2209,23 @@ export default function InboxShow({
 
     const appendMessage = (msg) => {
         if (!msg) return;
-        setMessages(prev => prev.some(m => m.id === msg.id) ? prev : [...prev, msg]);
+        setMessages(prev => {
+            // Known id → refresh the row in place (status/payload updates from
+            // the broadcast), never duplicate.
+            if (prev.some(m => m.id === msg.id)) {
+                return prev.map(m => m.id === msg.id ? { ...m, ...msg } : m);
+            }
+            // A stored outbound message supersedes this browser's optimistic
+            // twin: by echoed client_id when present, otherwise by a body
+            // match on a human send (bot/AI replies must NOT drop it).
+            const echoId = msg.payload?.client_id ?? null;
+            const cleaned = prev.filter(m => {
+                if (!m._optimistic) return true;
+                if (echoId) return m.client_id !== echoId;
+                return !(msg.direction === 'out' && msg.sent_by === 'human' && msg.body === m.body);
+            });
+            return [...cleaned, msg];
+        });
     };
 
     const handleSend = (e) => {
@@ -2210,7 +2240,16 @@ export default function InboxShow({
         const onDone = (res) => {
             const msg = res?.data?.message;
             const errText = res?.data?.error;
-            appendMessage(msg);
+            if (msg) {
+                appendMessage(msg);
+            } else {
+                // Response arrived without the message (e.g. non-JSON error
+                // shape): promote the optimistic bubble to failed so it never
+                // looks silently dropped.
+                setMessages(prev => prev.map(m => m.client_id === clientId
+                    ? { ...m, status: 'failed', error_json: { message: errText ?? 'Send failed' } }
+                    : m));
+            }
             reset();
             setAttachPreview(null);
             if (errText) setSendError(errText);
@@ -2222,7 +2261,36 @@ export default function InboxShow({
                 ?? err?.message
                 ?? t('inbox.failed_send_message');
             setSendError(errText);
+            // Mark the optimistic bubble failed — it stays visible with the
+            // same red ✗ the driver failure path paints.
+            setMessages(prev => prev.map(m => m.client_id === clientId
+                ? { ...m, status: 'failed', error_json: { message: errText } }
+                : m));
         };
+
+        // Optimistic bubble: appears INSTANTLY, before the POST resolves —
+        // Instagram sends can take 40+ s (primary attempt + /me/messages
+        // fallback + HUMAN_AGENT retry) and the agent must see their message
+        // the moment they hit enter, not when the AI reply refreshes the
+        // thread. client_id dedupes against both the POST response and the
+        // MessageSent broadcast (server echoes it in payload.client_id); the
+        // broadcast/response merge prefers server data via that key.
+        const clientId = `tmp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        const optimistic = {
+            id: clientId,
+            client_id: clientId,
+            conversation_id: conversation.id,
+            direction: 'out',
+            channel: conversation.channel_account?.channel ?? 'whatsapp',
+            type: attachPreview ? (attachPreview.type === 'image' ? 'image' : (attachPreview.type === 'audio' ? 'audio' : 'document')) : 'text',
+            body: data.body || attachPreview?.file?.name || '',
+            payload: attachPreview?.type === 'audio' ? { mime_type: attachPreview.file.type } : null,
+            status: 'queued',
+            sent_at: new Date().toISOString(),
+            created_at: new Date().toISOString(),
+            _optimistic: true,
+        };
+        setMessages(prev => [...prev, optimistic]);
 
         const config = { headers: { Accept: 'application/json' } };
 
@@ -2231,6 +2299,7 @@ export default function InboxShow({
             fd.append('body', data.body || attachPreview.file.name);
             fd.append('type', attachPreview.type === 'image' ? 'image' : (attachPreview.type === 'audio' ? 'audio' : 'document'));
             fd.append('attachment', attachPreview.file);
+            fd.append('client_id', clientId);
             axios.post(route('client.inbox.reply', conversation.uuid), fd, {
                 headers: { 'Content-Type': 'multipart/form-data', Accept: 'application/json' },
             })
@@ -2242,6 +2311,7 @@ export default function InboxShow({
                 body: data.body,
                 type: 'text',
                 payload: null,
+                client_id: clientId,
             }, config)
                 .then(onDone)
                 .catch(onErr)
