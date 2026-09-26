@@ -1938,9 +1938,20 @@ export default function InboxShow({
     const chunksRef                           = useRef([]);
     const recTimerRef                         = useRef(null);
     const fileRef = useRef(null);
+    const taRef = useRef(null);
     const bottomRef = useRef(null);
 
     const { data, setData, reset } = useForm({ body: '', type: 'text', payload: null });
+
+    // Auto-grow composer textarea: starts one line tall, grows with content
+    // (capped) and shrinks back after send/reset.
+    useEffect(() => {
+        const el = taRef.current;
+        if (el) {
+            el.style.height = 'auto';
+            el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
+        }
+    }, [data.body]);
 
     const scrollToBottom = useCallback(() => {
         bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -2655,17 +2666,19 @@ export default function InboxShow({
                                     <input ref={fileRef} type="file" className="hidden" onChange={handleFileChange} />
                                 </div>
 
-                                {/* WhatsApp-style composer: mic, text field and send all inside ONE bordered field */}
-                                <div className="flex items-end gap-1 rounded-xl border border-neutral-300 dark:border-neutral-600 bg-neutral-50 dark:bg-neutral-800 px-1.5 py-1.5 focus-within:ring-2 focus-within:ring-brand-500">
-                                    {/* Voice note mic — embedded left, inside the field */}
+                                {/* WhatsApp-style composer: mic, text field and send all inside ONE bordered field.
+                                    Textarea auto-grows (1 line → 120px) and buttons stay aligned to its last line. */}
+                                <div className="flex items-end gap-1 rounded-2xl border border-neutral-300 dark:border-neutral-600 bg-neutral-50 dark:bg-neutral-800 pl-1 pr-1 py-1 focus-within:ring-2 focus-within:ring-brand-500">
+                                    {/* Voice note mic — embedded left, vertically centered with the text line */}
                                     <button type="button" onClick={startRecording}
                                         title={recording ? t('inbox.stop_recording') : t('inbox.record_voice')}
-                                        className={`self-end shrink-0 rounded-lg p-2 transition ${recording
+                                        className={`shrink-0 self-center rounded-full p-2 transition ${recording
                                             ? 'bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-300 animate-pulse'
                                             : 'text-neutral-400 hover:text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-900/30'}`}>
-                                        {recording ? <Square className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+                                        {recording ? <Square className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
                                     </button>
                                     <textarea
+                                        ref={taRef}
                                         value={data.body}
                                         onChange={e => handleReplyChange(e.target.value)}
                                         onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(e); } }}
@@ -2674,15 +2687,15 @@ export default function InboxShow({
                                                 ? t('inbox.session_closed_placeholder')
                                                 : t('inbox.type_message_placeholder')
                                         }
-                                        rows={2}
+                                        rows={1}
                                         disabled={isWhatsApp && !isWindowOpen && !attachPreview}
-                                        className="flex-1 border-0 bg-transparent px-1 py-1.5 text-sm resize-none focus:outline-none focus:ring-0 disabled:opacity-60 disabled:cursor-not-allowed"
+                                        className="flex-1 border-0 bg-transparent px-1 py-1.5 text-sm leading-5 resize-none focus:outline-none focus:ring-0 disabled:opacity-60 disabled:cursor-not-allowed placeholder:text-neutral-400"
                                     />
                                     <button
                                         type="submit"
                                         disabled={sending || (!data.body.trim() && !attachPreview) || (isWhatsApp && !isWindowOpen && !attachPreview)}
-                                        className="self-end shrink-0 rounded-lg bg-brand-600 p-2 text-white hover:bg-brand-700 disabled:opacity-50 transition">
-                                        {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                                        className="shrink-0 self-center rounded-full bg-brand-600 p-2 text-white hover:bg-brand-700 disabled:opacity-50 transition">
+                                        {sending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
                                     </button>
                                 </div>
                             </form>
