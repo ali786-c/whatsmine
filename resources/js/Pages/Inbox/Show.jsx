@@ -1143,6 +1143,7 @@ function VoiceNotePreview({ url, sizeLabel, duration = 0 }) {
     const audioRef  = useRef(null);
     const [playing, setPlaying]   = useState(false);
     const [pos, setPos]           = useState(0);   // seconds played
+    const [err, setErr]           = useState(false); // playback refused (e.g. CSP blocked the blob)
     const total = Math.max(1, Math.round(duration));
     const fmt = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 
@@ -1163,7 +1164,16 @@ function VoiceNotePreview({ url, sizeLabel, duration = 0 }) {
         const el = audioRef.current;
         if (!el) return;
         if (playing) { el.pause(); setPlaying(false); }
-        else { el.play().then(() => setPlaying(true)).catch(() => {}); }
+        else {
+            el.play()
+                .then(() => { setErr(false); setPlaying(true); })
+                .catch((e) => {
+                    // Never swallow this silently — a blocked blob URL or an
+                    // undecodable codec looks identical to "button dead".
+                    console.error('[voice] preview play failed:', e?.name, e?.message, e);
+                    setErr(true);
+                });
+        }
     };
 
     const pct = Math.min(100, (pos / total) * 100);
@@ -1181,7 +1191,11 @@ function VoiceNotePreview({ url, sizeLabel, duration = 0 }) {
                     <div className="h-full rounded-full bg-brand-500 transition-all" style={{ width: `${pct}%` }} />
                 </div>
                 <div className="flex justify-between text-[10px] text-brand-700/80 dark:text-brand-300/80 mt-0.5 font-medium tabular-nums">
-                    <span>{fmt(pos)}</span>
+                    <span>
+                        {err
+                            ? <span className="text-red-500 font-semibold">⚠ Play blocked — hard refresh (Ctrl+Shift+R)</span>
+                            : fmt(pos)}
+                    </span>
                     <span>{fmt(total)}</span>
                 </div>
             </div>

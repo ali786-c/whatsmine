@@ -2995,6 +2995,11 @@ php artisan instagram:register-webhook &amp;&amp; php artisan instagram:diagnose
 <pre><code>Permissions-Policy: geolocation=(), microphone=(self), camera=()
 </code></pre>
 <p>Same-origin inbox recording works; third-party embeds stay blocked. Camera remains <code>()</code> — flip it to <code>(self)</code> if a video feature ever needs it. Regression test: <code>tests/Feature/SecureHeadersTest.php</code>.</p>
+<h3>CSP <code>media-src</code>: blob audio playback (play button dead before send)</h3>
+<p><strong>Root cause of the dead preview play button:</strong> the CSP had <code>img-src … blob:</code> but <strong>no <code>media-src</code> directive</strong>. <code>media-src</code> is not inherited from <code>img-src</code>, so <code>&lt;audio src=&quot;blob:...&quot;&gt;</code> in the composer voice-note preview fell back to <code>default-src &#39;self&#39;</code>, the blob URL was blocked, and <code>audio.play()</code> rejected — silently, because the component swallowed the error. Recording, size and duration all worked; only playback was dead. Fixed by adding:</p>
+<pre><code>media-src &#39;self&#39; blob:
+</code></pre>
+<p>The preview player now also surfaces play failures (red &quot;Play blocked — hard refresh&quot; hint + <code>console.error(&#39;[voice] preview play failed: …&#39;)</code>) instead of failing silently.</p>
 <h2>8. Server Requirements for Voice Notes (aaPanel / AlmaLinux 8)</h2>
 <p>These three are <strong>mandatory</strong> — miss any one and Chrome voice notes fail with a clear 422 naming the reason:</p>
 <ol>

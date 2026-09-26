@@ -67,6 +67,16 @@ Permissions-Policy: geolocation=(), microphone=(self), camera=()
 
 Same-origin inbox recording works; third-party embeds stay blocked. Camera remains `()` — flip it to `(self)` if a video feature ever needs it. Regression test: `tests/Feature/SecureHeadersTest.php`.
 
+### CSP `media-src`: blob audio playback (play button dead before send)
+
+**Root cause of the dead preview play button:** the CSP had `img-src … blob:` but **no `media-src` directive**. `media-src` is not inherited from `img-src`, so `<audio src="blob:...">` in the composer voice-note preview fell back to `default-src 'self'`, the blob URL was blocked, and `audio.play()` rejected — silently, because the component swallowed the error. Recording, size and duration all worked; only playback was dead. Fixed by adding:
+
+```
+media-src 'self' blob:
+```
+
+The preview player now also surfaces play failures (red "Play blocked — hard refresh" hint + `console.error('[voice] preview play failed: …')`) instead of failing silently.
+
 ## 8. Server Requirements for Voice Notes (aaPanel / AlmaLinux 8)
 
 These three are **mandatory** — miss any one and Chrome voice notes fail with a clear 422 naming the reason:

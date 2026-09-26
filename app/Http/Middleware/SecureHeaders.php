@@ -50,18 +50,25 @@ class SecureHeaders
 
         $frameSrc = "'self'".$this->metaFrameSources();
 
-        $directives = array_filter([
+        // All directives are always non-empty literals/concatenations, so no
+        // array_filter() here — it would be a no-op (and phpstan flags it).
+        $directives = [
             "default-src 'self'",
             'script-src '.$scriptSrc,
             'script-src-elem '.$scriptSrc,
             'style-src '.$styleSrc,
             'style-src-elem '.$styleSrc,
             "img-src 'self' data: https: blob:",
+            // media-src is NOT inherited from img-src; without it, blob: URLs fall
+            // back to default-src 'self' and the composer voice-note preview's
+            // <audio src="blob:..."> gets blocked — the play button silently does
+            // nothing while the file itself is perfectly fine.
+            "media-src 'self' blob:",
             'font-src '.$fontSrc,
             "connect-src 'self' ".$this->connectSources(),
             'frame-src '.$frameSrc,
             "frame-ancestors 'self'",
-        ]);
+        ];
 
         return implode('; ', $directives);
     }
