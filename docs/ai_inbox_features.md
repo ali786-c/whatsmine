@@ -61,6 +61,7 @@ Instagram Messaging differs from WhatsApp in two ways the implementation absorbs
 - **Privacy note:** because Meta fetches the URL itself, Instagram media is necessarily served from a publicly reachable location (WhatsApp's media-id flow keeps files private).
 - **Inbound:** customer-sent audio/image/video/file attachments are now mapped to proper message types with the sender's CDN URL, so they render as playable/visible bubbles in the thread (previously everything showed as an empty text bubble).
 - Video and document attachments reuse the same public-URL mechanism (`video` / `file` attachment types).
+- **24-hour window:** when the window is closed, the driver retries once with the `HUMAN_AGENT` tag (valid for 7 days since the customer's last message) — for **any** message type, audio included. Meta localises the window error (production reported it in Russian), so detection matches English, Russian («за пределами») and the generic word "window". If even the tagged send fails, the surfaced error is an actionable English message explaining the window state instead of the localised Meta string.
 
 ### Browser permission chain (why mic could "never" prompt)
 

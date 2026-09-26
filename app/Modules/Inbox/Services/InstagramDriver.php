@@ -209,13 +209,20 @@ class InstagramDriver implements ChannelDriverInterface
 
         // (#10 / "outside allowed window") = the 24-hour customer window has
         // closed. Docs: a HUMAN_AGENT tagged send may still reach the user for
-        // 7 days. Retry once with that tag before surfacing the failure.
+        // 7 days — for ANY message type (text AND attachments), so retry once
+        // with that tag before surfacing the failure. Meta localises this
+        // error (production reported it in Russian: "Сообщение отправлено за
+        // пределами допустимого окна"), so match the English string, the
+        // Russian one and the generic word "window"; a false positive only
+        // costs one harmless extra request that fails with its own error.
+        $bothErrors = (string) $errMsg.' '.$fbMsg;
         $windowClosed = (int) $errCode === 10
             || (int) $fbCode === 10
-            || str_contains((string) $errMsg, 'outside allowed window')
-            || str_contains((string) $fbMsg, 'outside allowed window');
+            || str_contains($bothErrors, 'outside allowed window')
+            || str_contains($bothErrors, 'за пределами')
+            || preg_match('/\bwindow\b/iu', $bothErrors) === 1;
 
-        if ($windowClosed && ($messageObj['text'] ?? null) !== null) {
+        if ($windowClosed) {
             $tagged = Http::withToken($accessToken)
                 ->timeout(15)
                 ->post($baseUrl."/{$igAccountId}/messages", [
@@ -228,6 +235,7 @@ class InstagramDriver implements ChannelDriverInterface
             if ($tagged->successful()) {
                 Log::info('Instagram send: delivered via HUMAN_AGENT tag after 24h window closed', [
                     'recipient' => $recipientId,
+                    'message_type' => isset($messageObj['text']) ? 'text' : ($messageObj['attachment']['type'] ?? 'unknown'),
                 ]);
 
                 return $tagged->json('message_id', '');
@@ -238,6 +246,16 @@ class InstagramDriver implements ChannelDriverInterface
                 'error_code' => $tagged->json('error.code'),
                 'error' => $tagged->json('error.message') ?? $tagged->body(),
             ]);
+
+            // Surface an actionable English reason instead of the localised
+            // Meta error: the HUMAN_AGENT window itself has limits (7 days
+            // since the customer's last message; not available for new
+            // accounts pending App Review).
+            throw new \RuntimeException(
+                'Instagram send failed: the 24-hour customer window is closed and the HUMAN_AGENT 7-day retry was rejected too. '
+                .'The customer last messaged more than 7 days ago (or the tag is unavailable for this app). Ask them to message you first. '
+                .'Meta said: '.($tagged->json('error.message') ?? $tagged->body())
+            );
         }
 
         // (#3) = the app / page token lacks the capability for this call. For

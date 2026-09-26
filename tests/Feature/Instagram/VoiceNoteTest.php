@@ -245,4 +245,84 @@ class VoiceNoteTest extends TestCase
         $this->assertStringStartsWith('http', $url);
         $this->assertStringContainsString('ig-voice-1.m4a', $url);
     }
+
+    #[Test]
+    public function audio_attachment_is_retried_with_human_agent_tag_when_window_closed(): void
+    {
+        $conversation = $this->makeConversation();
+
+        $message = Message::create([
+            'conversation_id' => $conversation->id,
+            'direction'       => 'out',
+            'channel'         => 'instagram',
+            'type'            => 'audio',
+            'body'            => 'voice-note-1.m4a',
+            'payload'         => [
+                'preview_url' => 'https://cdn.example.com/ig-voice-1.m4a',
+                'mime_type'   => 'audio/mp4',
+            ],
+            'status'          => 'queued',
+            'sent_by'         => 'human',
+            'sent_at'         => now(),
+        ]);
+
+        // Primary + /me/messages fallback both reject with the localised
+        // (Russian) window error production reported; the HUMAN_AGENT retry
+        // must then fire for the AUDIO attachment and succeed.
+        $windowError = ['error' => ['code' => 10, 'message' => 'Сообщение отправлено за пределами допустимого окна.']];
+        Http::fake([
+            'graph.instagram.com/v20.0/IG-ACC-1/messages' => Http::sequence()
+                ->push($windowError, 400)
+                ->push(['message_id' => 'IGMID-TAGGED'], 200),
+            'graph.instagram.com/v20.0/me/messages' => Http::response($windowError, 400),
+        ]);
+
+        $providerId = app(InstagramDriver::class)->send($message);
+
+        $this->assertSame('IGMID-TAGGED', $providerId);
+
+        Http::assertSent(function ($request) {
+            $body = $request->data();
+
+            return str_contains($request->url(), 'IG-ACC-1/messages')
+                && ($body['messaging_type'] ?? null) === 'MESSAGE_TAG'
+                && ($body['tag'] ?? null) === 'HUMAN_AGENT'
+                && ($body['message']['attachment']['type'] ?? null) === 'audio';
+        });
+    }
+
+    #[Test]
+    public function window_error_falls_back_to_actionable_english_message(): void
+    {
+        $conversation = $this->makeConversation();
+
+        $message = Message::create([
+            'conversation_id' => $conversation->id,
+            'direction'       => 'out',
+            'channel'         => 'instagram',
+            'type'            => 'audio',
+            'body'            => 'voice-note.m4a',
+            'payload'         => ['preview_url' => 'https://cdn.example.com/ig-voice.m4a'],
+            'status'          => 'queued',
+            'sent_by'         => 'human',
+            'sent_at'         => now(),
+        ]);
+
+        // All three attempts (primary, fallback, HUMAN_AGENT retry) fail —
+        // the surfaced error must be the actionable English one, not the
+        // localised Meta string the agent cannot act on.
+        $windowError = ['error' => ['code' => 10, 'message' => 'Сообщение отправлено за пределами допустимого окна.']];
+        Http::fake([
+            'graph.instagram.com/*' => Http::response($windowError, 400),
+        ]);
+
+        try {
+            app(InstagramDriver::class)->send($message);
+            $this->fail('Expected a RuntimeException from a fully rejected send.');
+        } catch (\RuntimeException $e) {
+            $this->assertStringContainsString('24-hour customer window is closed', $e->getMessage());
+            $this->assertStringContainsString('HUMAN_AGENT', $e->getMessage());
+            $this->assertStringContainsString('Сообщение', $e->getMessage());
+        }
+    }
 }

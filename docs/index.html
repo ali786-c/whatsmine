@@ -2989,6 +2989,7 @@ php artisan instagram:register-webhook &amp;&amp; php artisan instagram:diagnose
 <li><strong>Privacy note:</strong> because Meta fetches the URL itself, Instagram media is necessarily served from a publicly reachable location (WhatsApp&#39;s media-id flow keeps files private).</li>
 <li><strong>Inbound:</strong> customer-sent audio/image/video/file attachments are now mapped to proper message types with the sender&#39;s CDN URL, so they render as playable/visible bubbles in the thread (previously everything showed as an empty text bubble).</li>
 <li>Video and document attachments reuse the same public-URL mechanism (<code>video</code> / <code>file</code> attachment types).</li>
+<li><strong>24-hour window:</strong> when the window is closed, the driver retries once with the <code>HUMAN_AGENT</code> tag (valid for 7 days since the customer&#39;s last message) — for <strong>any</strong> message type, audio included. Meta localises the window error (production reported it in Russian), so detection matches English, Russian («за пределами») and the generic word &quot;window&quot;. If even the tagged send fails, the surfaced error is an actionable English message explaining the window state instead of the localised Meta string.</li>
 </ul>
 <h3>Browser permission chain (why mic could &quot;never&quot; prompt)</h3>
 <table>
