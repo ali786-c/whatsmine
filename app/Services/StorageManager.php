@@ -72,6 +72,32 @@ class StorageManager
     }
 
     /**
+     * Publicly reachable absolute URL for a stored file — required when a
+     * third-party API must fetch the file itself (Instagram Messaging sends
+     * media attachments by public URL; it has no media-id upload like
+     * WhatsApp).
+     *
+     * - Cloud disks (S3 / DigitalOcean Spaces / Wasabi): url() is already an
+     *   absolute CDN/endpoint URL.
+     * - Local 'public' disk: url() yields a relative /storage/... path, which
+     *   is prefixed with the configured APP URL so Meta's servers can fetch it.
+     */
+    public function publicUrl(string $path): string
+    {
+        $url = (string) $this->disk()->url($path);
+
+        if ($url !== '' && ! str_starts_with($url, 'http')) {
+            $base = rtrim((string) config('app.url'), '/');
+
+            if ($base !== '') {
+                $url = $base.($url[0] === '/' ? $url : '/'.$url);
+            }
+        }
+
+        return $url;
+    }
+
+    /**
      * Returns the active provider slug or null if nothing is enabled.
      */
     public function activeProvider(): ?string

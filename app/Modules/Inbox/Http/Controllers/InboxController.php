@@ -179,20 +179,20 @@ class InboxController extends Controller
                     : (str_starts_with($mimeType, 'audio/') ? 'audio' : 'document'));
             }
 
-            // Upload to WhatsApp so we have a media_id for sending
-            $client = CloudApiClient::forWorkspace($conversation->workspace_id);
-            if (! $client) {
-                return response()->json(['error' => 'No active WhatsApp account.'], 422);
-            }
+            $isInstagram = $conversation->channelAccount?->channel === 'instagram';
 
-            // Voice notes: Chrome's MediaRecorder outputs audio/webm, which the
-            // WhatsApp Cloud API rejects. Transcode to ogg/opus server-side when
-            // ffmpeg is available so the composer works in every browser.
+            // Voice notes: Chrome's MediaRecorder outputs audio/webm, which Meta
+            // rejects on every channel. Transcode server-side when ffmpeg is
+            // available so the composer works in every browser: ogg/opus for
+            // WhatsApp Cloud API, AAC/m4a for Instagram (which accepts neither
+            // webm nor ogg — only aac/m4a/wav/mp4).
             $uploadPath = $file->getRealPath();
             $uploadMime = $mimeType;
             $converted = null;
             if ($msgType === 'audio' && str_contains($mimeType, 'webm')) {
-                $converted = $this->transcodeAudioToOgg($file->getRealPath());
+                $converted = $isInstagram
+                    ? $this->transcodeAudioToM4a($file->getRealPath())
+                    : $this->transcodeAudioToOgg($file->getRealPath());
                 if ($converted) {
                     $uploadPath = $converted['path'];
                     $uploadMime = $converted['mime'];
@@ -202,31 +202,57 @@ class InboxController extends Controller
                     // 'video/webm'"), which surfaced as a cryptic 500. Fail
                     // fast with the precise server-side reason instead.
                     return response()->json([
-                        'error' => 'Voice note needs server transcoding (Chrome records webm, WhatsApp needs ogg/opus) but it failed: '.($this->transcodeReason ?? 'unknown reason'),
+                        'error' => 'Voice note needs server transcoding (Chrome records webm, '.($isInstagram ? 'Instagram needs m4a/aac' : 'WhatsApp needs ogg/opus').') but it failed: '.($this->transcodeReason ?? 'unknown reason'),
                     ], 422);
                 }
             }
 
-            $mediaId = $client->uploadMedia($uploadPath, $uploadMime);
-            $storedPath = $this->storageManager->prefixedPath('message-media/'.$file->hashName().($converted ? '.ogg' : ''));
-            if ($converted) {
-                $this->storageManager->disk()->put($storedPath, (string) file_get_contents($converted['path']));
-                @unlink($converted['path']);
+            if ($isInstagram) {
+                // Instagram Messaging has no media-id upload like WhatsApp —
+                // attachments reference a PUBLIC URL that Meta's servers fetch
+                // themselves. Cloud storage (S3/Spaces/Wasabi) provides a real
+                // public URL; local storage builds one from the configured APP
+                // URL, which must be reachable from the internet for this to work.
+                $ext = $converted ? 'm4a' : ($file->getClientOriginalExtension() ?: 'bin');
+                $storedPath = $this->storageManager->prefixedPath('message-media/ig-voice-'.uniqid().'.'.$ext);
+                $this->storageManager->disk()->put($storedPath, (string) file_get_contents($uploadPath));
+                if ($converted) {
+                    @unlink($converted['path']);
+                }
+
+                $msgPayload = array_merge($msgPayload ?? [], [
+                    'preview_url' => $this->storageManager->publicUrl($storedPath),
+                    'mime_type'   => $mimeType,
+                    'filename'    => $file->getClientOriginalName(),
+                ]);
             } else {
-                $this->storageManager->disk()->putFileAs(dirname($storedPath), $file, basename($storedPath));
-            }
-            $previewUrl = $this->storageManager->disk()->url($storedPath);
+                // Upload to WhatsApp so we have a media_id for sending
+                $client = CloudApiClient::forWorkspace($conversation->workspace_id);
+                if (! $client) {
+                    return response()->json(['error' => 'No active WhatsApp account.'], 422);
+                }
 
-            $msgPayload = array_merge($msgPayload ?? [], [
-                'media_id' => $mediaId,
-                'preview_url' => $previewUrl,
-                'caption' => $validated['body'] ?? null,
-                'filename' => $file->getClientOriginalName(),
-            ]);
+                $mediaId = $client->uploadMedia($uploadPath, $uploadMime);
+                $storedPath = $this->storageManager->prefixedPath('message-media/'.$file->hashName().($converted ? '.ogg' : ''));
+                if ($converted) {
+                    $this->storageManager->disk()->put($storedPath, (string) file_get_contents($converted['path']));
+                    @unlink($converted['path']);
+                } else {
+                    $this->storageManager->disk()->putFileAs(dirname($storedPath), $file, basename($storedPath));
+                }
+                $previewUrl = $this->storageManager->disk()->url($storedPath);
 
-            if ($msgType === 'audio' && str_starts_with($mimeType, 'audio/')) {
-                $msgPayload['mime_type'] = $mimeType;
-                $msgPayload['voice'] = str_contains($mimeType, 'ogg');
+                $msgPayload = array_merge($msgPayload ?? [], [
+                    'media_id' => $mediaId,
+                    'preview_url' => $previewUrl,
+                    'caption' => $validated['body'] ?? null,
+                    'filename' => $file->getClientOriginalName(),
+                ]);
+
+                if ($msgType === 'audio' && str_starts_with($mimeType, 'audio/')) {
+                    $msgPayload['mime_type'] = $mimeType;
+                    $msgPayload['voice'] = str_contains($mimeType, 'ogg');
+                }
             }
 
             // For image/document the 'body' shown in the chat is the caption or filename
@@ -684,10 +710,43 @@ class InboxController extends Controller
      */
     private function transcodeAudioToOgg(string $sourcePath): ?array
     {
-        // shell_exec/proc_open are commonly in disable_functions on hardened
-        // hosts (aaPanel default) — calling a disabled function throws a fatal
-        // \Error, so every execution path must be guarded. Failure reasons are
-        // recorded in $this->transcodeReason for a clear client-side error.
+        return $this->runFfmpeg(
+            $sourcePath,
+            ['-c:a', 'libopus', '-b:a', '32k', '-ar', '16000', '-ac', '1'],
+            'ogg',
+            'audio/ogg'
+        );
+    }
+
+    /**
+     * Chrome webm → AAC in an MP4 container. Instagram Messaging accepts only
+     * aac/m4a/wav/mp4 audio attachments (no ogg, no webm — WhatsApp's format).
+     *
+     * @return array{path:string,mime:string}|null
+     */
+    private function transcodeAudioToM4a(string $sourcePath): ?array
+    {
+        return $this->runFfmpeg(
+            $sourcePath,
+            ['-c:a', 'aac', '-b:a', '64k', '-ar', '44100', '-ac', '1'],
+            'm4a',
+            'audio/mp4'
+        );
+    }
+
+    /**
+     * Shared guarded ffmpeg invocation for every voice-note transcode.
+     *
+     * shell_exec/proc_open are commonly in disable_functions on hardened hosts
+     * (aaPanel default) — calling a disabled function throws a fatal \Error, so
+     * execution must go through guarded process launching. Every failure path
+     * records a precise human-readable reason in $this->transcodeReason.
+     *
+     * @param  list<string>  $codecArgs
+     * @return array{path:string,mime:string}|null
+     */
+    private function runFfmpeg(string $sourcePath, array $codecArgs, string $ext, string $mime): ?array
+    {
         $ffmpeg = $this->findFfmpeg();
         if ($ffmpeg === null) {
             $this->transcodeReason = $this->transcodeReason ?? 'ffmpeg binary not found (not in PATH, /usr/local/bin or /usr/bin)';
@@ -696,11 +755,10 @@ class InboxController extends Controller
             return null;
         }
 
-        $out = tempnam(sys_get_temp_dir(), 'voice_').'.ogg';
+        $out = tempnam(sys_get_temp_dir(), 'voice_').'.'.$ext;
         try {
             $process = new \Symfony\Component\Process\Process([
-                $ffmpeg, '-y', '-i', $sourcePath,
-                '-c:a', 'libopus', '-b:a', '32k', '-ar', '16000', '-ac', '1',
+                $ffmpeg, '-y', '-i', $sourcePath, ...$codecArgs,
                 $out,
             ], sys_get_temp_dir(), null, null, 60.0);
             $process->run();
@@ -729,7 +787,7 @@ class InboxController extends Controller
             return null;
         }
 
-        return ['path' => $out, 'mime' => 'audio/ogg'];
+        return ['path' => $out, 'mime' => $mime];
     }
 
     /**

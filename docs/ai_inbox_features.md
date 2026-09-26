@@ -40,11 +40,27 @@ Outbound AI replies arrive on the customer's phone as a native quote of their qu
 
 ## 6. Voice Notes: Record & Send from the Inbox Composer
 
-Agents can record and send WhatsApp voice notes directly from the inbox.
+Agents can record and send WhatsApp voice notes directly from the inbox. **Instagram conversations support the same composer** (see §6.1).
 
 - **Composer UI:** mic button left of the textarea (MediaRecorder, prefers `audio/ogg;codecs=opus`, falls back to webm), recording indicator with seconds, audio preview player before send.
 - **Server transcode:** Chrome records `audio/webm`, which the WhatsApp Cloud API rejects. `InboxController::transcodeAudioToOgg()` converts to `audio/ogg` (libopus 32k, 16kHz, mono) so it sends as a native voice note.
 - **Graceful errors:** every failure path sets a human-readable reason (see §8) and returns a 422 with that exact reason instead of a cryptic 500 or a Meta rejection.
+
+### 6.1 Instagram Voice Notes & Media
+
+Instagram Messaging differs from WhatsApp in two ways the implementation absorbs:
+
+| | WhatsApp Cloud API | Instagram Messaging |
+|---|---|---|
+| Accepted audio | `audio/ogg` (opus) as **voice note**; aac/m4a/mp3 as audio | **aac, m4a, wav, mp4 only** — no ogg, no webm |
+| Delivery | Upload → `media_id` | **No upload API** — attachment references a **public URL** Meta fetches |
+| Voice-bubble UX | Yes (`voice: true`) | Standard audio bubble |
+
+- **Transcode target:** on Instagram conversations the composer's webm is converted to **AAC in an MP4 container** (`transcodeAudioToM4a()`, 64k, 44.1kHz, mono) — same ffmpeg, same fail-fast 422 reasons.
+- **Storage:** the file is stored via the workspace Storage integration and its **absolute URL** (`StorageManager::publicUrl()`) travels in the message payload. Cloud storage (S3 / Spaces / Wasabi) yields a real public URL automatically; on the local disk the APP URL must be publicly reachable and serve `/storage`.
+- **Privacy note:** because Meta fetches the URL itself, Instagram media is necessarily served from a publicly reachable location (WhatsApp's media-id flow keeps files private).
+- **Inbound:** customer-sent audio/image/video/file attachments are now mapped to proper message types with the sender's CDN URL, so they render as playable/visible bubbles in the thread (previously everything showed as an empty text bubble).
+- Video and document attachments reuse the same public-URL mechanism (`video` / `file` attachment types).
 
 ### Browser permission chain (why mic could "never" prompt)
 
@@ -102,8 +118,9 @@ Transcode failure reasons are logged as `Inbox audio: ...` warnings in `storage/
 | `tests/Feature/AI/PlaygroundHistoryTest.php` | Playground history sanitizing + memory |
 | `tests/Feature/AI/WhatsappQuotedReplyTest.php` | Bot quote context + no-quote retry |
 | `tests/Feature/AI/InboxMediaServingTest.php` | Inline media streaming without symlink |
-| `tests/Feature/SecureHeadersTest.php` | `microphone=(self)` in Permissions-Policy |
+| `tests/Feature/SecureHeadersTest.php` | `microphone=(self)` in Permissions-Policy; CSP `media-src 'self' blob: https:` |
 | `tests/Feature/AI/VoiceNoteSendTest.php` | Webm voice-note send never 500s on hardened hosts |
+| `tests/Feature/Instagram/VoiceNoteTest.php` | Instagram voice-note chain: m4a transcode branch, URL attachment send, inbound attachment mapping, `publicUrl()` |
 
 Full AI suite reference: 38+ tests green before this doc; voice-note + header tests add 3 more.
 

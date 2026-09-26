@@ -62,8 +62,9 @@ class SecureHeaders
             // media-src is NOT inherited from img-src; without it, blob: URLs fall
             // back to default-src 'self' and the composer voice-note preview's
             // <audio src="blob:..."> gets blocked — the play button silently does
-            // nothing while the file itself is perfectly fine.
-            "media-src 'self' blob:",
+            // nothing while the file itself is perfectly fine. https: allows
+            // Instagram voice notes to play straight from cloud storage.
+            "media-src 'self' blob: https:",
             'font-src '.$fontSrc,
             "connect-src 'self' ".$this->connectSources(),
             'frame-src '.$frameSrc,

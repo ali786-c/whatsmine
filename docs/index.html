@@ -2951,11 +2951,44 @@ php artisan instagram:register-webhook &amp;&amp; php artisan instagram:diagnose
 <h2>5. Inbound Media Reliability (&quot;Image unavailable&quot; fix)</h2>
 <p><code>InboxController::serveMedia()</code> previously redirected to <code>disk-&gt;url()</code>, which 404s whenever the <code>/storage</code> symlink is missing. It now <strong>streams bytes inline</strong> (<code>streamStored()</code>: correct Content-Type map, <code>inline</code> disposition, 24h Cache-Control) across all three paths (QR cache hit, QR download, Cloud download). Symlink or not, images/audio/video render.</p>
 <h2>6. Voice Notes: Record &amp; Send from the Inbox Composer</h2>
-<p>Agents can record and send WhatsApp voice notes directly from the inbox.</p>
+<p>Agents can record and send WhatsApp voice notes directly from the inbox. <strong>Instagram conversations support the same composer</strong> (see §6.1).</p>
 <ul>
 <li><strong>Composer UI:</strong> mic button left of the textarea (MediaRecorder, prefers <code>audio/ogg;codecs=opus</code>, falls back to webm), recording indicator with seconds, audio preview player before send.</li>
 <li><strong>Server transcode:</strong> Chrome records <code>audio/webm</code>, which the WhatsApp Cloud API rejects. <code>InboxController::transcodeAudioToOgg()</code> converts to <code>audio/ogg</code> (libopus 32k, 16kHz, mono) so it sends as a native voice note.</li>
 <li><strong>Graceful errors:</strong> every failure path sets a human-readable reason (see §8) and returns a 422 with that exact reason instead of a cryptic 500 or a Meta rejection.</li>
+</ul>
+<h3>6.1 Instagram Voice Notes &amp; Media</h3>
+<p>Instagram Messaging differs from WhatsApp in two ways the implementation absorbs:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>WhatsApp Cloud API</th>
+<th>Instagram Messaging</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Accepted audio</td>
+<td><code>audio/ogg</code> (opus) as <strong>voice note</strong>; aac/m4a/mp3 as audio</td>
+<td><strong>aac, m4a, wav, mp4 only</strong> — no ogg, no webm</td>
+</tr>
+<tr>
+<td>Delivery</td>
+<td>Upload → <code>media_id</code></td>
+<td><strong>No upload API</strong> — attachment references a <strong>public URL</strong> Meta fetches</td>
+</tr>
+<tr>
+<td>Voice-bubble UX</td>
+<td>Yes (<code>voice: true</code>)</td>
+<td>Standard audio bubble</td>
+</tr>
+</tbody></table>
+<ul>
+<li><strong>Transcode target:</strong> on Instagram conversations the composer&#39;s webm is converted to <strong>AAC in an MP4 container</strong> (<code>transcodeAudioToM4a()</code>, 64k, 44.1kHz, mono) — same ffmpeg, same fail-fast 422 reasons.</li>
+<li><strong>Storage:</strong> the file is stored via the workspace Storage integration and its <strong>absolute URL</strong> (<code>StorageManager::publicUrl()</code>) travels in the message payload. Cloud storage (S3 / Spaces / Wasabi) yields a real public URL automatically; on the local disk the APP URL must be publicly reachable and serve <code>/storage</code>.</li>
+<li><strong>Privacy note:</strong> because Meta fetches the URL itself, Instagram media is necessarily served from a publicly reachable location (WhatsApp&#39;s media-id flow keeps files private).</li>
+<li><strong>Inbound:</strong> customer-sent audio/image/video/file attachments are now mapped to proper message types with the sender&#39;s CDN URL, so they render as playable/visible bubbles in the thread (previously everything showed as an empty text bubble).</li>
+<li>Video and document attachments reuse the same public-URL mechanism (<code>video</code> / <code>file</code> attachment types).</li>
 </ul>
 <h3>Browser permission chain (why mic could &quot;never&quot; prompt)</h3>
 <table>
@@ -3038,11 +3071,15 @@ ffmpeg -version   # verify
 </tr>
 <tr>
 <td><code>tests/Feature/SecureHeadersTest.php</code></td>
-<td><code>microphone=(self)</code> in Permissions-Policy</td>
+<td><code>microphone=(self)</code> in Permissions-Policy; CSP <code>media-src &#39;self&#39; blob: https:</code></td>
 </tr>
 <tr>
 <td><code>tests/Feature/AI/VoiceNoteSendTest.php</code></td>
 <td>Webm voice-note send never 500s on hardened hosts</td>
+</tr>
+<tr>
+<td><code>tests/Feature/Instagram/VoiceNoteTest.php</code></td>
+<td>Instagram voice-note chain: m4a transcode branch, URL attachment send, inbound attachment mapping, <code>publicUrl()</code></td>
 </tr>
 </tbody></table>
 <p>Full AI suite reference: 38+ tests green before this doc; voice-note + header tests add 3 more.</p>

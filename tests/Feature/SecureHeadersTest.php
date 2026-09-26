@@ -36,7 +36,7 @@ class SecureHeadersTest extends TestCase
         $csp = (string) $response->headers->get('Content-Security-Policy');
 
         $this->assertStringContainsString('media-src', $csp);
-        $this->assertStringContainsString("media-src 'self' blob:", $csp);
+        $this->assertStringContainsString("media-src 'self' blob: https:", $csp);
         $this->assertStringNotContainsString('microphone=()', (string) $response->headers->get('Permissions-Policy'));
     }
 }

@@ -74,6 +74,40 @@ class InstagramDriver implements ChannelDriverInterface
             throw new \RuntimeException('Instagram template send failed: '.($resp->json('error.message') ?? $resp->body()));
         }
 
+        // Audio/voice notes: Instagram Messaging accepts audio attachments as
+        // aac/m4a/wav/mp4 ONLY (no webm/ogg — those are WhatsApp formats) and
+        // has no media-id upload, so the payload must reference a publicly
+        // fetchable URL. The composer path transcodes webm → m4a and stores the
+        // file on the workspace storage disk; meta carries its absolute URL.
+        if ($message->type === 'audio') {
+            $audioUrl = $payload['link'] ?? $payload['preview_url'] ?? null;
+            if (! $audioUrl) {
+                throw new \RuntimeException('Instagram audio send failed: no public audio URL in the message payload.');
+            }
+
+            return $this->postMessage($base, $accessToken, $igAccountId, $recipientId, [
+                'attachment' => [
+                    'type' => 'audio',
+                    'payload' => ['url' => $audioUrl, 'is_reusable' => true],
+                ],
+            ]);
+        }
+
+        // Video / document attachments share the same public-URL mechanism —
+        // the composer's Instagram path stores any attachment on the storage
+        // disk and carries its absolute URL in the payload.
+        if (in_array($message->type, ['video', 'document'], true)) {
+            $mediaUrl = $payload['link'] ?? $payload['preview_url'] ?? null;
+            if ($mediaUrl) {
+                return $this->postMessage($base, $accessToken, $igAccountId, $recipientId, [
+                    'attachment' => [
+                        'type' => $message->type === 'video' ? 'video' : 'file',
+                        'payload' => ['url' => $mediaUrl, 'is_reusable' => true],
+                    ],
+                ]);
+            }
+        }
+
         // Image messages (e.g. shared products): send the photo as an attachment,
         // then the caption as a follow-up — an IG attachment carries no text.
         if ($message->type === 'image' && $imageUrl) {
@@ -384,12 +418,29 @@ class InstagramDriver implements ChannelDriverInterface
             ['status' => 'open', 'external_thread_id' => $senderId]
         );
 
+        // Attachments (audio, image, video, file) arrive as message.attachments[]
+        // with a publicly fetchable URL. Map the first one to the message type the
+        // bubble renderer understands and carry its URL as preview_url, so voice
+        // notes and photos customers send play/show in the thread instead of
+        // rendering as an empty text bubble.
+        $attachments = $event['message']['attachments'] ?? [];
+        $first = $attachments[0] ?? null;
+        $attType = $first['type'] ?? null;
+        $attUrl = $first['payload']['url'] ?? null;
+        $typeMap = ['audio' => 'audio', 'image' => 'image', 'video' => 'video', 'file' => 'document'];
+        $inType = $typeMap[$attType] ?? 'text';
+        if ($inType !== 'text') {
+            $msgBody = $msgBody ?: null;
+        }
+
         $message = Message::create([
             'conversation_id' => $conversation->id,
             'direction' => 'in',
             'channel' => 'instagram',
-            'type' => 'text',
-            'payload' => $event,
+            'type' => $inType,
+            'payload' => $inType !== 'text' && $attUrl
+                ? array_merge($event, [$inType => ['preview_url' => $attUrl, 'mime_type' => $first['payload']['mime_type'] ?? null]])
+                : $event,
             'body' => $msgBody,
             'status' => 'delivered',
             'provider_message_id' => $event['message']['mid'] ?? null,

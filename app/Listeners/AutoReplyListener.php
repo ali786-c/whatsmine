@@ -3,6 +3,7 @@
 namespace App\Listeners;
 
 use App\Events\MessageReceived;
+use App\Events\MessageSent;
 use App\Models\User;
 use App\Modules\AI\Jobs\GenerateAiReplyJob;
 use App\Modules\AI\Models\AiChatbot;
