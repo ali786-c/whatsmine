@@ -87,6 +87,7 @@ export default function useClientNav() {
     const inboxItems = [
         { label: t('nav.inbox'),         href: safeRoute('client.inbox.index'), icon: <Inbox className={iconClass} />, activePattern: 'client.inbox.index' },
         { label: t('nav.channel_setup'), href: safeRoute('client.inbox.setup'), icon: <Inbox className={iconClass} />, activePattern: 'client.inbox.setup' },
+        { label: t('nav.labels'),        href: safeRoute('client.inbox.labels.index'), icon: <Tag className={iconClass} />, activePattern: 'client.inbox.labels.*' },
     ];
 
     const aiItems = [

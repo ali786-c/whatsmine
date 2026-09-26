@@ -2899,9 +2899,20 @@ export default function InboxShow({
                     </div>
 
                     {/* Labels / Tags */}
-                    {allLabels.length > 0 && (
-                        <div className="p-4 border-b border-neutral-100 dark:border-neutral-800">
-                            <p className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 mb-2">{t('inbox.tags')}</p>
+                    <div className="p-4 border-b border-neutral-100 dark:border-neutral-800">
+                        <div className="flex items-center justify-between mb-2">
+                            <p className="text-[10px] font-bold uppercase tracking-wider text-neutral-400">{t('inbox.tags')}</p>
+                            <Link href={route('client.inbox.labels.index')}
+                                className="text-[10px] font-semibold text-brand-600 hover:underline dark:text-brand-400">
+                                {t('inbox.manage_labels')}
+                            </Link>
+                        </div>
+                        {allLabels.length === 0 ? (
+                            <p className="text-xs text-neutral-400">
+                                {t('inbox.no_tags_yet')}{' '}
+                                <Link href={route('client.inbox.labels.index')} className="font-semibold text-brand-600 hover:underline dark:text-brand-400">{t('inbox.create_label_cta')}</Link>
+                            </p>
+                        ) : (
                             <div className="flex flex-wrap gap-1.5">
                                 {allLabels.map(label => {
                                     const active = convLabels.some(l => l.id === label.id);
@@ -2917,8 +2928,8 @@ export default function InboxShow({
                                     );
                                 })}
                             </div>
-                        </div>
-                    )}
+                        )}
+                    </div>
 
                     {/* Opt-ins */}
                     <div className="p-4 border-b border-neutral-100 dark:border-neutral-800">

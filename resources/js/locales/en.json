@@ -119,6 +119,7 @@
     "email_server": "Email Server",
     "inbox": "Inbox",
     "channel_setup": "Channel Setup",
+    "labels": "Labels",
     "chatbots": "Chatbots",
     "knowledge_bases": "Knowledge Bases",
     "ai_providers": "AI Providers",
@@ -2969,7 +2970,10 @@
     "https_required": "HTTPS required — voice notes need a secure (https://) connection.",
     "mic_blocked_site": "Microphone is BLOCKED. Chrome: lock icon → Site settings → Microphone → Allow. If it's already Allow, your operating system is blocking the mic (Windows: Settings → Privacy & security → Microphone) — then reload.",
     "mic_not_found": "No microphone found on this device. Connect a mic or enable it in system settings.",
-    "mic_in_use": "Microphone is in use by another app (Zoom/Meet etc.) — close it and try again."
+    "mic_in_use": "Microphone is in use by another app (Zoom/Meet etc.) — close it and try again.",
+    "manage_labels": "Manage",
+    "no_tags_yet": "No tags yet.",
+    "create_label_cta": "Create one in Labels →"
   },
   "whatsappQr": {
     "title": "WhatsApp QR Login",
