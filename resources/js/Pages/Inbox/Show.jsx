@@ -1134,6 +1134,63 @@ function EmojiPicker({ onPick, onClose }) {
     );
 }
 
+/* ─── Voice note preview (composer) ───
+   Chrome's MediaRecorder webm blobs carry NO duration metadata, so a native
+   <audio controls> shows 0:00 / 0:00. This mini player derives the duration
+   from the recording timer (passed via the file name) and tracks playback
+   progress itself. */
+function VoiceNotePreview({ url, sizeLabel, duration = 0 }) {
+    const audioRef  = useRef(null);
+    const [playing, setPlaying]   = useState(false);
+    const [pos, setPos]           = useState(0);   // seconds played
+    const total = Math.max(1, Math.round(duration));
+    const fmt = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+
+    useEffect(() => {
+        const el = audioRef.current;
+        if (!el) return;
+        const onTime = () => setPos(el.currentTime || 0);
+        const onEnd  = () => { setPlaying(false); setPos(0); };
+        el.addEventListener('timeupdate', onTime);
+        el.addEventListener('ended', onEnd);
+        return () => {
+            el.removeEventListener('timeupdate', onTime);
+            el.removeEventListener('ended', onEnd);
+        };
+    }, []);
+
+    const toggle = () => {
+        const el = audioRef.current;
+        if (!el) return;
+        if (playing) { el.pause(); setPlaying(false); }
+        else { el.play().then(() => setPlaying(true)).catch(() => {}); }
+    };
+
+    const pct = Math.min(100, (pos / total) * 100);
+
+    return (
+        <div className="flex items-center gap-2 bg-brand-50 dark:bg-brand-900/20 rounded-full pl-1 pr-3 py-1 border border-brand-100 dark:border-brand-900/40 min-w-[220px]">
+            <button type="button" onClick={toggle}
+                className="shrink-0 h-8 w-8 rounded-full bg-brand-600 text-white flex items-center justify-center hover:bg-brand-700 transition">
+                {playing
+                    ? <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>
+                    : <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l11-6.5-11-6.5Z"/></svg>}
+            </button>
+            <div className="flex-1">
+                <div className="h-1.5 rounded-full bg-brand-200/70 dark:bg-brand-900/50 overflow-hidden">
+                    <div className="h-full rounded-full bg-brand-500 transition-all" style={{ width: `${pct}%` }} />
+                </div>
+                <div className="flex justify-between text-[10px] text-brand-700/80 dark:text-brand-300/80 mt-0.5 font-medium tabular-nums">
+                    <span>{fmt(pos)}</span>
+                    <span>{fmt(total)}</span>
+                </div>
+            </div>
+            <audio ref={audioRef} src={url} preload="metadata" className="hidden" />
+            <span className="text-[10px] text-neutral-400 shrink-0">{sizeLabel}</span>
+        </div>
+    );
+}
+
 /* ─── Instagram template composer (generic carousel / button) ── */
 /* buildIgTemplateMessage / igTemplateValid / emptyIgButton live in @/Utils/igTemplate
    so the full-page gallery editor (Instagram → DM Templates) shares them. */
@@ -1937,6 +1994,7 @@ export default function InboxShow({
     const mediaRecorderRef                    = useRef(null);
     const chunksRef                           = useRef([]);
     const recTimerRef                         = useRef(null);
+    const recordSecsRef                       = useRef(0); // mirrors recordSecs for onstop
     const fileRef = useRef(null);
     const taRef = useRef(null);
     const bottomRef = useRef(null);
@@ -2217,18 +2275,27 @@ export default function InboxShow({
             rec.ondataavailable = (ev) => ev.data.size > 0 && chunksRef.current.push(ev.data);
             rec.onstop = () => {
                 stream.getTracks().forEach(t => t.stop());
+                clearInterval(recTimerRef.current);
                 const type = rec.mimeType || 'audio/webm';
                 const ext = type.includes('ogg') ? 'ogg' : (type.includes('mp4') ? 'm4a' : 'webm');
                 const blob = new Blob(chunksRef.current, { type });
                 if (blob.size === 0) { setSendError(t('inbox.voice_too_short')); return; }
                 const file = new File([blob], `voice-note-${Date.now()}.${ext}`, { type: type.split(';')[0] });
-                setAttachPreview({ file, url: URL.createObjectURL(blob), type: 'audio' });
+                // Chrome webm blobs lack duration metadata — carry the real
+                // recorded length alongside for the preview player.
+                setAttachPreview({ file, url: URL.createObjectURL(blob), type: 'audio', duration: recordSecsRef.current });
             };
             rec.start();
             mediaRecorderRef.current = rec;
             setRecordSecs(0);
+            recordSecsRef.current = 0;
             setRecording(true);
-            recTimerRef.current = setInterval(() => setRecordSecs(s => s + 1), 1000);
+            recTimerRef.current = setInterval(() => {
+                setRecordSecs(s => {
+                    recordSecsRef.current = s + 1;
+                    return s + 1;
+                });
+            }, 1000);
         } catch (err) {
             // Map getUserMedia failures to actionable messages. Log + append the
             // raw error name so on-screen text can be verified against reality.
@@ -2546,7 +2613,7 @@ export default function InboxShow({
                                 {attachPreview.type === 'image'
                                     ? <img src={attachPreview.url} alt="" className="h-12 w-12 rounded-lg object-cover" />
                                     : attachPreview.type === 'audio'
-                                        ? <audio src={attachPreview.url} controls className="h-10 w-56" />
+                                        ? <VoiceNotePreview url={attachPreview.url} duration={attachPreview.duration} sizeLabel={`${(attachPreview.file.size / 1024).toFixed(1)} KB`} />
                                         : <div className="h-12 w-12 rounded-lg bg-neutral-200 dark:bg-neutral-700 flex items-center justify-center"><Paperclip className="h-5 w-5 text-neutral-500" /></div>
                                 }
                                 <div className="flex-1 min-w-0">
