@@ -31,6 +31,16 @@ namespace App\Modules\AI\Services;
 class EmojiEngine
 {
     /**
+     * Full CLDR dataset (labels + tags + group for ~1900 emoji), generated
+     * from emojibase-data via `npm run emoji:build`. Universal coverage: any
+     * emoji the customer sends resolves to its CLDR label/tags even when the
+     * curated map below has no opinion about it.
+     *
+     * @var array<string, array{0:string, 1:list<string>, 2:?string}>
+     */
+    private array $dataset;
+
+    /**
      * Canonical customer-service emoji → [semantic phrase, keywords, sentiment, intensity 1-3].
      * Sentiment: positive | negative | neutral | angry | urgent.
      */
@@ -136,6 +146,28 @@ class EmojiEngine
     private const ANGER_EMOJI = ['😡', '🤬', '😤', '😠', '🤦'];
     private const URGENT_EMOJI = ['🚨', '🆘', '‼', '❗', '⏳'];
 
+    /**
+     * Label-word sentiment buckets for dataset-only emoji (checked in order;
+     * first hit wins). Deliberately narrow — ambiguous labels stay null.
+     *
+     * @var array<string, list<string>>
+     */
+    private const LABEL_SENTIMENT = [
+        'angry' => ['enraged', 'rage', 'cursing', 'triumph anger'],
+        'negative' => ['crying', 'crying face', 'loudly crying', 'sob', 'disappointed', 'unamused', 'weary', 'anguished', 'fearful', 'confounded', 'persevering', 'sleepy sad'],
+        'urgent' => ['police car light', 'siren', 'rotating light', 'exclamation question', 'double exclamation'],
+        'positive' => ['heart eyes', 'star-struck', 'star struck', 'rolling on the floor', 'face blowing', 'smiling face with hearts', 'clapping hands', 'thumbs up', 'raised hands'],
+    ];
+
+    public function __construct()
+    {
+        // The CLDR dataset lives beside this class in resources/ai — loaded
+        // once per process. Missing file (fresh clone without npm install)
+        // degrades gracefully to curated-only coverage.
+        $path = resource_path('ai/emoji_dataset.php');
+        $this->dataset = is_file($path) ? (require $path) : [];
+    }
+
     /** Match any emoji class broadly (symbols, pictographs, dingbats, CJK-adjacent blocks). */
     private const EMOJI_REGEX =
         '/[\x{1F300}-\x{1FAFF}\x{1F000}-\x{1F0FF}\x{2600}-\x{27BF}\x{2B00}-\x{2BFF}\x{FE0F}\x{1F900}-\x{1F9FF}\x{2190}-\x{21FF}\x{2300}-\x{23FF}]/u';
@@ -151,9 +183,17 @@ class EmojiEngine
     public function normalize(string $text): string
     {
         $normalized = preg_replace_callback(self::EMOJI_REGEX, function (array $m) {
-            $entry = self::MAP[$m[0]] ?? null;
+            // Curated sense wins; otherwise the CLDR label from the full
+            // dataset ("📦" → "package", "🚀" → "rocket") keeps ANY emoji
+            // meaningful to retrieval instead of dying as a dead token.
+            if ($entry = self::MAP[$m[0]] ?? null) {
+                return ' '.$entry[0].' ';
+            }
+            if ($cldr = $this->dataset[$m[0]] ?? null) {
+                return ' '.$cldr[0].' ';
+            }
 
-            return $entry !== null ? ' '.$entry[0].' ' : ' ';
+            return ' ';
         }, $text) ?? $text;
 
         // Collapse the whitespace the substitutions introduced.
@@ -189,30 +229,49 @@ class EmojiEngine
         $maxIntensity = 0;
 
         foreach ($found as $emoji) {
-            $entry = self::MAP[$emoji] ?? null;
-            if ($entry === null) {
+            if ($entry = self::MAP[$emoji] ?? null) {
+                [$phrase, $kws, $sentiment, $intensity] = $entry;
+                $labels[] = $phrase;
+                foreach ($kws as $kw) {
+                    $keywords[$kw] = true;
+                }
+                $sentimentScores[$sentiment] = ($sentimentScores[$sentiment] ?? 0) + $intensity;
+                $maxIntensity = max($maxIntensity, $intensity);
+
+                if (in_array($emoji, self::ANGER_EMOJI, true)) {
+                    $intents[] = 'escalation_risk';
+                }
+                if (in_array($emoji, self::URGENT_EMOJI, true)) {
+                    $intents[] = 'urgency';
+                }
+                if ($phrase === 'deal agreed' || $phrase === 'check mark done') {
+                    $intents[] = 'agreement';
+                }
+                if (in_array($phrase, ['money bag price', 'shopping cart order', 'package delivery', 'delivery truck shipping'], true)) {
+                    $intents[] = 'purchase_or_delivery';
+                }
+
                 continue;
             }
 
-            [$phrase, $kws, $sentiment, $intensity] = $entry;
-            $labels[] = $phrase;
-            foreach ($kws as $kw) {
-                $keywords[$kw] = true;
+            // Not curated — fall back to the universal CLDR dataset: the label
+            // feeds the prompt layer ("📦 = package") and tags become retrieval
+            // keywords; sentiment comes from a conservative label classifier.
+            $cldr = $this->dataset[$emoji] ?? null;
+            if ($cldr === null) {
+                continue;
             }
-            $sentimentScores[$sentiment] = ($sentimentScores[$sentiment] ?? 0) + $intensity;
-            $maxIntensity = max($maxIntensity, $intensity);
 
-            if (in_array($emoji, self::ANGER_EMOJI, true)) {
-                $intents[] = 'escalation_risk';
+            [$label, $tags, $group] = $cldr;
+            $labels[] = $label;
+            foreach ($tags as $tag) {
+                $keywords[$tag] = true;
             }
-            if (in_array($emoji, self::URGENT_EMOJI, true)) {
-                $intents[] = 'urgency';
-            }
-            if ($phrase === 'deal agreed' || $phrase === 'check mark done') {
-                $intents[] = 'agreement';
-            }
-            if (in_array($phrase, ['money bag price', 'shopping cart order', 'package delivery', 'delivery truck shipping'], true)) {
-                $intents[] = 'purchase_or_delivery';
+
+            $classified = $this->classifyLabel($label, $tags);
+            if ($classified !== null) {
+                $sentimentScores[$classified] = ($sentimentScores[$classified] ?? 0) + 1;
+                $maxIntensity = max($maxIntensity, 1);
             }
         }
 
@@ -234,6 +293,29 @@ class EmojiEngine
             'labels' => array_values(array_unique($labels)),
             'keywords' => array_keys($keywords),
         ];
+    }
+
+    /**
+     * Conservative sentiment guess for dataset-only emoji, purely from their
+     * CLDR label/tags. Only emits when the words are unambiguous — a wrong
+     * guess here would poison the prompt layer, so unknown stays null (the
+     * model itself remains the deeper judge).
+     *
+     * @param  list<string>  $tags
+     */
+    private function classifyLabel(string $label, array $tags): ?string
+    {
+        $bag = $label.' '.implode(' ', $tags);
+
+        foreach (self::LABEL_SENTIMENT as $sentiment => $needles) {
+            foreach ($needles as $needle) {
+                if (str_contains($bag, $needle)) {
+                    return $sentiment;
+                }
+            }
+        }
+
+        return null;
     }
 
     /**

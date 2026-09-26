@@ -86,7 +86,15 @@ The LLM understands emoji natively — but everything AROUND the model is text m
 4. **expandKeywords()** — emoji-derived keywords join the keyword-retrieval expansion set, so "🔥🔥" (no words at all) still surfaces relevant KB chunks.
 5. **metaFor()** — `emoji_count / emoji_sentiment / emoji_intensity / emoji_intents` land in run meta for diagnostics and eval.
 
-Regression tests: `tests/Feature/AI/EmojiEngineTest.php` (13 tests). The map covers ~100 high-frequency customer-service emoji; unknown emoji are stripped from queries but still flagged in analysis.
+Regression tests: `tests/Feature/AI/EmojiEngineTest.php` (17 tests).
+
+### Universal coverage: CLDR dataset (not just the curated map)
+
+Hand-curating emoji can never cover everything customers send, so the engine loads **`resources/ai/emoji_dataset.php`** — auto-generated from **emojibase-data** (the full Unicode CLDR annotation set: label + tags + group for ~1895 emoji) via `npm run emoji:build` (also wired as a postinstall hook, so `npm install` regenerates it).
+
+- **Curated map wins** for the ~100 customer-service emoji where we know the *sense* ("😍" → "love it") and the sentiment/intents; the **CLDR dataset is the fallback** for everything else ("🚀" → "rocket" + tags launch/rocket/space, "🐙" → "octopus" + tags animal/ocean).
+- Dataset-only emoji get a **conservative label classifier**: unambiguous CLDR words ("enraged", "crying", "thumbs up"...) map to sentiment; anything ambiguous stays null — the model remains the deeper judge, the engine never poisons the prompt with a wrong guess.
+- Net effect: **every emoji the customer can send** now resolves to words for retrieval, keywords for KB search, and (when unambiguous) a sentiment signal — no manual maintenance as new Unicode emoji ship; regenerate the dataset when emojibase updates.
 
 ## 7A. Security Header Change: `microphone=(self)`
 

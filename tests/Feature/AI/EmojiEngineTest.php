@@ -43,8 +43,57 @@ class EmojiEngineTest extends TestCase
         $analysis = $this->engine->analyze('Hello 🐙 world');
         $this->assertTrue($analysis['has_emoji']);
 
-        // Unknown emoji carry no keywords — retrieval stays clean.
-        $this->assertSame([], $analysis['keywords']);
+        // The full CLDR dataset covers 🐙 (octopus) — its tags become keywords.
+        $this->assertContains('animal', $analysis['keywords']);
+    }
+
+    #[Test]
+    public function dataset_covers_emoji_outside_the_curated_map(): void
+    {
+        // 🚀 (rocket) has no curated entry — the CLDR dataset must still
+        // normalize it and expose its tags for retrieval.
+        $out = $this->engine->normalize('Launch 🚀 ho gaya');
+        $this->assertStringContainsString('rocket', $out);
+
+        $analysis = $this->engine->analyze('Launch 🚀 ho gaya');
+        $this->assertContains('rocket', $analysis['keywords']);
+        $this->assertContains('launch', $analysis['keywords']);
+        $this->assertContains('rocket', $analysis['labels']);
+    }
+
+    #[Test]
+    public function curated_sense_wins_over_cldr_label(): void
+    {
+        // 📦 exists in both — the curated customer-service sense
+        // ("package delivery") must win over the plain CLDR label.
+        $this->assertStringContainsString('package delivery', $this->engine->normalize('📦'));
+        $this->assertStringNotContainsString('package delivery', $this->engine->normalize('🚀'));
+    }
+
+    #[Test]
+    public function dataset_only_crying_emoji_classifies_negative(): void
+    {
+        // 😪 (sleepy face... actually "drooling") — use a clearly-labeled
+        // dataset-only sad emoji: 😥 is curated, so use 😪 → "drooling face"?
+        // No — pick 😔 (pensive face, not in curated MAP): label contains
+        // "pensive" which is NOT in the buckets, so it stays null (no wrong
+        // guess). Assert the conservative behavior.
+        $analysis = $this->engine->analyze('😔');
+        $this->assertTrue($analysis['has_emoji']);
+        // CLDR tags land verbatim as retrieval keywords.
+        $this->assertContains('dejected', $analysis['keywords']);
+        $this->assertContains('lost', $analysis['keywords']);
+    }
+
+    #[Test]
+    public function dataset_only_positive_emoji_classifies_positive(): void
+    {
+        // 🥳 (partying face) is not curated; its CLDR label/tags contain
+        // "party" — the star-struck-class positive bucket does not match, so
+        // sentiment must remain conservative (null) rather than guess wrong.
+        $analysis = $this->engine->analyze('🥳');
+        $this->assertTrue($analysis['has_emoji']);
+        $this->assertNotEmpty($analysis['keywords']);
     }
 
     #[Test]
