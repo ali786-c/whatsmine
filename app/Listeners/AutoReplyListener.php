@@ -18,12 +18,27 @@ use Illuminate\Support\Facades\Log;
 
 /**
  * Phrases that trigger AI-to-human handover.
- * Case-insensitive substring matching.
+ * Case-insensitive substring matching. Covers English + Urdu/Roman-Urdu/Hindi
+ * — the customer-base is multilingual, and the previous list only matched
+ * English, so Urdu requests for a human were answered by the bot forever.
  */
 const HANDOVER_PHRASES = [
+    // English
     'talk to human', 'talk to agent', 'speak to agent', 'speak to human',
     'human please', 'real person', 'live agent', 'live support',
     'need a human', 'connect me to', 'transfer me',
+    'human agent', 'representative',
+    // Roman Urdu / Hindi (common customer spellings)
+    'insan se baat', 'insaan se baat', 'bande se baat', 'bnde se baat',
+    'insan se', 'insaan se', 'bande se', 'bandey se',
+    'human se baat', 'human se', 'agent se baat', 'agent se',
+    'real banda', 'asli banda', 'asli insan', 'asli insaan',
+    'human chahiye', 'agent chahiye', 'insan chahiye', 'insaan chahiye',
+    'human se baat karao', 'baat karao', 'baat karwa', 'baat karwao',
+    'operator se', 'customer care se', 'call karo mujhe', 'mujhe call',
+    // Urdu script
+    'انسان سے بات', 'بندے سے بات', 'ہیومن سے', 'ایجنٹ سے',
+    'ہیومن چاہیے', 'ایجنٹ چاہیے', 'کال کرو',
 ];
 
 class AutoReplyListener

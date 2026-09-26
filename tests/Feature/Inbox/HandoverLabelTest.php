@@ -2,15 +2,21 @@
 
 namespace Tests\Feature\Inbox;
 
+use App\Events\MessageReceived;
+use App\Listeners\AutoReplyListener;
+use App\Modules\AI\Jobs\GenerateAiReplyJob;
 use App\Modules\AI\Models\AiChatbot;
+use App\Modules\AI\Services\ChatbotRunner;
 use App\Modules\Inbox\Models\InboxLabel;
 use App\Modules\Inbox\Services\HandoverService;
 use App\Modules\Shared\Models\ChannelAccount;
 use App\Modules\Shared\Models\Contact;
 use App\Modules\Shared\Models\Conversation;
 use App\Modules\Shared\Models\Message;
+use App\Modules\Shared\Services\ChannelManager;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Notification;
 use PHPUnit\Framework\Attributes\Test;
 use Tests\TestCase;
 
@@ -227,5 +233,126 @@ class HandoverLabelTest extends TestCase
         );
         $this->assertTrue($conversationA->labels->contains('name', 'Waiting for you'));
         $this->assertTrue($conversationB->labels->contains('name', 'Waiting for you'));
+    }
+
+    #[Test]
+    public function roman_urdu_human_request_triggers_handover_and_waiting_label(): void
+    {
+        Notification::fake();
+
+        $conversation = $this->makeConversation();
+
+        $message = Message::create([
+            'conversation_id' => $conversation->id,
+            'direction'       => 'in',
+            'channel'         => 'whatsapp',
+            'type'            => 'text',
+            'body'            => 'mujhe insan se baat karao abhi',
+            'status'          => 'delivered',
+            'sent_at'         => now(),
+        ]);
+        $message->setRelation('conversation', $conversation->load('channelAccount'));
+
+        app(AutoReplyListener::class)->handle(new MessageReceived($message));
+
+        $conversation->refresh();
+        $this->assertSame('human', $conversation->assigned_to);
+        $this->assertNotNull($conversation->handover_at);
+
+        $label = InboxLabel::where('workspace_id', $this->ctx['workspace']->id)
+            ->where('name', HandoverService::WAITING_LABEL)
+            ->first();
+        $this->assertNotNull($label);
+        $this->assertTrue($conversation->labels->contains($label->id));
+    }
+
+    #[Test]
+    public function ai_reply_with_handover_marker_fires_handover_and_strips_marker(): void
+    {
+        Notification::fake();
+        $this->seedWabaForPhoneNumber('PN-HANDOVER-2');
+
+        $chatbot = $this->makeChatbot();
+        $conversation = $this->makeConversationWithBot($chatbot);
+
+        Http::fake(['graph.facebook.com/*' => Http::response(['messages' => [['id' => 'wamid.HM1']]], 200)]);
+
+        $message = Message::create([
+            'conversation_id' => $conversation->id,
+            'direction'       => 'in',
+            'channel'         => 'whatsapp',
+            'type'            => 'text',
+            'body'            => 'mujhe agent se baat karni hai',
+            'status'          => 'delivered',
+            'sent_at'         => now(),
+        ]);
+
+        $this->mock(ChatbotRunner::class)
+            ->shouldReceive('run')
+            ->once()
+            ->andReturn('Ji bilkul, main aap ko human agent se connect kar raha hoon 🙏 '.HandoverService::HANDOVER_MARKER);
+
+        (new GenerateAiReplyJob($chatbot->id, $message->id))
+            ->handle(app(ChatbotRunner::class), app(ChannelManager::class));
+
+        $conversation->refresh();
+        $this->assertSame('human', $conversation->assigned_to);
+        $this->assertNotNull($conversation->handover_at);
+
+        $label = InboxLabel::where('workspace_id', $this->ctx['workspace']->id)
+            ->where('name', HandoverService::WAITING_LABEL)
+            ->first();
+        $this->assertNotNull($label);
+        $this->assertTrue($conversation->labels->contains($label->id));
+
+        // The customer sees the AI's reassurance — never the raw marker.
+        $ack = Message::where('payload->kind', 'handover_ack')->latest('id')->first();
+        $this->assertNotNull($ack);
+        $this->assertStringContainsString('human agent se connect', $ack->body);
+        $this->assertStringNotContainsString(HandoverService::HANDOVER_MARKER, $ack->body);
+        $this->assertSame(
+            0,
+            Message::where('conversation_id', $conversation->id)
+                ->where('body', 'like', '%'.HandoverService::HANDOVER_MARKER.'%')
+                ->count(),
+        );
+    }
+
+    #[Test]
+    public function ai_reply_without_marker_replies_normally(): void
+    {
+        Notification::fake();
+        $this->seedWabaForPhoneNumber('PN-HANDOVER-2');
+
+        $chatbot = $this->makeChatbot();
+        $conversation = $this->makeConversationWithBot($chatbot);
+
+        Http::fake(['graph.facebook.com/*' => Http::response(['messages' => [['id' => 'wamid.HM2']]], 200)]);
+
+        $message = Message::create([
+            'conversation_id' => $conversation->id,
+            'direction'       => 'in',
+            'channel'         => 'whatsapp',
+            'type'            => 'text',
+            'body'            => 'delivery kitne din mein hoti hai?',
+            'status'          => 'delivered',
+            'sent_at'         => now(),
+        ]);
+
+        $this->mock(ChatbotRunner::class)
+            ->shouldReceive('run')
+            ->once()
+            ->andReturn('Delivery 3 se 5 din mein hoti hai.');
+
+        (new GenerateAiReplyJob($chatbot->id, $message->id))
+            ->handle(app(ChatbotRunner::class), app(ChannelManager::class));
+
+        $conversation->refresh();
+        $this->assertSame('bot', $conversation->assigned_to);
+        $this->assertNull($conversation->handover_at);
+        $this->assertNotNull(Message::where('conversation_id', $conversation->id)
+            ->where('body', 'Delivery 3 se 5 din mein hoti hai.')
+            ->where('sent_by', 'bot')
+            ->first());
     }
 }

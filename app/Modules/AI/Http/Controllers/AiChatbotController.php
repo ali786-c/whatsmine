@@ -113,9 +113,17 @@ class AiChatbotController extends Controller
             $history = $this->sanitizeHistory($request->input('history'));
             $reply = app(ChatbotRunner::class)->run($chatbot, $fakeMessage, $meta, $history);
 
+            // Playground view: strip the handover marker (it is a control
+            // signal for GenerateAiReplyJob, never customer-visible text) and
+            // surface the handover decision as structured meta instead.
+            $handover = is_string($reply) && str_contains($reply, \App\Modules\Inbox\Services\HandoverService::HANDOVER_MARKER);
+            $reply = $handover
+                ? trim(str_replace(\App\Modules\Inbox\Services\HandoverService::HANDOVER_MARKER, '', (string) $reply))
+                : $reply;
+
             return response()->json([
                 'reply' => $reply ?? $chatbot->fallback_reply ?? 'No response.',
-                'meta' => $meta,
+                'meta' => $handover ? array_merge($meta ?? [], ['handover' => true]) : $meta,
             ]);
         } catch (\Throwable $e) {
             return response()->json(['error' => $e->getMessage()], 422);

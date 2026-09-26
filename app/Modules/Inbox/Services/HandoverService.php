@@ -35,11 +35,18 @@ class HandoverService
     public function __construct(private ChannelManager $channelManager) {}
 
     /**
+     * Marker the AI appends to its reply when it decides the customer needs a
+     * human. GenerateAiReplyJob detects it, fires the handover, and relays the
+     * reply without the marker.
+     */
+    public const HANDOVER_MARKER = '[HUMAN_HANDOVER]';
+
+    /**
      * Announce the handover to the customer and mark the conversation as
      * waiting for a human agent. Resolves the conversation's linked chatbot
      * (for the configurable reply) and channel itself.
      */
-    public function announce(Conversation $conversation): void
+    public function announce(Conversation $conversation, ?string $replyOverride = null): void
     {
         $channelAccount = $conversation->channelAccount;
         $meta = $channelAccount?->getAttribute('meta_json');
@@ -49,7 +56,11 @@ class HandoverService
         // is the authority for which driver to send through.
         $channel = $conversation->getAttribute('channel') ?: ($channelAccount?->getAttribute('channel') ?? 'whatsapp');
 
-        $this->sendHandoverReply($conversation, $chatbot, $channel);
+        // Mark the handover on the conversation itself: bot replies stop and the
+        // inbox shows the thread as human-owned. Idempotent — safe to re-announce.
+        $conversation->update(['assigned_to' => 'human', 'handover_at' => now()]);
+
+        $this->sendHandoverReply($conversation, $chatbot, $channel, $replyOverride);
         $this->attachWaitingLabel($conversation);
     }
 
@@ -93,9 +104,11 @@ class HandoverService
      * sent_by='bot' so agent-vs-bot analytics stay truthful, dispatched via
      * the normal channel driver and MessageSent broadcast.
      */
-    private function sendHandoverReply(Conversation $conversation, ?AiChatbot $chatbot, string $channel): void
+    private function sendHandoverReply(Conversation $conversation, ?AiChatbot $chatbot, string $channel, ?string $replyOverride = null): void
     {
-        $body = trim((string) ($chatbot->handover_reply ?? '')) ?: $this->defaultReply($conversation);
+        $body = $replyOverride
+            ?? trim((string) ($chatbot->handover_reply ?? ''))
+            ?: $this->defaultReply($conversation);
 
         $message = Message::create([
             'conversation_id' => $conversation->id,

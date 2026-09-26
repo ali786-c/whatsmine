@@ -58,6 +58,19 @@ class GenerateAiReplyJob implements ShouldQueue
                 return;
             }
 
+            // The AI signals "this needs a human" by ending its reply with the
+            // handover marker (system-prompt escape hatch). Strip the marker,
+            // hand the conversation to a human (waiting label + ack rules), and
+            // relay the AI's own reassurance text as the handover reply.
+            $handoverMarker = \App\Modules\Inbox\Services\HandoverService::HANDOVER_MARKER;
+            if (str_contains($reply, $handoverMarker)) {
+                $reply = trim(str_replace($handoverMarker, '', $reply));
+
+                app(\App\Modules\Inbox\Services\HandoverService::class)->announce($conversation, $reply !== '' ? $reply : null);
+
+                return;
+            }
+
             $botMessage = Message::create([
                 'conversation_id' => $conversation->id,
                 'direction'       => 'out',
