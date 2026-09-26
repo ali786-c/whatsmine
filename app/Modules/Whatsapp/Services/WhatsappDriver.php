@@ -367,6 +367,20 @@ class WhatsappDriver implements ChannelDriverInterface
             'source' => $isOutgoingEcho ? 'whatsapp_echo' : 'whatsapp_inbound',
         ]);
 
+        // Cloud API includes the sender's WhatsApp profile name alongside every
+        // message (contacts[0].profile.name) — use it for the contact display
+        // name instead of saving contacts under a bare phone number. Fill-only:
+        // never overwrite a name already set (manually in the inbox or by an
+        // earlier sync), mirroring the WhatsApp QR path.
+        $profileName = trim((string) ($value['contacts'][0]['profile']['name'] ?? ''));
+        if ($profileName !== '' && blank($contact->first_name)) {
+            $nameParts = explode(' ', $profileName, 2);
+            $contact->update([
+                'first_name' => $nameParts[0],
+                'last_name' => $nameParts[1] ?? null,
+            ]);
+        }
+
         $conversation = Conversation::firstOrCreate(
             ['workspace_id' => $workspaceId, 'contact_id' => $contact->id, 'channel_account_id' => $channelAccount?->id],
             ['status' => 'open', 'external_thread_id' => $fromPhone]
