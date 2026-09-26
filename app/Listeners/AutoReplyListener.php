@@ -263,6 +263,18 @@ class AutoReplyListener
             'handover_at' => now(),
         ]);
 
+        // Customer experience: the bot announces the handover (configurable
+        // per chatbot) and the conversation gets the "Waiting for you" label
+        // so the team's inbox visibly queues who needs a human reply.
+        try {
+            app(\App\Modules\Inbox\Services\HandoverService::class)->announce($conversation);
+        } catch (\Throwable $e) {
+            Log::warning('Handover announce failed', [
+                'conversation_id' => $conversation->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
+
         // Notify all workspace members
         $members = User::where('workspace_id', $conversation->workspace_id)->get();
         foreach ($members as $member) {

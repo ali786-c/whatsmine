@@ -74,6 +74,17 @@ Instagram Messaging differs from WhatsApp in two ways the implementation absorbs
 
 > The `permissions.query()` pre-check was removed: Chrome can report `denied` even when the site toggle is Allow. `getUserMedia`'s own error is the only authoritative signal, and its raw error name is now appended to the UI message (e.g. `[NotAllowedError]`) plus `console.error` for debugging.
 
+## 6A. AI → Human Handover: Auto-Reply + "Waiting for you" Label
+
+When the customer asks for a human ("talk to human", "human chahiye"…), the handover now has a full customer experience instead of silence:
+
+1. **Immediate acknowledgment** — the bot sends "Connecting you with a human agent…" to the customer. The text is **configurable per chatbot** (`AiChatbot › Handover Reply`, all 17 languages translated in the UI); empty = language-aware default (Roman Urdu customers get the Roman Urdu reply, everyone else English).
+2. **"Waiting for you" label** — auto-attached to the conversation (amber, created once per workspace, marked `auto_assigned`). The team's inbox visibly queues who needs a human.
+3. **Auto-cleanup** — when a human agent sends the first reply, the waiting label is removed automatically.
+4. **AI stays silent** after handover (pre-existing behavior, verified) — the agent owns the thread.
+
+Implementation: `App\Modules\Inbox\Services\HandoverService` (announce / attachWaitingLabel / removeWaitingLabel), wired in `AutoReplyListener::triggerHandover()` and the inbox reply path. Migration adds `ai_chatbots.handover_reply` + `inbox_labels.auto_assigned`. Tests: `tests/Feature/Inbox/HandoverLabelTest.php` (5).
+
 ## 7. Engine-Level Emoji Intelligence (EmojiEngine)
 
 The LLM understands emoji natively — but everything AROUND the model is text machinery, and emoji died there: keyword retrieval strips punctuation (`📦` became nothing), the embedder saw an unknown token, the system prompt had no signal, and run metadata recorded nothing.

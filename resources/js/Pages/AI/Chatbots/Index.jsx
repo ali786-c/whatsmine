@@ -154,6 +154,7 @@ function ChatbotCard({ chatbot, knowledgeBases }) {
         num_ctx: chatbot.num_ctx ?? 2048,
         keep_alive: chatbot.keep_alive ?? '10m',
         fallback_reply: chatbot.fallback_reply ?? '',
+        handover_reply: chatbot.handover_reply ?? '',
         ai_kb_id: chatbot.ai_kb_id ?? '',
         enabled: chatbot.enabled,
     });
@@ -309,6 +310,18 @@ function ChatbotCard({ chatbot, knowledgeBases }) {
                                 className="w-full rounded-lg border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 px-3 py-2 text-sm text-neutral-900 dark:text-neutral-100 focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500 transition"
                             />
                             <p className="text-xs text-neutral-400 dark:text-neutral-500">{t('ai.fallback_reply_hint')}</p>
+                        </div>
+
+                        <div className="space-y-1">
+                            <label className="text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wide">{t('ai.handover_reply')}</label>
+                            <input
+                                type="text"
+                                value={data.handover_reply}
+                                onChange={e => setData('handover_reply', e.target.value)}
+                                placeholder={t('ai.handover_reply_placeholder')}
+                                className="w-full rounded-lg border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 px-3 py-2 text-sm text-neutral-900 dark:text-neutral-100 focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500 transition"
+                            />
+                            <p className="text-xs text-neutral-400 dark:text-neutral-500">{t('ai.handover_reply_hint')}</p>
                         </div>
 
                         <div className="pt-2 pb-1 border-t border-neutral-100 dark:border-neutral-800">

@@ -361,6 +361,12 @@ class InboxController extends Controller
 
         $conversation->update(['last_message_at' => now()]);
 
+        // First HUMAN reply after an AI handover → drop the "Waiting for
+        // you" label: the customer is now being attended to.
+        if ($msgType !== 'template') {
+            app(\App\Modules\Inbox\Services\HandoverService::class)->removeWaitingLabel($conversation);
+        }
+
         // SLA: set first_response_at on first outbound after inbound
         if ($conversation->last_inbound_at && ! $conversation->first_response_at) {
             $conversation->update(['first_response_at' => now()]);

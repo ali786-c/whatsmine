@@ -61,6 +61,7 @@ class AiChatbotController extends Controller
             'num_ctx' => ['nullable', 'integer', 'min:512', 'max:8192'],
             'keep_alive' => ['nullable', 'string', 'max:20'],
             'fallback_reply' => ['nullable', 'string', 'max:512'],
+            'handover_reply' => ['nullable', 'string', 'max:512'],
             'channels' => ['nullable', 'array'],
             'enabled' => ['boolean'],
         ]);
