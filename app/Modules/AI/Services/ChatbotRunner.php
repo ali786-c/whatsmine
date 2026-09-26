@@ -92,15 +92,22 @@ class ChatbotRunner
         $body = $inboundMessage->body ?? '';
         $workspaceId = $conversation->workspace_id;
 
+        // 0. Emoji intelligence (engine-level, not model-level): decode emoji
+        // into semantic phrases for retrieval, harvest extra keywords, and
+        // derive sentiment/urgency/escalation signals for the prompt + meta.
+        $emojiEngine = app(EmojiEngine::class);
+        $emoji = $emojiEngine->analyze($body);
+
         // Playground runs a synthetic conversation (id 0) with no DB messages,
         // so the caller supplies sanitized prior turns instead. Production
         // (WhatsApp inbox) passes null and history is loaded from the DB below.
 
-        // 1. Embed the user query
+        // 1. Embed the user query — emoji-normalized so "😍" embeds as "love
+        // it" and matches KB prose instead of dying as an unknown token.
         $queryEmbedding = [];
         if ($bot->ai_kb_id) {
             try {
-                $embeddings = $this->llmGateway->embed($workspaceId, [$body]);
+                $embeddings = $this->llmGateway->embed($workspaceId, [$emojiEngine->normalize($body)]);
                 $queryEmbedding = $embeddings[0] ?? [];
             } catch (\Throwable) {
                 // proceed without retrieval
@@ -110,12 +117,20 @@ class ChatbotRunner
         // 2. Retrieve top-k relevant chunks (hybrid: embedding + keyword, rank-fused)
         $contextChunks = [];
         if ($bot->ai_kb_id) {
-            $results = $this->retrieveHybrid($bot->ai_kb_id, $body, $queryEmbedding, $bot->max_context_chunks ?? 5);
+            $results = $this->retrieveHybrid($bot->ai_kb_id, $emojiEngine->normalize($body), $queryEmbedding, $bot->max_context_chunks ?? 5, $emoji['keywords']);
             $contextChunks = array_column(app(KbContextTrimmer::class)->fit($results), 'chunk');
         }
 
         // Layered prompt: core guardrails + admin global rules + tone + bot prompt
         $systemPrompt = app(AiSystemPrompt::class)->build($bot);
+
+        // Engine-derived emoji layer: only present when the message carries
+        // emoji — gives weak local models an explicit, deterministic read of
+        // the customer's sentiment/urgency that they'd otherwise underuse.
+        $emojiLayer = $emojiEngine->promptLayer($emoji);
+        if ($emojiLayer !== null) {
+            $systemPrompt .= "\n\n".$emojiLayer;
+        }
 
         // Load recent conversation turns as context (capped — see HISTORY_TURNS)
         // unless the caller already supplied them (playground).
@@ -196,7 +211,7 @@ class ChatbotRunner
                 'prompt_tokens' => $response->promptTokens,
                 'completion_tokens' => $response->completionTokens,
                 'history_turns' => intdiv(count($history), 2),
-            ], $meta);
+            ], $emojiEngine->metaFor($emoji), $meta);
 
             return $this->cleanReply($response->content, $bot);
         } catch (\Throwable $e) {
@@ -283,14 +298,24 @@ class ChatbotRunner
      *  - number bonus: figures from the query (1999, 3999...) found literally in a
      *    chunk are a strong signal — customers and KBs both price with numbers
      *
+     * @param  list<string>  $extraKeywords
      * @return array<int, array{chunk: AiKbChunk, score: float}>
      */
-    private function keywordChunks(int $kbId, string $query, int $limit): array
+    private function keywordChunks(int $kbId, string $query, int $limit, array $extraKeywords = []): array
     {
         $clean = preg_replace('/[^a-z0-9\s]/', ' ', str_replace(',', '', mb_strtolower($query))) ?? '';
         $words = array_values(array_filter(explode(' ', $clean), fn ($w) => mb_strlen(trim($w)) > 2));
         $stopWords = ['the', 'and', 'for', 'you', 'have', 'with', 'this', 'that', 'are', 'what', 'how', 'much', 'can', 'get', 'want', 'any', 'which', 'your', 'offer'];
         $keywords = array_values(array_diff($words, $stopWords));
+
+        // Emoji-derived keywords join the base set: "😍" normalized to "love
+        // it" already lands as words above, but emoji-only fragments ("🔥🔥")
+        // leave no words at all — the engine's keywords rescue retrieval.
+        foreach ($extraKeywords as $ek) {
+            if (! in_array($ek, $keywords, true)) {
+                $keywords[] = $ek;
+            }
+        }
 
         if (empty($keywords)) {
             return [];
@@ -325,7 +350,9 @@ class ChatbotRunner
                 $score = $matched > 0 ? $matched / max(count($keywords), 1) : 0.0;
 
                 // Phrase bonus — the whole query verbatim is the strongest match.
-                if ($phrase !== '' && str_contains($content, $phrase)) {
+                // (emoji keywords appended after the phrase was built are not
+                // part of it; $phrase is non-empty by construction here)
+                if (str_contains($content, $phrase)) {
                     $score += 0.5;
                 }
 
@@ -482,9 +509,10 @@ class ChatbotRunner
      * pricing) could be crowded out by loosely-related chunks the embedder liked.
      *
      * @param  array<int, float>  $queryEmbedding
+     * @param  list<string>  $extraKeywords  emoji-engine keywords folded into the keyword channel
      * @return array<int, array{chunk: AiKbChunk, score: float}> RRF-fused results
      */
-    private function retrieveHybrid(int $kbId, string $query, array $queryEmbedding, int $limit): array
+    private function retrieveHybrid(int $kbId, string $query, array $queryEmbedding, int $limit, array $extraKeywords = []): array
     {
         $embedResults = [];
         if (! empty($queryEmbedding)) {
@@ -496,7 +524,7 @@ class ChatbotRunner
             );
         }
 
-        $keywordResults = $this->keywordChunks($kbId, $query, max($limit, 5));
+        $keywordResults = $this->keywordChunks($kbId, $query, max($limit, 5), $extraKeywords);
 
         return $this->fuseRrf($embedResults, $keywordResults, $limit);
     }
@@ -618,11 +646,17 @@ class ChatbotRunner
      */
     public function runForApi(AiChatbot $bot, string $message, int $workspaceId, array $history = []): array
     {
+        // Emoji intelligence — same engine-level treatment as run() so the
+        // playground/API path behaves identically to production.
+        $emojiEngine = app(EmojiEngine::class);
+        $emoji = $emojiEngine->analyze($message);
+        $normalizedMessage = $emojiEngine->normalize($message);
+
         // 1. Embed the user query for RAG
         $queryEmbedding = [];
         if ($bot->ai_kb_id) {
             try {
-                $embeddings = $this->llmGateway->embed($workspaceId, [$message]);
+                $embeddings = $this->llmGateway->embed($workspaceId, [$normalizedMessage]);
                 $queryEmbedding = $embeddings[0] ?? [];
             } catch (\Throwable) {
             }
@@ -631,12 +665,16 @@ class ChatbotRunner
         // 2. Retrieve top-k relevant chunks (hybrid: embedding + keyword, rank-fused)
         $contextChunks = [];
         if ($bot->ai_kb_id) {
-            $results = $this->retrieveHybrid($bot->ai_kb_id, $message, $queryEmbedding, $bot->max_context_chunks ?? 5);
+            $results = $this->retrieveHybrid($bot->ai_kb_id, $normalizedMessage, $queryEmbedding, $bot->max_context_chunks ?? 5, $emoji['keywords']);
             $contextChunks = array_column(app(KbContextTrimmer::class)->fit($results), 'chunk');
         }
 
         // 3. Build messages array — layered prompt (guardrails + admin rules + tone + bot prompt)
         $systemPrompt = app(AiSystemPrompt::class)->build($bot);
+        $emojiLayer = $emojiEngine->promptLayer($emoji);
+        if ($emojiLayer !== null) {
+            $systemPrompt .= "\n\n".$emojiLayer;
+        }
         
         $augmentedUserMessage = "";
         if (! empty($contextChunks)) {

@@ -74,7 +74,21 @@ Instagram Messaging differs from WhatsApp in two ways the implementation absorbs
 
 > The `permissions.query()` pre-check was removed: Chrome can report `denied` even when the site toggle is Allow. `getUserMedia`'s own error is the only authoritative signal, and its raw error name is now appended to the UI message (e.g. `[NotAllowedError]`) plus `console.error` for debugging.
 
-## 7. Security Header Change: `microphone=(self)`
+## 7. Engine-Level Emoji Intelligence (EmojiEngine)
+
+The LLM understands emoji natively — but everything AROUND the model is text machinery, and emoji died there: keyword retrieval strips punctuation (`📦` became nothing), the embedder saw an unknown token, the system prompt had no signal, and run metadata recorded nothing.
+
+`app/Modules/AI/Services/EmojiEngine.php` closes the gap — a deterministic, curated (no giant auto-generated table) layer wired into every `ChatbotRunner::run()` AND `runForApi()` (playground) pass:
+
+1. **normalize()** — known emoji become their semantic phrase before embedding/retrieval: "Package 📦 kab aayega?" → "Package package delivery kab aayega?". KB prose written in words now matches emoji-only queries.
+2. **analyze()** — sentiment (positive/negative/angry/urgent/neutral), intensity 1–3, confidence (single-dominant-signal wins over mixed), and intents: `escalation_risk` (😡🤬😤), `urgency` (🚨❗⏳), `agreement` (🤝✅), `purchase_or_delivery` (🛒📦🚚💰).
+3. **promptLayer()** — a deterministic "EMOJI SIGNAL" block appended to the system prompt ONLY when the message carries emoji (clean tokens otherwise). Explicit instructions steer even weak local models: anger → empathy + de-escalation + handover candidate at 3/3; positive → match energy, suggest next step; urgency → acknowledge time pressure first.
+4. **expandKeywords()** — emoji-derived keywords join the keyword-retrieval expansion set, so "🔥🔥" (no words at all) still surfaces relevant KB chunks.
+5. **metaFor()** — `emoji_count / emoji_sentiment / emoji_intensity / emoji_intents` land in run meta for diagnostics and eval.
+
+Regression tests: `tests/Feature/AI/EmojiEngineTest.php` (13 tests). The map covers ~100 high-frequency customer-service emoji; unknown emoji are stripped from queries but still flagged in analysis.
+
+## 7A. Security Header Change: `microphone=(self)`
 
 **Root cause of the site-wide mic failure:** `app/Http/Middleware/SecureHeaders.php` sent `Permissions-Policy: microphone=()`, which makes Chrome deny every same-origin `getUserMedia` instantly — no prompt, regardless of user settings. It now sends:
 
@@ -122,6 +136,7 @@ Transcode failure reasons are logged as `Inbox audio: ...` warnings in `storage/
 | `tests/Feature/SecureHeadersTest.php` | `microphone=(self)` in Permissions-Policy; CSP `media-src 'self' blob: https:` |
 | `tests/Feature/AI/VoiceNoteSendTest.php` | Webm voice-note send never 500s on hardened hosts |
 | `tests/Feature/Instagram/VoiceNoteTest.php` | Instagram voice-note chain: m4a transcode branch, URL attachment send, inbound attachment mapping, `publicUrl()` |
+| `tests/Feature/AI/EmojiEngineTest.php` | Engine-level emoji intelligence: normalization, sentiment/intents, prompt layer, retrieval keywords, run meta |
 
 Full AI suite reference: 38+ tests green before this doc; voice-note + header tests add 3 more.
 

@@ -4033,12 +4033,6 @@ parameters:
 			path: app/Modules/AI/Services/ChatbotRunner.php
 
 		-
-			message: '#^Strict comparison using \!\=\= between lowercase\-string&non\-falsy\-string and '''' will always evaluate to true\.$#'
-			identifier: notIdentical.alwaysTrue
-			count: 1
-			path: app/Modules/AI/Services/ChatbotRunner.php
-
-		-
 			message: '#^Access to an undefined property App\\Modules\\AI\\Models\\AiKbChunk\:\:\$document_id\.$#'
 			identifier: property.notFound
 			count: 1
