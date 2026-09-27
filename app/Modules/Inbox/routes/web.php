@@ -1,5 +1,6 @@
 <?php
 
+use App\Modules\Inbox\Http\Controllers\AiDraftController;
 use App\Modules\Inbox\Http\Controllers\CannedReplyController;
 use App\Modules\Inbox\Http\Controllers\InboxController;
 use App\Modules\Inbox\Http\Controllers\InboxSetupController;
@@ -24,6 +25,9 @@ Route::middleware(['web', 'client-app'])->prefix('app/inbox')->name('client.inbo
     Route::get('/conversations/{conversation}/notes', [InternalNoteController::class, 'index'])->name('notes.index');
     Route::post('/conversations/{conversation}/notes', [InternalNoteController::class, 'store'])->name('notes.store');
     Route::post('/conversations/{conversation}/handover', [InboxController::class, 'handover'])->name('handover');
+
+    // AI draft suggestion for the composer (same token meter as the playground)
+    Route::post('/conversations/{conversation}/ai-draft', [AiDraftController::class, 'store'])->name('ai-draft.store')->middleware('limit:ai_tokens_per_month,ai_tokens');
 
     // Canned replies
     Route::get('/canned-replies', [CannedReplyController::class, 'index'])->name('canned-replies.index');

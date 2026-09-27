@@ -25,7 +25,12 @@ return new class extends Migration
             $table->unsignedInteger('nudge_count')->default(0);
             $table->timestamp('delivered_at')->nullable();
             $table->timestamp('closed_at')->nullable();
-            $table->timestamp('expires_at')->index(); // comment time + 7 days (private-reply window)
+            // dateTime (not bare `timestamp`): a NOT NULL timestamp without an
+            // explicit default is rejected on MariaDB < 10.10 when
+            // explicit_defaults_for_timestamp is OFF (XAMPP default) — and
+            // DateTime avoids the implicit FIRST-timestamp-column defaulting
+            // entirely, so the table migrates cleanly on every server.
+            $table->dateTime('expires_at')->index(); // comment time + 7 days (private-reply window)
             $table->timestamps();
         });
     }

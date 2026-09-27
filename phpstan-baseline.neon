@@ -3673,6 +3673,12 @@ parameters:
 			path: app/Modules/AI/Jobs/GenerateAiReplyJob.php
 
 		-
+			message: '#^Parameter \#1 \$conversation of method App\\Modules\\Inbox\\Services\\HandoverService\:\:announce\(\) expects App\\Modules\\Shared\\Models\\Conversation, Illuminate\\Database\\Eloquent\\Model given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Modules/AI/Jobs/GenerateAiReplyJob.php
+
+		-
 			message: '#^Access to an undefined property App\\Modules\\AI\\Models\\AiKbChunk\:\:\$content\.$#'
 			identifier: property.notFound
 			count: 1
@@ -6263,6 +6269,72 @@ parameters:
 			identifier: identical.alwaysFalse
 			count: 1
 			path: app/Modules/Ecommerce/Services/StoreConnector.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\AI\\Models\\AiChatbot\:\:\$name\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Inbox/Http/Controllers/AiDraftController.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\AI\\Models\\AiChatbot\|Illuminate\\Database\\Eloquent\\Collection\<int, App\\Modules\\AI\\Models\\AiChatbot\>\:\:\$enabled\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Inbox/Http/Controllers/AiDraftController.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\AI\\Models\\AiChatbot\|Illuminate\\Database\\Eloquent\\Collection\<int, App\\Modules\\AI\\Models\\AiChatbot\>\:\:\$workspace_id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Inbox/Http/Controllers/AiDraftController.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Shared\\Models\\Conversation\:\:\$workspace_id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Inbox/Http/Controllers/AiDraftController.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Shared\\Models\\Message\:\:\$body\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Inbox/Http/Controllers/AiDraftController.php
+
+		-
+			message: '#^Access to an undefined property App\\Modules\\Shared\\Models\\Message\:\:\$direction\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Inbox/Http/Controllers/AiDraftController.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$body\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Inbox/Http/Controllers/AiDraftController.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Inbox/Http/Controllers/AiDraftController.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$meta_json\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Modules/Inbox/Http/Controllers/AiDraftController.php
+
+		-
+			message: '#^Offset ''tokens_used'' on array\{reply\: string\|null, tokens_used\: int\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/Modules/Inbox/Http/Controllers/AiDraftController.php
+
+		-
+			message: '#^Parameter \#1 \$callback of method Illuminate\\Database\\Eloquent\\Collection\<int,Illuminate\\Database\\Eloquent\\Model\>\:\:map\(\) expects callable\(Illuminate\\Database\\Eloquent\\Model, int\)\: array\{role\: ''assistant''\|''user'', content\: string\}, Closure\(App\\Modules\\Shared\\Models\\Message\)\: array\{role\: ''assistant''\|''user'', content\: string\} given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Modules/Inbox/Http/Controllers/AiDraftController.php
 
 		-
 			message: '#^Access to an undefined property App\\Modules\\Inbox\\Models\\CannedReply\:\:\$workspace_id\.$#'

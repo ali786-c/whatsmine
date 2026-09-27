@@ -8,12 +8,15 @@ import {
     Paperclip, Image as ImageIcon, ChevronDown, UserCheck,
     LayoutTemplate, Plus, Loader2, Bot, Calendar, BarChart2, PhoneMissed,
     Volume2, VolumeX, ShoppingBag, CornerUpLeft, Mic, Square, AudioLines,
+    Sparkles, ChevronUp, FileText, Play,
 } from 'lucide-react';
 import { ChannelBrandIcon, CHANNEL_LABELS } from '@/Components/BrandIcons';
 import { formatTimeTz, formatInTz } from '@/Utils/datetime';
 import { playInboundSound, getSoundPrefs, setChannelSoundEnabled, SOUND_CHANNELS } from '@/Utils/notificationSound';
 import { buildIgTemplateMessage, igTemplateValid, emptyIgButton } from '@/Utils/igTemplate';
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { splitHighlight, findMatchingMessageIds, partitionMedia, mediaLabel } from '@/Utils/inboxSearch';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { toast } from 'sonner';
 import { useTranslation } from 'react-i18next';
 import axios from 'axios';
 
@@ -55,12 +58,22 @@ function templatePreview(components) {
     return body?.text ?? '';
 }
 
+/** Inline highlight for the active thread search (plain text nodes). */
+function HL({ text, query }) {
+    const segs = splitHighlight(text, query);
+    if (!segs.some(s => s.match)) return <>{text}</>;
+    return (
+        <>
+            {segs.map((s, i) => s.match
+                ? <mark key={i} className="bg-accent-200/80 dark:bg-accent-500/30 text-inherit rounded px-0.5">{s.text}</mark>
+                : <span key={i}>{s.text}</span>)}
+        </>
+    );
+}
+
 /** Parse WhatsApp formatting: *bold*, _italic_, ~strike~, `code`, newlines */
-function WaText({ text, className = '' }) {
+function WaText({ text, className = '', query = '' }) {
     if (!text) return null;
-    const parts = [];
-    let remaining = text;
-    let key = 0;
 
     // Replace patterns iteratively
     const patterns = [
@@ -93,14 +106,14 @@ function WaText({ text, className = '' }) {
                 }
             }
             if (!earliest) {
-                lineSegs.push(<span key={lk++}>{rest}</span>);
+                lineSegs.push(<HL key={lk++} text={rest} query={query} />);
                 break;
             }
             if (earliest.match.index > 0) {
-                lineSegs.push(<span key={lk++}>{rest.slice(0, earliest.match.index)}</span>);
+                lineSegs.push(<HL key={lk++} text={rest.slice(0, earliest.match.index)} query={query} />);
             }
             const { Tag, cls, match } = earliest;
-            lineSegs.push(<Tag key={lk++} className={cls}>{match[1]}</Tag>);
+            lineSegs.push(<Tag key={lk++} className={cls}><HL text={match[1]} query={query} /></Tag>);
             rest = rest.slice(earliest.match.index + match[0].length);
         }
         segments.push(...lineSegs);
@@ -227,6 +240,24 @@ function groupMessagesForRender(messages) {
     return items;
 }
 
+/**
+ * Resolve the playable/visible URL for a media message — shared by the thread
+ * bubbles and the Shared Media tab: payload preview_url first (outbound sends
+ * carry it directly; raw inbound webhooks nest it under the type key), then
+ * the streaming proxy route (always used for WhatsApp QR media to bypass
+ * CORS/mixed-content blocks, and for any message that only has a media id).
+ */
+function mediaSrcFor(msg, conversationId) {
+    const p = msg.payload ?? {};
+    const type = msg.type ?? 'text';
+    const previewUrl = p.preview_url ?? p[type]?.preview_url ?? null;
+    const rawMediaId = p[type]?.id ?? p.media_id ?? null;
+    if (msg.channel === 'whatsapp_qr') {
+        return route('client.inbox.message-media', { conversation: conversationId, message: msg.id });
+    }
+    return previewUrl ?? (rawMediaId ? route('client.inbox.message-media', { conversation: conversationId, message: msg.id }) : null);
+}
+
 function galleryImageSrc(msg, conversationId) {
     return msg.payload?.preview_url
         ?? route('client.inbox.message-media', { conversation: conversationId, message: msg.id });
@@ -320,7 +351,9 @@ function ImageLightbox({ images, index, onClose, onIndex }) {
                     className="absolute left-3 md:left-6 text-white/70 hover:text-white text-4xl leading-none px-2">‹</button>
             )}
             <figure className="flex flex-col items-center" onClick={(e) => e.stopPropagation()}>
-                <img src={current.src} alt="image" className="max-w-[90vw] max-h-[80vh] object-contain rounded" />
+                {current.isVideo
+                    ? <video src={current.src} controls className="max-w-[90vw] max-h-[80vh] rounded bg-black" />
+                    : <img src={current.src} alt="image" className="max-w-[90vw] max-h-[80vh] object-contain rounded" />}
                 {current.caption && (
                     <figcaption className="mt-3 text-sm text-white/80 max-w-[80vw] text-center">{current.caption}</figcaption>
                 )}
@@ -353,6 +386,80 @@ function MediaDocument({ src, filename, conversationId, messageId, isOut }) {
                 <p className="text-[10px] opacity-60">{t('inbox.tap_to_open')}</p>
             </div>
         </a>
+    );
+}
+
+/* ─── Shared Media tab building blocks ───────────────── */
+
+function MediaGrid({ messages, conversationId }) {
+    const [lightbox, setLightbox] = useState(null);
+
+    const images = messages.map((m) => ({
+        id: m.id,
+        src: mediaSrcFor(m, conversationId),
+        caption: mediaLabel(m),
+        isVideo: m.type === 'video',
+    }));
+
+    return (
+        <>
+            <div className="grid grid-cols-3 md:grid-cols-4 gap-1.5 max-w-2xl">
+                {images.map((img, idx) => (
+                    <button key={img.id} type="button" onClick={() => setLightbox(idx)}
+                        className="relative aspect-square overflow-hidden rounded-xl bg-black/10 group">
+                        <img src={img.src} alt={img.caption || 'media'} loading="lazy"
+                            className="h-full w-full object-cover transition group-hover:opacity-90" />
+                        {img.isVideo && (
+                            <span className="absolute inset-0 flex items-center justify-center">
+                                <span className="h-8 w-8 rounded-full bg-black/50 text-white flex items-center justify-center">
+                                    <Play className="h-4 w-4" />
+                                </span>
+                            </span>
+                        )}
+                    </button>
+                ))}
+            </div>
+            {lightbox !== null && (
+                <ImageLightbox
+                    images={images}
+                    index={lightbox}
+                    onClose={() => setLightbox(null)}
+                    onIndex={setLightbox}
+                />
+            )}
+        </>
+    );
+}
+
+function MediaFileRow({ msg, conversationId }) {
+    const { t } = useTranslation();
+    const src = mediaSrcFor(msg, conversationId);
+    const name = mediaLabel(msg) || t('inbox.document');
+    return (
+        <a href={src} target="_blank" rel="noopener noreferrer"
+            className="flex items-center gap-3 rounded-xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 px-3 py-2.5 hover:bg-neutral-50 dark:hover:bg-neutral-800 transition">
+            <div className="h-9 w-9 rounded-lg bg-neutral-100 dark:bg-neutral-700 flex items-center justify-center shrink-0">
+                <FileText className="h-4 w-4 text-neutral-500" />
+            </div>
+            <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-neutral-800 dark:text-neutral-100 truncate">{name}</p>
+                <p className="text-[10px] text-neutral-400">{t('inbox.tap_to_open')}</p>
+            </div>
+            <Paperclip className="h-4 w-4 text-neutral-300 dark:text-neutral-600 shrink-0" />
+        </a>
+    );
+}
+
+function MediaAudioRow({ msg, conversationId, userTz }) {
+    const src = mediaSrcFor(msg, conversationId);
+    return (
+        <div className="flex items-center gap-3 rounded-xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 px-3 py-2.5">
+            <div className="h-9 w-9 rounded-full bg-brand-100 dark:bg-brand-900/30 flex items-center justify-center shrink-0">
+                <AudioLines className="h-4 w-4 text-brand-600 dark:text-brand-300" />
+            </div>
+            <audio src={src} controls className="flex-1 min-w-0 h-9" />
+            {msg.sent_at && <span className="text-[10px] text-neutral-400 shrink-0">{formatTimeTz(msg.sent_at, userTz)}</span>}
+        </div>
     );
 }
 
@@ -805,7 +912,7 @@ function SoundPrefsMenu() {
     );
 }
 
-function MessageBubble({ msg, conversationId, allMessages = [] }) {
+function MessageBubble({ msg, conversationId, allMessages = [], highlightQuery = '', flash = false }) {
     const { t } = useTranslation();
     const { props: pageProps } = usePage();
     const bubbleTz = pageProps.timezone || 'Asia/Dhaka';
@@ -820,12 +927,8 @@ function MessageBubble({ msg, conversationId, allMessages = [] }) {
 
     // Resolve media source: outbound has preview_url directly; inbound raw webhook nests under type key
     const mediaType   = msg.type ?? 'text';
-    const previewUrl  = p.preview_url ?? p[mediaType]?.preview_url ?? null;
-    const rawMediaId  = p[mediaType]?.id ?? p.media_id ?? null;
-    // Use proxy for all inbound whatsapp_qr media to bypass CORS/mixed-content blocks
-    const mediaSrc = (msg.channel === 'whatsapp_qr')
-        ? route('client.inbox.message-media', { conversation: conversationId, message: msg.id })
-        : (previewUrl ?? (rawMediaId ? route('client.inbox.message-media', { conversation: conversationId, message: msg.id }) : null));
+    // Shared resolver (proxy for all inbound whatsapp_qr media to bypass CORS/mixed-content blocks)
+    const mediaSrc = mediaSrcFor(msg, conversationId);
 
     // Template header components — prefer `definition` (full text+params) over raw `components` (params-only)
     const templateComponents = p.template?.definition ?? p.template?.components ?? (Array.isArray(p.components) ? p.components : null);
@@ -842,7 +945,7 @@ function MessageBubble({ msg, conversationId, allMessages = [] }) {
 
     const bubbleBase = `max-w-[70%] rounded-2xl overflow-hidden text-sm ${isOut
         ? 'bg-brand-600 text-white rounded-br-sm'
-        : 'bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 rounded-bl-sm border border-neutral-200 dark:border-neutral-700'}`;
+        : 'bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 rounded-bl-sm border border-neutral-200 dark:border-neutral-700'}${flash ? ' ring-2 ring-accent-400 ring-offset-1 dark:ring-offset-neutral-950' : ''}`;
 
     // Reaction: no bubble, just float
     if (mediaType === 'reaction' || reaction) {
@@ -881,7 +984,7 @@ function MessageBubble({ msg, conversationId, allMessages = [] }) {
     );
 
     return (
-        <div className={`flex ${isOut ? 'justify-end' : 'justify-start'} mb-2`}>
+        <div data-mid={msg.id} className={`flex ${isOut ? 'justify-end' : 'justify-start'} mb-2`}>
             <div className={bubbleBase}>
                 {/* Template header image/video/doc */}
                 {templateComponents && (
@@ -940,7 +1043,7 @@ function MessageBubble({ msg, conversationId, allMessages = [] }) {
 
                     {/* TEMPLATE — inbound raw (no components) */}
                     {mediaType === 'template' && !templateComponents && !igTemplate && (
-                        <WaText text={msg.body || '[template]'} />
+                        <WaText text={msg.body || '[template]'} query={highlightQuery} />
                     )}
 
                     {/* INSTAGRAM generic carousel / button template */}
@@ -963,12 +1066,12 @@ function MessageBubble({ msg, conversationId, allMessages = [] }) {
 
                     {/* TEXT / fallback */}
                     {!templateComponents && (mediaType === 'text' || (!['image','video','audio','document','location','contacts','interactive','template','poll','event','unsupported'].includes(mediaType))) && (
-                        <WaText text={msg.body || '(media)'} />
+                        <WaText text={msg.body || '(media)'} query={highlightQuery} />
                     )}
 
                     {/* Caption below media */}
                     {['image','video','document','audio'].includes(mediaType) && caption && (
-                        <p className="text-xs mt-1 opacity-90"><WaText text={caption} /></p>
+                        <p className="text-xs mt-1 opacity-90"><WaText text={caption} query={highlightQuery} /></p>
                     )}
 
                     {timeRow}
@@ -1984,6 +2087,18 @@ export default function InboxShow({
     const [sending, setSending]             = useState(false);
     const [sendError, setSendError]         = useState(null);
 
+    // ── In-chat search (client-side over the loaded thread) ──
+    // Declared above the conversation-switch effect so it can reset them.
+    const [searchOpen, setSearchOpen]     = useState(false);
+    const [searchQuery, setSearchQuery]   = useState('');
+    const [matchIdx, setMatchIdx]         = useState(0);
+    const [flashId, setFlashId]           = useState(null);
+    const flashTimerRef                   = useRef(null);
+    const threadScrollRef                 = useRef(null);
+
+    // ── AI draft suggestion (composer) ──
+    const [drafting, setDrafting] = useState(false);
+
     // When Inertia navigates between conversations the page component is
     // re-used, so seed local state from the new server props on conversation
     // change. The websocket listeners dedupe by `id` so any freshly broadcast
@@ -2002,6 +2117,10 @@ export default function InboxShow({
         setAssignedTo(conversation.assigned_to ?? 'bot');
         setAssignedUserId(conversation.assigned_user_id ?? null);
         setSendError(null);
+        // Thread switched — drop any in-progress search state.
+        setSearchOpen(false);
+        setSearchQuery('');
+        setFlashId(null);
         // eslint-disable-next-line react-hooks/exhaustive-deps -- seed only on conversation switch; initialMessages refreshes are merged by id above
     }, [conversation.id]);
 
@@ -2029,6 +2148,13 @@ export default function InboxShow({
 
     const { data, setData, reset } = useForm({ body: '', type: 'text', payload: null });
 
+    const matchIds = useMemo(
+        () => findMatchingMessageIds(messages, searchQuery),
+        [messages, searchQuery],
+    );
+
+    const mediaGroups = useMemo(() => partitionMedia(messages), [messages]);
+
     // Auto-grow composer textarea: starts one line tall, grows with content
     // (capped) and shrinks back after send/reset.
     useEffect(() => {
@@ -2049,7 +2175,16 @@ export default function InboxShow({
             .catch(() => {});
     }, []);
 
-    useEffect(() => { scrollToBottom(); }, [messages]);
+    // Auto-scroll only when a message is ADDED — status/payload refreshes and
+    // idempotent poll merges must not yank the agent away from a scroll
+    // position (e.g. right after jump-to-match in search).
+    const prevMsgCountRef = useRef(0);
+    useEffect(() => {
+        if (messages.length !== prevMsgCountRef.current) {
+            prevMsgCountRef.current = messages.length;
+            scrollToBottom();
+        }
+    }, [messages, scrollToBottom]);
 
     // WS: conversation events
     useEffect(() => {
@@ -2405,6 +2540,49 @@ export default function InboxShow({
 
     const handleStatus = (status) => router.post(route('client.inbox.status', conversation.uuid), { status }, { preserveScroll: true });
 
+    // ── In-chat search navigation ──
+    const closeSearch = () => {
+        setSearchOpen(false);
+        setSearchQuery('');
+        setFlashId(null);
+    };
+
+    const jumpToMatch = (idx) => {
+        if (matchIds.length === 0) return;
+        // Clamp (not wrap) so a stale index — matches shrank after a new
+        // query — can never point past the end of the current match list.
+        const next = Math.max(0, Math.min(idx, matchIds.length - 1));
+        setMatchIdx(next);
+        const el = threadScrollRef.current?.querySelector(`[data-mid="${matchIds[next]}"]`);
+        if (el) {
+            el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+            setFlashId(matchIds[next]);
+            window.clearTimeout(flashTimerRef.current);
+            flashTimerRef.current = window.setTimeout(() => setFlashId(null), 2000);
+        }
+    };
+
+    // ── AI draft suggestion — fills the composer, the agent edits + sends ──
+    const generateDraft = async () => {
+        if (drafting) return;
+        setDrafting(true);
+        try {
+            const res = await axios.post(route('client.inbox.ai-draft.store', conversation.uuid));
+            const draft = res?.data?.draft ?? '';
+            if (draft) {
+                setData('body', draft);
+                toast.success(t('inbox.ai_draft_ready'));
+            } else {
+                toast.error(res?.data?.error ?? t('inbox.ai_draft_error'));
+            }
+        } catch (err) {
+            const msg = err?.response?.data?.error ?? err?.message ?? t('inbox.ai_draft_error');
+            toast.error(msg);
+        } finally {
+            setDrafting(false);
+        }
+    };
+
     const navigateList = (params) => {
         setListLoading(true);
         router.get(route('client.inbox.show', conversation.uuid), { ...filters, ...params }, { preserveState: true, replace: true });
@@ -2524,6 +2702,13 @@ export default function InboxShow({
                             </div>
                         )}
 
+                        {/* In-chat search */}
+                        <button type="button" onClick={() => (searchOpen ? closeSearch() : setSearchOpen(true))}
+                            title={t('inbox.search_in_chat')}
+                            className={`p-1.5 rounded-lg transition ${searchOpen ? 'bg-brand-50 text-brand-600 dark:bg-brand-900/30' : 'text-neutral-400 hover:text-neutral-600 hover:bg-neutral-100 dark:hover:bg-neutral-800'}`}>
+                            <Search className="h-4 w-4" />
+                        </button>
+
                         {/* Agent assign */}
                         <div className="relative">
                             <button
@@ -2560,10 +2745,48 @@ export default function InboxShow({
                         </select>
                     </div>
 
+                    {/* In-chat search bar */}
+                    {searchOpen && activeTab === 'messages' && (
+                        <div className="flex items-center gap-2 px-4 py-2 border-b border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 shrink-0">
+                            <Search className="h-4 w-4 text-neutral-400 shrink-0" />
+                            <input
+                                autoFocus
+                                value={searchQuery}
+                                onChange={e => setSearchQuery(e.target.value)}
+                                onKeyDown={e => {
+                                    if (e.key === 'Escape') closeSearch();
+                                    if (e.key === 'Enter' && matchIds.length > 0) jumpToMatch(e.shiftKey ? matchIdx - 1 : matchIdx + 1);
+                                }}
+                                placeholder={t('inbox.search_in_chat')}
+                                className="flex-1 text-sm bg-transparent border-0 focus:outline-none focus:ring-0 placeholder-neutral-400 text-neutral-800 dark:text-neutral-200"
+                            />
+                            {searchQuery.trim() !== '' && (
+                                <span className={`text-xs tabular-nums shrink-0 ${matchIds.length > 0 ? 'text-neutral-400' : 'text-coral-500'}`}>
+                                    {matchIds.length > 0 ? `${matchIdx + 1}/${matchIds.length}` : t('inbox.no_matches')}
+                                </span>
+                            )}
+                            <button type="button" onClick={() => jumpToMatch(matchIdx - 1)} disabled={matchIds.length === 0}
+                                title={t('inbox.search_prev')}
+                                className="p-1 rounded text-neutral-400 hover:text-neutral-600 hover:bg-neutral-100 dark:hover:bg-neutral-800 disabled:opacity-40 transition">
+                                <ChevronUp className="h-4 w-4 rotate-180" />
+                            </button>
+                            <button type="button" onClick={() => jumpToMatch(matchIdx + 1)} disabled={matchIds.length === 0}
+                                title={t('inbox.search_next')}
+                                className="p-1 rounded text-neutral-400 hover:text-neutral-600 hover:bg-neutral-100 dark:hover:bg-neutral-800 disabled:opacity-40 transition">
+                                <ChevronUp className="h-4 w-4" />
+                            </button>
+                            <button type="button" onClick={closeSearch} title={t('inbox.search_close')}
+                                className="p-1 rounded text-neutral-400 hover:text-neutral-600 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition">
+                                <X className="h-4 w-4" />
+                            </button>
+                        </div>
+                    )}
+
                     {/* Tab bar */}
                     <div className="flex border-b border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 shrink-0">
                         {[
                             { key: 'messages', label: t('inbox.tab_messages'), icon: null },
+                            { key: 'media',    label: t('inbox.tab_media'),    icon: <ImageIcon className="inline h-3.5 w-3.5 mr-1 -mt-0.5" /> },
                             { key: 'notes',    label: t('inbox.tab_notes'),    icon: <StickyNote className="inline h-3.5 w-3.5 mr-1 -mt-0.5" /> },
                             ...(hasEcommerceStore ? [{ key: 'orders', label: t('inbox.tab_orders'), icon: <ShoppingBag className="inline h-3.5 w-3.5 mr-1 -mt-0.5" /> }] : []),
                         ].map(tab => (
@@ -2580,11 +2803,12 @@ export default function InboxShow({
 
                     {/* Messages tab */}
                     {activeTab === 'messages' && (
-                        <div className="flex-1 overflow-y-auto p-4 space-y-1">
+                        <div ref={threadScrollRef} className="flex-1 overflow-y-auto p-4 space-y-1">
                             {groupMessagesForRender(messages).map(item => (
                                 item.kind === 'album'
                                     ? <ImageGallery key={item.key} messages={item.messages} conversationId={conversation.uuid} />
-                                    : <MessageBubble key={item.key} msg={item.msg} conversationId={conversation.uuid} allMessages={messages} />
+                                    : <MessageBubble key={item.key} msg={item.msg} conversationId={conversation.uuid} allMessages={messages}
+                                        highlightQuery={searchOpen ? searchQuery : ''} flash={searchOpen && flashId === item.msg.id} />
                             ))}
                             {messages.length === 0 && (
                                 <div className="py-8"><EmptyState icon={<MessageSquare className="h-8 w-8" />} title={t('inbox.no_messages_yet')} description={t('inbox.no_messages_desc')} /></div>
@@ -2618,6 +2842,40 @@ export default function InboxShow({
                                     <p className="text-neutral-700 dark:text-neutral-300 whitespace-pre-wrap">{note.body}</p>
                                 </div>
                             ))}
+                        </div>
+                    )}
+
+                    {/* Shared media tab */}
+                    {activeTab === 'media' && (
+                        <div className="flex-1 overflow-y-auto p-4">
+                            {mediaGroups.media.length === 0 && mediaGroups.files.length === 0 && mediaGroups.audio.length === 0 ? (
+                                <div className="py-8"><EmptyState icon={<ImageIcon className="h-8 w-8" />} title={t('inbox.no_shared_media')} description={t('inbox.no_shared_media_desc')} /></div>
+                            ) : (
+                                <div className="max-w-2xl space-y-5">
+                                    {mediaGroups.media.length > 0 && (
+                                        <section>
+                                            <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-neutral-400">{t('inbox.media_photos_videos')}</p>
+                                            <MediaGrid messages={mediaGroups.media} conversationId={conversation.uuid} />
+                                        </section>
+                                    )}
+                                    {mediaGroups.files.length > 0 && (
+                                        <section>
+                                            <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-neutral-400">{t('inbox.media_files')}</p>
+                                            <div className="space-y-2">
+                                                {mediaGroups.files.map(m => <MediaFileRow key={m.id} msg={m} conversationId={conversation.uuid} />)}
+                                            </div>
+                                        </section>
+                                    )}
+                                    {mediaGroups.audio.length > 0 && (
+                                        <section>
+                                            <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-neutral-400">{t('inbox.media_audio')}</p>
+                                            <div className="space-y-2">
+                                                {mediaGroups.audio.map(m => <MediaAudioRow key={m.id} msg={m} conversationId={conversation.uuid} userTz={userTz} />)}
+                                            </div>
+                                        </section>
+                                    )}
+                                </div>
+                            )}
                         </div>
                     )}
 
@@ -2765,6 +3023,14 @@ export default function InboxShow({
                             <form onSubmit={handleSend}>
                                 {/* Toolbar */}
                                 <div className="flex items-center gap-1 mb-1.5">
+                                    {/* AI draft suggestion */}
+                                    <button type="button" onClick={generateDraft} disabled={drafting}
+                                        title={t('inbox.ai_draft')}
+                                        className={`p-1.5 rounded-lg transition disabled:opacity-60 ${drafting
+                                            ? 'text-brand-600 dark:text-brand-400'
+                                            : 'text-accent-600 dark:text-accent-400 hover:text-accent-700 hover:bg-accent-50 dark:hover:bg-accent-900/20'}`}>
+                                        {drafting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                                    </button>
                                     {/* Emoji */}
                                     <button type="button" onClick={() => setShowEmoji(v => !v)}
                                         title={t('inbox.emoji')}
