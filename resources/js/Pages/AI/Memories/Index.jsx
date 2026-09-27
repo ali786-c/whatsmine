@@ -174,7 +174,7 @@ export default function AiMemoriesIndex({ memories, learningEnabled, maxMemories
                 {/* List */}
                 {visible.length === 0 ? (
                     <EmptyState
-                        icon={Brain}
+                        icon={<Brain className="h-8 w-8" />}
                         title={t('ai.memory_empty_title')}
                         description={t('ai.memory_empty_desc')}
                     />
