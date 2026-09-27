@@ -2678,6 +2678,8 @@
     "meta_webhook_help": "Meta অ্যাপ ড্যাশবোর্ড → Webhooks-এ Instagram ও Messenger-এর জন্য এই URL ব্যবহার করুন।",
     "resources": "রিসোর্স",
     "count_connected": "{{count}}টি সংযুক্ত",
+    "limit_reached": "সীমা",
+    "channel_limit_reached": "এই চ্যানেলের প্ল্যান সীমা পূর্ণ — একটি অ্যাকাউন্ট সরান বা আরও সংযোগের জন্য আপগ্রেড করুন।",
     "name_status_approved": "অনুমোদিত",
     "name_status_under_review": "নাম পর্যালোচনাধীন",
     "name_status_declined": "নাম প্রত্যাখ্যাত",

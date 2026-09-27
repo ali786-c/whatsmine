@@ -2752,6 +2752,8 @@
     "meta_webhook_help": "Используйте этот URL для Instagram и Messenger в Meta App Dashboard → Webhooks.",
     "resources": "Ресурсы",
     "count_connected": "Подключено: {{count}}",
+    "limit_reached": "Лимит",
+    "channel_limit_reached": "Достигнут лимит плана для этого канала — отключите аккаунт или обновите план, чтобы подключить больше.",
     "name_status_approved": "Одобрено",
     "name_status_under_review": "Имя на проверке",
     "name_status_declined": "Имя отклонено",

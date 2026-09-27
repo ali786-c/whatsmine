@@ -146,6 +146,11 @@ class ConnectController extends Controller
                         'status' => 'active',
                     ]);
                 } else {
+                    // Same plan guard as the Inbox IG flows — module callback
+                    // must not become the bypass around the limit.
+                    app(\App\Modules\Shared\Services\ChannelLimitService::class, ['workspaceId' => $workspaceId])
+                        ->blockIfExhausted('instagram');
+
                     \App\Modules\Shared\Models\ChannelAccount::create([
                         'workspace_id' => $workspaceId,
                         'channel' => 'instagram',

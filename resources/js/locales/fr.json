@@ -2754,6 +2754,8 @@
     "meta_webhook_help": "Utilisez cette URL pour Instagram et Messenger dans le tableau de bord d'application Meta → Webhooks.",
     "resources": "Ressources",
     "count_connected": "{{count}} connecté(s)",
+    "limit_reached": "Limite",
+    "channel_limit_reached": "Limite du plan atteinte pour ce canal — déconnectez un compte ou mettez à niveau pour en connecter davantage.",
     "name_status_approved": "Approuvé",
     "name_status_under_review": "Nom en cours d'examen",
     "name_status_declined": "Nom refusé",

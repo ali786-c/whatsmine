@@ -2752,6 +2752,8 @@
     "meta_webhook_help": "Use this URL for Instagram & Messenger in Meta App Dashboard → Webhooks.",
     "resources": "Resources",
     "count_connected": "{{count}} connected",
+    "limit_reached": "上限",
+    "channel_limit_reached": "このチャネルのプラン上限に達しました — アカウントを解除するか、アップグレードして追加接続してください。",
     "name_status_approved": "Approved",
     "name_status_under_review": "Name under review",
     "name_status_declined": "Name declined",

@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Modules\AI\Models\AiChatbot;
 use App\Modules\Integrations\Services\CredentialResolver;
 use App\Modules\Shared\Models\ChannelAccount;
+use App\Modules\Shared\Services\ChannelLimitService;
 use App\Modules\Whatsapp\Models\WhatsappBusinessAccount;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -62,6 +63,15 @@ class InboxSetupController extends Controller
             ->where('enabled', true)
             ->get(['id', 'name']);
 
+        // Plan limits per channel — drives the "X / Y used" badges and the
+        // disabled connect buttons on the setup page.
+        $limits = app(ChannelLimitService::class, ['workspaceId' => $workspaceId]);
+        $channelLimits = [
+            'whatsapp' => $limits->snapshot('whatsapp'),
+            'instagram' => $limits->snapshot('instagram'),
+            'messenger' => $limits->snapshot('messenger'),
+        ];
+
         $meta = CredentialResolver::system()->meta();
         $metaWebhookUrl = $meta ? url('/webhooks/meta/'.$meta->verifyToken()) : null;
 
@@ -70,6 +80,7 @@ class InboxSetupController extends Controller
 
         return Inertia::render('Inbox/Setup', [
             'wabas'                        => $wabas,
+            'channelLimits'                => $channelLimits,
             'whatsappWebhookUrl'           => url('/webhooks/whatsapp'),
             'whatsappWebhookGlobalUrl'     => route('webhooks.whatsapp.global.receive'),
             'webhookTokensByWaba'          => $webhookTokensByWaba,
@@ -135,6 +146,19 @@ class InboxSetupController extends Controller
         $pages     = $pagesRes->json('data', []);
         $connected = 0;
 
+        // Plan limit on Messenger (Facebook Pages). Embedded signup returns
+        // every page the user manages, so this is a BATCH: connect as many
+        // pages as the plan still has room for, skip the rest, and surface
+        // the shortfall so the user is not silently missing pages. Re-connects
+        // (already-connected pages) never consume a slot.
+        $limitService = app(ChannelLimitService::class, ['workspaceId' => $workspaceId]);
+        $messengerLimit = $limitService->limitFor('messenger');
+        $messengerUsed = $limitService->usedFor('messenger');
+        $newSlotsLeft = $messengerLimit === null
+            ? PHP_INT_MAX
+            : max(0, $messengerLimit - $messengerUsed);
+        $skippedForLimit = 0;
+
         Log::info('Messenger embedded signup: pages fetched', [
             'workspace_id' => $workspaceId,
             'page_count'   => count($pages),
@@ -194,6 +218,20 @@ class InboxSetupController extends Controller
                     'status'      => 'active',
                 ]);
             } else {
+                if ($newSlotsLeft < 1) {
+                    $skippedForLimit++;
+
+                    Log::info('Messenger embedded signup: page skipped — plan limit reached', [
+                        'workspace_id' => $workspaceId,
+                        'page_id'      => $pageId,
+                        'limit'        => $messengerLimit,
+                        'used'         => $messengerUsed,
+                    ]);
+                    continue;
+                }
+
+                $newSlotsLeft--;
+
                 ChannelAccount::create([
                     'workspace_id' => $workspaceId,
                     'channel'      => 'messenger',
@@ -216,11 +254,18 @@ class InboxSetupController extends Controller
 
         if ($connected === 0) {
             return response()->json([
-                'message' => 'No Facebook Pages found on your account. Make sure you manage at least one Facebook Page.',
+                'message' => $skippedForLimit > 0
+                    ? $limitService->blockMessage('messenger')
+                    : 'No Facebook Pages found on your account. Make sure you manage at least one Facebook Page.',
             ], 422);
         }
 
-        return response()->json(['success' => true, 'connected' => $connected]);
+        return response()->json([
+            'success' => true,
+            'connected' => $connected,
+            'skipped_for_limit' => $skippedForLimit > 0 ? $skippedForLimit : null,
+            'limit_message' => $skippedForLimit > 0 ? $limitService->blockMessage('messenger') : null,
+        ]);
     }
 
     private function logMeta(string $message, array $context = []): void
@@ -522,6 +567,11 @@ class InboxSetupController extends Controller
                 'status'      => 'active',
             ]);
         } else {
+            // Re-connects pass freely; only a genuinely NEW Instagram account
+            // consumes a plan slot.
+            app(ChannelLimitService::class, ['workspaceId' => $workspaceId])
+                ->blockIfExhausted('instagram');
+
             ChannelAccount::create([
                 'workspace_id' => $workspaceId,
                 'channel'      => 'instagram',

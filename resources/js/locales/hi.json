@@ -2678,6 +2678,8 @@
     "meta_webhook_help": "Meta ऐप डैशबोर्ड → Webhooks में Instagram और Messenger के लिए इस URL का उपयोग करें।",
     "resources": "संसाधन",
     "count_connected": "{{count}} कनेक्ट किए गए",
+    "limit_reached": "सीमा",
+    "channel_limit_reached": "इस चैनल के लिए प्लान सीमा पूरी हो गई है — एक खाता हटाएं या अधिक कनेक्ट करने के लिए अपग्रेड करें।",
     "name_status_approved": "स्वीकृत",
     "name_status_under_review": "नाम समीक्षाधीन",
     "name_status_declined": "नाम अस्वीकृत",

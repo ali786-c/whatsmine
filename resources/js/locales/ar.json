@@ -2678,6 +2678,8 @@
     "meta_webhook_help": "استخدم عنوان URL هذا لـ Instagram وMessenger في لوحة تحكم تطبيق Meta ← الويب هوك.",
     "resources": "الموارد",
     "count_connected": "{{count}} متصلة",
+    "limit_reached": "الحد",
+    "channel_limit_reached": "تم بلوغ حد الخطة لهذه القناة — قم بفصل حساب أو قم بالترقية لربط المزيد.",
     "name_status_approved": "معتمد",
     "name_status_under_review": "الاسم قيد المراجعة",
     "name_status_declined": "تم رفض الاسم",

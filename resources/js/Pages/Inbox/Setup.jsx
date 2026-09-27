@@ -95,7 +95,7 @@ function StatusBadge({ status }) {
     );
 }
 
-function ChannelCard({ icon: Icon, iconBg, title, count, children }) {
+function ChannelCard({ icon: Icon, iconBg, title, count, limit = null, children }) {
     const { t } = useTranslation();
     return (
         <div className="rounded-2xl border bg-white dark:bg-neutral-900 shadow-sm overflow-hidden border-neutral-200 dark:border-neutral-700">
@@ -108,7 +108,13 @@ function ChannelCard({ icon: Icon, iconBg, title, count, children }) {
                 </div>
                 {count != null && (
                     <span className={`ml-auto text-xs font-medium px-2 py-0.5 rounded-full ${count > 0 ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300' : 'bg-neutral-100 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400'}`}>
-                        {t('inbox.count_connected', { count })}
+                        {limit?.limit != null ? `${count} / ${limit.limit}` : t('inbox.count_connected', { count })}
+                    </span>
+                )}
+                {limit?.exhausted && (
+                    <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300"
+                        title={t('inbox.channel_limit_reached')}>
+                        {t('inbox.limit_reached')}
                     </span>
                 )}
             </div>
@@ -555,7 +561,7 @@ function WabaCard({ waba, webhookGlobalUrl, channelAccounts, chatbots, onSeedTem
     );
 }
 
-function WhatsAppSection({ wabas, webhookGlobalUrl, channelAccountsByWaba, chatbots, showForm, setShowForm, metaConfigIdWhatsapp, metaAppId }) {
+function WhatsAppSection({ wabas, webhookGlobalUrl, channelAccountsByWaba, chatbots, showForm, setShowForm, metaConfigIdWhatsapp, metaAppId, limit = null }) {
     const { t } = useTranslation();
     const [waApiError, setWaApiError] = useState(null);
     const [waSubmitting, setWaSubmitting] = useState(false);
@@ -608,6 +614,7 @@ function WhatsAppSection({ wabas, webhookGlobalUrl, channelAccountsByWaba, chatb
             iconBg="bg-white dark:bg-neutral-800 shadow-sm border border-neutral-100 dark:border-neutral-700"
             title={t('inbox.whatsapp_business')}
             count={wabas.length}
+            limit={limit}
         >
             {wabas.length > 0 && (
                 <div className="space-y-3">
@@ -1128,10 +1135,17 @@ export default function ChannelSetup({
     metaAppId = null, metaConfigIdWhatsapp = null, metaConfigIdSocial = null,
     igAuthorizeUrl = null,
     chatbots = [],
+    channelLimits = {},
 }) {
     const { t } = useTranslation();
     const { props } = usePage();
     const flash = props.flash ?? {};
+    const waLimit = channelLimits?.whatsapp ?? null;
+    const igLimit = channelLimits?.instagram ?? null;
+    const msgrLimit = channelLimits?.messenger ?? null;
+    const waExhausted = !!waLimit?.exhausted;
+    const igExhausted = !!igLimit?.exhausted;
+    const msgrExhausted = !!msgrLimit?.exhausted;
 
     const [drawer, setDrawer] = useState(null);
     const [showWabaForm, setShowWabaForm] = useState(false);
@@ -1245,8 +1259,9 @@ export default function ChannelSetup({
                         </p>
                     </div>
                     <div className="flex items-center gap-2 flex-wrap">
-                        <button type="button" onClick={() => openDrawer('whatsapp')}
-                            className="flex items-center gap-1.5 rounded-lg border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/30 px-3 py-1.5 text-xs font-medium text-green-700 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-950/50 transition shadow-sm whitespace-nowrap">
+                        <button type="button" onClick={() => openDrawer('whatsapp')} disabled={waExhausted}
+                            title={waExhausted ? t('inbox.channel_limit_reached') : undefined}
+                            className="flex items-center gap-1.5 rounded-lg border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/30 px-3 py-1.5 text-xs font-medium text-green-700 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-950/50 transition shadow-sm whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-green-50 dark:disabled:hover:bg-green-950/30">
                             <WhatsAppLogo className="h-3.5 w-3.5" /> {t('inbox.connect_whatsapp')}
                         </button>
                         <Link
@@ -1254,12 +1269,14 @@ export default function ChannelSetup({
                             className="flex items-center gap-1.5 rounded-lg border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/30 px-3 py-1.5 text-xs font-medium text-green-700 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-950/50 transition shadow-sm whitespace-nowrap">
                             <QrCode className="h-3.5 w-3.5" /> {t('inbox.connect_whatsapp_qr')}
                         </Link>
-                        <button type="button" onClick={() => openDrawer('messenger')}
-                            className="flex items-center gap-1.5 rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/30 px-3 py-1.5 text-xs font-medium text-blue-700 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-950/50 transition shadow-sm whitespace-nowrap">
+                        <button type="button" onClick={() => openDrawer('messenger')} disabled={msgrExhausted}
+                            title={msgrExhausted ? t('inbox.channel_limit_reached') : undefined}
+                            className="flex items-center gap-1.5 rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/30 px-3 py-1.5 text-xs font-medium text-blue-700 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-950/50 transition shadow-sm whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-blue-50 dark:disabled:hover:bg-blue-950/30">
                             <MessengerLogo className="h-3.5 w-3.5" /> {t('inbox.connect_messenger')}
                         </button>
-                        <button type="button" onClick={() => openDrawer('instagram')}
-                            className="flex items-center gap-1.5 rounded-lg border border-pink-200 dark:border-pink-800 bg-pink-50 dark:bg-pink-950/30 px-3 py-1.5 text-xs font-medium text-pink-700 dark:text-pink-400 hover:bg-pink-100 dark:hover:bg-pink-950/50 transition shadow-sm whitespace-nowrap">
+                        <button type="button" onClick={() => openDrawer('instagram')} disabled={igExhausted}
+                            title={igExhausted ? t('inbox.channel_limit_reached') : undefined}
+                            className="flex items-center gap-1.5 rounded-lg border border-pink-200 dark:border-pink-800 bg-pink-50 dark:bg-pink-950/30 px-3 py-1.5 text-xs font-medium text-pink-700 dark:text-pink-400 hover:bg-pink-100 dark:hover:bg-pink-950/50 transition shadow-sm whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-pink-50 dark:disabled:hover:bg-pink-950/30">
                             <InstagramLogo className="h-3.5 w-3.5" /> {t('inbox.connect_instagram')}
                         </button>
                     </div>
@@ -1302,6 +1319,7 @@ export default function ChannelSetup({
                     setShowForm={() => {}}
                     metaConfigIdWhatsapp={metaConfigIdWhatsapp}
                     metaAppId={metaAppId}
+                    limit={waLimit}
                 />
 
                 {/* Instagram */}
@@ -1310,6 +1328,7 @@ export default function ChannelSetup({
                     iconBg="bg-white dark:bg-neutral-800 shadow-sm border border-neutral-100 dark:border-neutral-700"
                     title={t('inbox.instagram_business')}
                     count={instagramAccounts.length}
+                    limit={igLimit}
                 >
                     {instagramAccounts.length > 0 ? (
                         <div className="space-y-2">
@@ -1321,10 +1340,14 @@ export default function ChannelSetup({
                                 <InstagramLogo className="h-6 w-6" />
                             </div>
                             <p className="text-sm text-neutral-400 dark:text-neutral-500 mb-3">{t('inbox.no_instagram_accounts')}</p>
-                            <button onClick={() => openDrawer('instagram')}
-                                className="text-xs font-medium text-pink-600 dark:text-pink-400 hover:underline">
-                                {t('inbox.plus_connect_instagram')}
-                            </button>
+                            {igExhausted ? (
+                                <span className="text-xs font-medium text-amber-600 dark:text-amber-400">{t('inbox.channel_limit_reached')}</span>
+                            ) : (
+                                <button onClick={() => openDrawer('instagram')}
+                                    className="text-xs font-medium text-pink-600 dark:text-pink-400 hover:underline">
+                                    {t('inbox.plus_connect_instagram')}
+                                </button>
+                            )}
                         </div>
                     )}
                 </ChannelCard>
@@ -1335,6 +1358,7 @@ export default function ChannelSetup({
                     iconBg="bg-white dark:bg-neutral-800 shadow-sm border border-neutral-100 dark:border-neutral-700"
                     title={t('inbox.facebook_messenger')}
                     count={messengerAccounts.length}
+                    limit={msgrLimit}
                 >
                     {messengerAccounts.length > 0 ? (
                         <div className="space-y-2">
@@ -1346,10 +1370,14 @@ export default function ChannelSetup({
                                 <MessengerLogo className="h-6 w-6" />
                             </div>
                             <p className="text-sm text-neutral-400 dark:text-neutral-500 mb-3">{t('inbox.no_messenger_accounts')}</p>
-                            <button onClick={() => openDrawer('messenger')}
-                                className="text-xs font-medium text-blue-600 dark:text-blue-400 hover:underline">
-                                {t('inbox.plus_connect_messenger')}
-                            </button>
+                            {msgrExhausted ? (
+                                <span className="text-xs font-medium text-amber-600 dark:text-amber-400">{t('inbox.channel_limit_reached')}</span>
+                            ) : (
+                                <button onClick={() => openDrawer('messenger')}
+                                    className="text-xs font-medium text-blue-600 dark:text-blue-400 hover:underline">
+                                    {t('inbox.plus_connect_messenger')}
+                                </button>
+                            )}
                         </div>
                     )}
                 </ChannelCard>
@@ -1427,6 +1455,7 @@ export default function ChannelSetup({
                     setShowForm={setShowWabaForm}
                     metaConfigIdWhatsapp={metaConfigIdWhatsapp}
                     metaAppId={metaAppId}
+                    limit={waLimit}
                 />
             </ConnectDrawer>
 
