@@ -1,3 +1,5 @@
 # Workspace Specific Rules
 
 - **WhatsApp Automations:** ALWAYS use `send_template` instead of `send_whatsapp` (plain messages) for E-Commerce flows, even when responding to user actions (like button clicks). Do not use plain text messages for any order-related notifications (confirmed, cancelled, shipped, etc).
+- **Frontend deploy workflow (STANDING RULE):** Whenever a task touches anything under `resources/js` (pages, components, locales, styles), ALWAYS run `npm run build` and commit/push the built `public/build` assets in the SAME task — the user must never have to ask for a build. The production server pulls built assets directly from git, so an un-pushed build means the change never goes live. Default flow: edit sources → `npm run build` → commit source + `public/build` → push to `origin/master` (the user has standing permission for commit + push on `master`).
+- **PHP on this machine:** the default `php` is 8.0 (XAMPP) and fails the platform check — always use `/c/php83/php.exe` for artisan, tests, and lint (e.g. `/c/php83/php.exe artisan test`).
