@@ -26,6 +26,9 @@ class PlanSeeder extends Seeder
                     'storage' => 5120,
                     // WhatsApp
                     'whatsapp_accounts' => 1,
+                    'whatsapp_qr_accounts' => 1,
+                    'instagram_accounts' => 1,
+                    'messenger_accounts' => 1,
                     'whatsapp_templates' => 10,
                     'whatsapp_messages_per_month' => 1000,
                     // Broadcasting
@@ -67,6 +70,9 @@ class PlanSeeder extends Seeder
                     'users' => 10,
                     'storage' => 51200,
                     'whatsapp_accounts' => 3,
+                    'whatsapp_qr_accounts' => 3,
+                    'instagram_accounts' => 3,
+                    'messenger_accounts' => 3,
                     'whatsapp_templates' => 50,
                     'whatsapp_messages_per_month' => 20000,
                     'campaigns_per_month' => 30,
