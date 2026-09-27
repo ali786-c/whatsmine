@@ -4,14 +4,17 @@ namespace App\Modules\Inbox\Services;
 
 use App\Events\ContactCreated;
 use App\Events\MessageReceived;
+use App\Events\MessageSent;
 use App\Modules\Shared\Contracts\ChannelDriverInterface;
 use App\Modules\Shared\Models\ChannelAccount;
 use App\Modules\Shared\Models\Contact;
 use App\Modules\Shared\Models\Conversation;
+use App\Modules\Integrations\Services\CredentialResolver;
 use App\Modules\Shared\Models\Message;
 use App\Modules\Shared\Services\ContactService;
 use App\Services\WebhookIdempotencyService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
@@ -112,10 +115,17 @@ class MessengerDriver implements ChannelDriverInterface
                     }
 
                     if ($event['message']['is_echo'] ?? false) {
-                        Log::info('Messenger webhook: echo (outbound) event skipped', [
-                            'entry_id' => $entryId,
-                            'mid' => $event['message']['mid'] ?? null,
-                        ]);
+                        // Echoes fired for messages OUR app sent are duplicates
+                        // of rows already persisted at send time. Echoes from
+                        // the Page Inbox, the mobile Messenger app or another
+                        // tool (different/absent app_id) are the ONLY way those
+                        // replies ever reach this inbox — sync them as outbound
+                        // messages so every surface stays in one thread.
+                        $echo = $this->processEchoEvent($entryId, $event);
+
+                        if ($echo !== null) {
+                            $processed[] = $echo;
+                        }
 
                         continue;
                     }
@@ -149,6 +159,151 @@ class MessengerDriver implements ChannelDriverInterface
     public function verifyCreds(): bool
     {
         return true;
+    }
+
+    /**
+     * Persist an echo (outbound) webhook event as an outbound message.
+     *
+     * Echoes from OUR app (matching app_id) are skipped — the send flow already
+     * wrote the row, and writing it again would duplicate the bubble. Echoes
+     * from any other surface (Page Inbox, mobile Messenger app, third-party
+     * tools — absent or different app_id) become direction=out rows so replies
+     * typed on the phone stay in the same inbox thread as web replies.
+     */
+    private function processEchoEvent(string $pageId, array $event): ?Message
+    {
+        $mid = $event['message']['mid'] ?? null;
+
+        if ($mid && ! app(WebhookIdempotencyService::class)->isNewEvent('messenger', $mid)) {
+            Log::info('Messenger webhook: duplicate echo skipped', ['mid' => $mid]);
+
+            return null;
+        }
+
+        $channelAccount = ChannelAccount::where('channel', 'messenger')
+            ->whereJsonContains('meta_json->page_id', $pageId)
+            ->first();
+
+        if (! $channelAccount) {
+            Log::info('Messenger webhook: echo for unconnected page — dropped', [
+                'entry_id' => $pageId,
+                'mid' => $mid,
+            ]);
+
+            return null;
+        }
+
+        $workspaceId = $channelAccount->workspace_id;
+        $recipientId = (string) ($event['recipient']['id'] ?? '');
+        $msgBody = (string) ($event['message']['text'] ?? '');
+        $echoAppId = isset($event['message']['app_id']) ? (string) $event['message']['app_id'] : null;
+
+        if ($this->echoFromOwnApp($echoAppId)) {
+            Log::info('Messenger webhook: echo from our own app — skipped (already stored at send time)', [
+                'entry_id' => $pageId,
+                'mid' => $mid,
+                'app_id' => $echoAppId,
+            ]);
+
+            return null;
+        }
+
+        // Belt-and-braces duplicate guard: the Send API response stores the
+        // same mid on the row it persisted, so an echo whose mid is already on
+        // ANY stored message is by definition our own send mirrored back —
+        // covers pages that omit app_id on echoes.
+        if ($mid && Message::where('provider_message_id', $mid)->exists()) {
+            Log::info('Messenger webhook: echo mid already stored — skipped', ['mid' => $mid]);
+
+            return null;
+        }
+
+        if ($msgBody === '' && empty($event['message']['attachments'])) {
+            Log::info('Messenger webhook: echo carried no text/attachment — skipped', [
+                'entry_id' => $pageId,
+                'mid' => $mid,
+            ]);
+
+            return null;
+        }
+
+        $contact = Contact::where('workspace_id', $workspaceId)
+            ->whereJsonContains('custom_fields->messenger_psid', $recipientId)
+            ->first();
+
+        if (! $contact) {
+            // Echo for a PSID we have never seen inbound — the thread does not
+            // exist on our side, so there is nothing meaningful to attach the
+            // outbound reply to.
+            Log::info('Messenger webhook: echo for unknown PSID — skipped', [
+                'entry_id' => $pageId,
+                'psid' => $recipientId,
+            ]);
+
+            return null;
+        }
+
+        $conversation = Conversation::firstOrCreate(
+            ['workspace_id' => $workspaceId, 'contact_id' => $contact->id, 'channel_account_id' => $channelAccount->id],
+            ['status' => 'open', 'external_thread_id' => $recipientId]
+        );
+
+        $attachment = $event['message']['attachments'][0] ?? null;
+        $type = 'text';
+        $payload = [];
+        if (($attachment['type'] ?? null) === 'image' && ! empty($attachment['payload']['url'])) {
+            $type = 'image';
+            $payload = ['link' => $attachment['payload']['url']];
+        }
+
+        // Echo timestamps are in seconds; sent_at would otherwise be "now",
+        // which mis-orders the bubble against the agent's earlier replies.
+        $sentAt = isset($event['timestamp'])
+            ? Carbon::createFromTimestampMs((int) $event['timestamp'])
+            : now();
+
+        $message = Message::create([
+            'conversation_id' => $conversation->id,
+            'direction' => 'out',
+            'channel' => 'messenger',
+            'type' => $type,
+            'payload' => $event,
+            'body' => $msgBody,
+            'status' => 'sent',
+            'provider_message_id' => $mid,
+            'sent_by' => 'human',
+            'sent_at' => $sentAt,
+        ]);
+
+        $conversation->update(['last_message_at' => $sentAt]);
+
+        // Real-time echo into any open inbox tabs, same as locally-sent messages.
+        MessageSent::dispatch($message);
+
+        Log::info('Messenger webhook: echo synced as outbound message', [
+            'message_id' => $message->id,
+            'conversation_id' => $conversation->id,
+            'workspace_id' => $workspaceId,
+            'mid' => $mid,
+            'echo_app_id' => $echoAppId,
+        ]);
+
+        return $message;
+    }
+
+    /**
+     * Whether an echo event originated from THIS app's own Send API calls.
+     * Our own echoes duplicate rows the send flow already persisted.
+     */
+    private function echoFromOwnApp(?string $echoAppId): bool
+    {
+        if ($echoAppId === null) {
+            return false; // older pages / no app_id — treat as external surface
+        }
+
+        $ownAppId = CredentialResolver::system()->meta()?->appId();
+
+        return $ownAppId !== null && $echoAppId === (string) $ownAppId;
     }
 
     private function processInboundMessage(string $pageId, array $event): ?Message

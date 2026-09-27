@@ -380,7 +380,7 @@ class InboxSetupController extends Controller
                 'object'       => 'page',
                 'callback_url' => $callbackUrl,
                 'verify_token' => $verifyToken,
-                'fields'       => 'messages,messaging_postbacks,messaging_optins,message_deliveries,message_reads',
+                'fields'       => 'messages,messaging_postbacks,messaging_optins,message_deliveries,message_reads,message_echoes',
             ]);
 
             if (! $res->successful()) {
@@ -424,9 +424,11 @@ class InboxSetupController extends Controller
         }
 
         try {
+            // message_echoes delivers Page-Inbox / mobile-Messenger-app replies
+            // back to us so every surface stays in one inbox thread.
             $res = Http::withToken($pageToken)
                 ->post("https://graph.facebook.com/v20.0/{$pageId}/subscribed_apps", [
-                    'subscribed_fields' => 'messages,messaging_postbacks,messaging_optins,message_deliveries,message_reads',
+                    'subscribed_fields' => 'messages,messaging_postbacks,messaging_optins,message_deliveries,message_reads,message_echoes',
                 ]);
 
             if (! $res->successful()) {
