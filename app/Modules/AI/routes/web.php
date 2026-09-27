@@ -2,6 +2,7 @@
 
 use App\Modules\AI\Http\Controllers\AiChatbotController;
 use App\Modules\AI\Http\Controllers\AiKnowledgeBaseController;
+use App\Modules\AI\Http\Controllers\AiMemoryController;
 use App\Modules\AI\Http\Controllers\AiProviderController;
 use Illuminate\Support\Facades\Route;
 
@@ -24,4 +25,10 @@ Route::middleware(['web', 'client-app'])->prefix('app/ai')->name('client.ai.')->
     Route::put('/chatbots/{chatbot}', [AiChatbotController::class, 'update'])->name('chatbots.update');
     Route::delete('/chatbots/{chatbot}', [AiChatbotController::class, 'destroy'])->name('chatbots.destroy');
     Route::post('/chatbots/{chatbot}/playground', [AiChatbotController::class, 'playground'])->name('chatbots.playground')->middleware('limit:ai_tokens_per_month,ai_tokens');
+
+    // Learned memories (self-learning engine)
+    Route::get('/memories', [AiMemoryController::class, 'index'])->name('memories.index');
+    Route::post('/memories', [AiMemoryController::class, 'store'])->name('memories.store');
+    Route::delete('/memories/{memory}', [AiMemoryController::class, 'destroy'])->name('memories.destroy');
+    Route::post('/memories/toggle-learning', [AiMemoryController::class, 'toggle'])->name('memories.toggle');
 });

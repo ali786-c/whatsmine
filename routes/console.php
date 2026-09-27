@@ -56,6 +56,16 @@ Schedule::job(new RefreshSocialTokensJob, 'social')
     ->dailyAt('02:00')
     ->name('refresh-social-tokens');
 
+// AI self-learning hygiene: decay stale learned memories + enforce the
+// per-workspace cap (nightly, staggered across workspaces by the queue).
+Schedule::call(function () {
+    \App\Modules\AI\Models\AiMemory::query()
+        ->select('workspace_id')
+        ->distinct()
+        ->pluck('workspace_id')
+        ->each(fn ($wsId) => \App\Modules\AI\Jobs\DecayAiMemoriesJob::dispatch((int) $wsId));
+})->dailyAt('03:30')->name('decay-ai-memories');
+
 // Refresh 60-day Instagram-Login tokens before they expire (daily)
 Schedule::job(new RefreshInstagramLoginTokensJob)
     ->dailyAt('02:30')

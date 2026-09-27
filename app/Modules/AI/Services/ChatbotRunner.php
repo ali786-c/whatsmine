@@ -161,6 +161,20 @@ class ChatbotRunner
             }
         }
 
+        // Self-learning layers (ADDITIVE — history replay above is untouched):
+        // rolling conversation summary + workspace learned memories, both built
+        // as small fixed-size blocks injected right after the system prompt.
+        $memoryService = app(AiMemoryService::class);
+        $learningBlocks = [];
+        $summaryBlock = $memoryService->summaryBlock($conversation->id ?: null);
+        if ($summaryBlock !== null) {
+            $learningBlocks[] = $summaryBlock;
+        }
+        $memoryBlock = $memoryService->injectBlock($workspaceId, $bot);
+        if ($memoryBlock !== null) {
+            $learningBlocks[] = $memoryBlock;
+        }
+
         // Build the augmented user message with context
         $augmentedUserMessage = "";
         
@@ -191,6 +205,7 @@ class ChatbotRunner
 
         $messages = array_merge(
             [['role' => 'system', 'content' => $systemPrompt]],
+            array_map(fn (string $block) => ['role' => 'system', 'content' => $block], $learningBlocks),
             $history,
             [['role' => 'user', 'content' => $augmentedUserMessage]],
         );
@@ -214,6 +229,8 @@ class ChatbotRunner
                 'prompt_tokens' => $response->promptTokens,
                 'completion_tokens' => $response->completionTokens,
                 'history_turns' => intdiv(count($history), 2),
+                'summary_used' => $summaryBlock !== null,
+                'memory_injected' => $memoryBlock !== null,
             ], $emojiEngine->metaFor($emoji), $meta);
 
             return $this->cleanReply($response->content, $bot);
@@ -723,8 +740,14 @@ class ChatbotRunner
         }
         $augmentedUserMessage .= $message;
 
+        // Self-learning layer (ADDITIVE): workspace learned memories injected
+        // as a compact system block — same treatment as run().
+        $memoryBlock = app(AiMemoryService::class)->injectBlock($workspaceId, $bot);
+        $learningBlocks = $memoryBlock !== null ? [$memoryBlock] : [];
+
         $messages = array_merge(
             [['role' => 'system', 'content' => $systemPrompt]],
+            array_map(fn (string $block) => ['role' => 'system', 'content' => $block], $learningBlocks),
             $history,
             [['role' => 'user', 'content' => $augmentedUserMessage]],
         );

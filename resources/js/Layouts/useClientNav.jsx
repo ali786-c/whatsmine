@@ -5,7 +5,7 @@ import {
     LayoutDashboard, CreditCard, Package, FileText, Users, Settings,
     Layers, Webhook, Key, BookOpen, Image, Radio, Inbox, Bot, Database,
     Zap, Share2, MapPin, Tag, LifeBuoy, ExternalLink, Mail, MessageSquare,
-    ShoppingBag, LayoutTemplate,
+    ShoppingBag, LayoutTemplate, Brain,
 } from 'lucide-react';
 
 const iconClass = 'h-4 w-4';
@@ -93,6 +93,7 @@ export default function useClientNav() {
     const aiItems = [
         { label: t('nav.chatbots'),        href: safeRoute('client.ai.chatbots.index'),        icon: <Bot className={iconClass} />,      activePattern: 'client.ai.chatbots.*' },
         { label: t('nav.knowledge_bases'), href: safeRoute('client.ai.knowledge-bases.index'), icon: <Database className={iconClass} />, activePattern: 'client.ai.knowledge-bases.*' },
+        { label: t('nav.ai_memories'),     href: safeRoute('client.ai.memories.index'),        icon: <Brain className={iconClass} />,    activePattern: 'client.ai.memories.*' },
         { label: t('nav.ai_providers'),    href: safeRoute('client.ai.providers.index'),        icon: <Bot className={iconClass} />,      activePattern: 'client.ai.providers.*' },
     ];
 

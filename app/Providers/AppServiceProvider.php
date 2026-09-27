@@ -9,6 +9,7 @@ use App\Events\CommerceEventReceived;
 use App\Events\ContactCreated;
 use App\Events\ConversationAssigned;
 use App\Events\MessageReceived;
+use App\Events\MessageSent;
 use App\Events\PlanChanged;
 use App\Events\SubscriptionCancelled;
 use App\Events\SubscriptionExpired;
@@ -18,6 +19,7 @@ use App\Events\TrialEnding;
 use App\Listeners\AutomationTriggerListener;
 use App\Listeners\AutoReplyListener;
 use App\Listeners\DispatchOutboundWebhookListener;
+use App\Listeners\LearnFromConversationListener;
 use App\Listeners\LogSuccessfulLogin;
 use App\Listeners\SendAutomationFailedNotification;
 use App\Listeners\SendCampaignCompletedNotification;
@@ -83,6 +85,9 @@ class AppServiceProvider extends ServiceProvider
 
         Event::listen(MessageReceived::class, [AutomationTriggerListener::class, 'handleMessageReceived']);
         Event::listen(MessageReceived::class, [AutoReplyListener::class, 'handle']);
+
+        // ── AI self-learning (background, throttled) ─────────────────────────
+        Event::listen(MessageSent::class, LearnFromConversationListener::class);
         Event::listen(ContactCreated::class, [AutomationTriggerListener::class, 'handleContactCreated']);
         Event::listen(AutomationWebhookReceived::class, [AutomationTriggerListener::class, 'handleAutomationWebhookReceived']);
         Event::listen(CommerceEventReceived::class, [AutomationTriggerListener::class, 'handleCommerceEvent']);
