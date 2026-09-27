@@ -11,9 +11,10 @@ use App\Modules\Shared\Models\ChannelAccount;
  * Plan-governed limit on how many channel accounts a workspace may connect,
  * per channel. Keys live in Plan.limits JSON:
  *
- *   whatsapp_accounts    — Cloud API numbers AND QR (Baileys) numbers together
- *   instagram_accounts   — Instagram professional accounts
- *   messenger_accounts   — Facebook Pages connected for Messenger
+ *   whatsapp_accounts     — Meta Cloud API numbers
+ *   whatsapp_qr_accounts  — QR (Baileys) numbers — SEPARATE limit from Cloud API
+ *   instagram_accounts    — Instagram professional accounts
+ *   messenger_accounts    — Facebook Pages connected for Messenger
  *
  *   null => unlimited (default when the plan does not define the key)
  *   0    => no new connections at all
@@ -25,7 +26,7 @@ use App\Modules\Shared\Models\ChannelAccount;
  *
  * Enforcement points (every place a NEW channel account row is born):
  *   - WhatsappEmbeddedSignupController::store   (WhatsApp Cloud API)
- *   - QrSessionManager::createSession           (WhatsApp QR)
+ *   - WhatsappQRController::store / QrWebhookController (WhatsApp QR)
  *   - InboxSetupController::instagramLoginConnect / instagramManualToken
  *   - ConnectController::igLoginCallback        (module-side IG callback)
  *   - InboxSetupController::embeddedSignupMessenger (multi-page batch)
@@ -37,18 +38,19 @@ class ChannelLimitService
 {
     /** Plan limit key + display label per logical channel. */
     public const CHANNEL_KEYS = [
-        'whatsapp' => ['limit' => 'whatsapp_accounts', 'label' => 'WhatsApp'],
+        'whatsapp' => ['limit' => 'whatsapp_accounts', 'label' => 'WhatsApp (Cloud API)'],
+        'whatsapp_qr' => ['limit' => 'whatsapp_qr_accounts', 'label' => 'WhatsApp QR'],
         'instagram' => ['limit' => 'instagram_accounts', 'label' => 'Instagram'],
         'messenger' => ['limit' => 'messenger_accounts', 'label' => 'Messenger'],
     ];
 
     /**
-     * Map a channel_accounts.channel value (which distinguishes the two
-     * WhatsApp transports) to a logical channel with a single shared limit.
+     * Map a channel_accounts.channel value to its logical channel — Cloud API
+     * and QR each have their OWN limit bucket.
      */
     public static function logicalChannel(string $channel): string
     {
-        return $channel === 'whatsapp_qr' ? 'whatsapp' : $channel;
+        return $channel; // 'whatsapp', 'whatsapp_qr', 'instagram', 'messenger'
     }
 
     public function __construct(private readonly ?int $workspaceId) {}
@@ -76,7 +78,8 @@ class ChannelLimitService
     {
         // All channel_accounts.channel values that roll up to this logical channel.
         $dbChannels = match ($logicalChannel) {
-            'whatsapp' => ['whatsapp', 'whatsapp_qr'],
+            'whatsapp' => ['whatsapp'],
+            'whatsapp_qr' => ['whatsapp_qr'],
             'instagram' => ['instagram'],
             'messenger' => ['messenger'],
             default => [$logicalChannel],

@@ -54,7 +54,7 @@ class ChannelLimitServiceTest extends TestCase
         $this->assertTrue($this->service()->canConnect('whatsapp'));
     }
 
-    public function test_whatsapp_cloud_api_and_qr_count_as_one_bucket(): void
+    public function test_whatsapp_cloud_api_and_qr_count_in_separate_buckets(): void
     {
         ChannelAccount::create([
             'workspace_id' => $this->ctx['workspace']->id,
@@ -72,7 +72,10 @@ class ChannelLimitServiceTest extends TestCase
             'status' => 'active',
         ]);
 
-        $this->assertSame(2, $this->service()->usedFor('whatsapp'));
+        // Cloud API and QR are SEPARATE limit buckets — one of each does not
+        // consume the other's slot.
+        $this->assertSame(1, $this->service()->usedFor('whatsapp'));
+        $this->assertSame(1, $this->service()->usedFor('whatsapp_qr'));
     }
 
     public function test_guard_blocks_new_connect_when_limit_reached(): void
@@ -133,10 +136,10 @@ class ChannelLimitServiceTest extends TestCase
         $this->assertTrue($this->service()->canConnect('messenger'));
     }
 
-    public function test_logical_channel_maps_qr_to_whatsapp(): void
+    public function test_logical_channel_distinguishes_qr_from_cloud(): void
     {
-        $this->assertSame('whatsapp', ChannelLimitService::logicalChannel('whatsapp_qr'));
         $this->assertSame('whatsapp', ChannelLimitService::logicalChannel('whatsapp'));
+        $this->assertSame('whatsapp_qr', ChannelLimitService::logicalChannel('whatsapp_qr'));
         $this->assertSame('instagram', ChannelLimitService::logicalChannel('instagram'));
     }
 }

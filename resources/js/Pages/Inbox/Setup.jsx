@@ -1141,9 +1141,11 @@ export default function ChannelSetup({
     const { props } = usePage();
     const flash = props.flash ?? {};
     const waLimit = channelLimits?.whatsapp ?? null;
+    const qrLimit = channelLimits?.whatsapp_qr ?? null;
     const igLimit = channelLimits?.instagram ?? null;
     const msgrLimit = channelLimits?.messenger ?? null;
     const waExhausted = !!waLimit?.exhausted;
+    const qrExhausted = !!qrLimit?.exhausted;
     const igExhausted = !!igLimit?.exhausted;
     const msgrExhausted = !!msgrLimit?.exhausted;
 
@@ -1266,7 +1268,9 @@ export default function ChannelSetup({
                         </button>
                         <Link
                             href={route('client.whatsapp-qr.index')}
-                            className="flex items-center gap-1.5 rounded-lg border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/30 px-3 py-1.5 text-xs font-medium text-green-700 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-950/50 transition shadow-sm whitespace-nowrap">
+                            disabled={qrExhausted}
+                            title={qrExhausted ? t('inbox.channel_limit_reached') : undefined}
+                            className="flex items-center gap-1.5 rounded-lg border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/30 px-3 py-1.5 text-xs font-medium text-green-700 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-950/50 transition shadow-sm whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed">
                             <QrCode className="h-3.5 w-3.5" /> {t('inbox.connect_whatsapp_qr')}
                         </Link>
                         <button type="button" onClick={() => openDrawer('messenger')} disabled={msgrExhausted}

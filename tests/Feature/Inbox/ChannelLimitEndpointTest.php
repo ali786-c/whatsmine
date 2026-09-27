@@ -58,6 +58,16 @@ class ChannelLimitEndpointTest extends TestCase
         $this->attachLimitPlan(['whatsapp_accounts' => 1]);
         $this->addWhatsappAccount();
 
+        // A QR account must NOT block Cloud API — separate buckets.
+        ChannelAccount::create([
+            'workspace_id' => $this->ctx['workspace']->id,
+            'channel' => 'whatsapp_qr',
+            'provider' => 'baileys',
+            'type' => 'qr',
+            'display_name' => 'QR',
+            'status' => 'active',
+        ]);
+
         Http::fake(['*' => Http::response([], 500)]); // guard fires before any upstream call
 
         $response = $this->actingAs($this->ctx['user'])
@@ -94,23 +104,30 @@ class ChannelLimitEndpointTest extends TestCase
     {
         Http::fake(['*' => Http::response([], 500)]);
 
-        $this->attachLimitPlan(['whatsapp_accounts' => 1]);
-        // QR counts in the same bucket as Cloud API.
-        $this->addWhatsappAccount();
+        $this->attachLimitPlan(['whatsapp_qr_accounts' => 1]);
+        // Exhaust the QR bucket — a Cloud API account must NOT block QR.
+        ChannelAccount::create([
+            'workspace_id' => $this->ctx['workspace']->id,
+            'channel' => 'whatsapp_qr',
+            'provider' => 'baileys',
+            'type' => 'qr',
+            'display_name' => 'Existing QR',
+            'status' => 'active',
+        ]);
 
         $response = $this->actingAs($this->ctx['user'])
             ->postJson(route('client.whatsapp-qr.store'), []);
 
         $response->assertStatus(402)
             ->assertJsonPath('upgrade_required', true)
-            ->assertJsonPath('limit_key', 'whatsapp_accounts');
+            ->assertJsonPath('limit_key', 'whatsapp_qr_accounts');
     }
 
     public function test_qr_session_creation_allows_when_under_limit(): void
     {
         Http::fake(['*' => Http::response([], 500)]);
 
-        $this->attachLimitPlan(['whatsapp_accounts' => 3]);
+        $this->attachLimitPlan(['whatsapp_qr_accounts' => 3]);
 
         $response = $this->actingAs($this->ctx['user'])
             ->postJson(route('client.whatsapp-qr.store'), []);

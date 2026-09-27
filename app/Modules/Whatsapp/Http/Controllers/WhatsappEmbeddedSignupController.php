@@ -29,21 +29,22 @@ class WhatsappEmbeddedSignupController extends Controller
 
         $workspaceId = $request->user()->current_workspace_id ?? $request->user()->workspace_id;
 
-        // Plan limit on connected WhatsApp numbers (Cloud API + QR share one
-        // limit). Guard BEFORE the Meta token exchange — rejecting after the
-        // OAuth dance completes would leave the user stranded on Meta's
-        // "success" screen with a dead end. Re-connecting what this workspace
-        // already owns (same WABA, and either the same phone or a pure token
-        // refresh with no phone param) stays allowed: it refreshes tokens, it
-        // does not add an account slot. Numbers Meta later discovers on an
-        // already-owned WABA ride along with that re-auth by design.
+        // Plan limit on Cloud API numbers — a SEPARATE bucket from QR
+        // (Baileys) numbers. Guard BEFORE the Meta token exchange — rejecting
+        // after the OAuth dance completes would leave the user stranded on
+        // Meta's "success" screen with a dead end. Re-connecting what this
+        // workspace already owns (same WABA, and either the same phone or a
+        // pure token refresh with no phone param) stays allowed: it refreshes
+        // tokens, it does not add an account slot. Numbers Meta later
+        // discovers on an already-owned WABA ride along with that re-auth by
+        // design.
         $ownsWaba = WhatsappBusinessAccount::where('waba_id', $validated['waba_id'])
             ->where('workspace_id', $workspaceId)
             ->exists();
         $reconnectPhone = $ownsWaba && (
             empty($validated['phone_number_id'])
             || ChannelAccount::where('workspace_id', $workspaceId)
-                ->whereIn('channel', ['whatsapp', 'whatsapp_qr'])
+                ->where('channel', 'whatsapp')
                 ->where('phone_number_id', $validated['phone_number_id'])
                 ->exists()
         );

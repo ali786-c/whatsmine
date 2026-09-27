@@ -34,7 +34,7 @@ class WhatsappQRController extends Controller
 
         return Inertia::render('WhatsappQR/Index', [
             'sessions' => $sessions,
-            'whatsappLimit' => app(ChannelLimitService::class, ['workspaceId' => $workspaceId])->snapshot('whatsapp'),
+            'whatsappLimit' => app(ChannelLimitService::class, ['workspaceId' => $workspaceId])->snapshot('whatsapp_qr'),
         ]);
     }
 
@@ -64,12 +64,12 @@ class WhatsappQRController extends Controller
 
         $workspaceId = $request->user()->current_workspace_id ?? $request->user()->workspace_id;
 
-        // Plan limit on connected WhatsApp numbers — QR and Cloud API numbers
-        // share one limit key. Blocking here (before the Baileys session spins
-        // up on the Node service) beats blocking in the webhook, where the
-        // number would look connected to the user but never appear in the Inbox.
+        // Plan limit on QR (Baileys) numbers — a SEPARATE bucket from Cloud
+        // API numbers. Blocking here (before the Baileys session spins up on
+        // the Node service) beats blocking in the webhook, where the number
+        // would look connected to the user but never appear in the Inbox.
         app(ChannelLimitService::class, ['workspaceId' => $workspaceId])
-            ->blockIfExhausted('whatsapp');
+            ->blockIfExhausted('whatsapp_qr');
 
         try {
             $userId = $request->user()->id;

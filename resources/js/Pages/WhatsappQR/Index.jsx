@@ -115,10 +115,11 @@ function SessionRow({ session, onDelete }) {
     );
 }
 
-export default function WhatsappQRIndex({ sessions }) {
+export default function WhatsappQRIndex({ sessions, whatsappLimit = null }) {
     const { t } = useTranslation();
     const [creating, setCreating] = useState(false);
     const [error, setError] = useState(null);
+    const exhausted = !!whatsappLimit?.exhausted;
 
     const handleCreate = async () => {
         setCreating(true);
@@ -164,18 +165,26 @@ export default function WhatsappQRIndex({ sessions }) {
                             {t('whatsappQr.subtitle')}
                         </p>
                     </div>
-                    <button
-                        onClick={handleCreate}
-                        disabled={creating}
-                        className="flex items-center gap-2 rounded-lg bg-green-600 hover:bg-green-700 disabled:opacity-60 text-white px-4 py-2.5 text-sm font-semibold shadow-sm transition"
-                    >
-                        {creating ? (
-                            <RefreshCw className="h-4 w-4 animate-spin" />
-                        ) : (
-                            <Plus className="h-4 w-4" />
+                    <div className="flex items-center gap-2">
+                        {whatsappLimit?.limit != null && (
+                            <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${exhausted ? 'bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300' : 'bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300'}`}>
+                                {sessions.length} / {whatsappLimit.limit}
+                            </span>
                         )}
-                        {creating ? t('whatsappQr.creating') : t('whatsappQr.new_session')}
-                    </button>
+                        <button
+                            onClick={handleCreate}
+                            disabled={creating || exhausted}
+                            title={exhausted ? t('inbox.channel_limit_reached') : undefined}
+                            className="flex items-center gap-2 rounded-lg bg-green-600 hover:bg-green-700 disabled:opacity-60 disabled:cursor-not-allowed text-white px-4 py-2.5 text-sm font-semibold shadow-sm transition"
+                        >
+                            {creating ? (
+                                <RefreshCw className="h-4 w-4 animate-spin" />
+                            ) : (
+                                <Plus className="h-4 w-4" />
+                            )}
+                            {creating ? t('whatsappQr.creating') : t('whatsappQr.new_session')}
+                        </button>
+                    </div>
                 </div>
 
                 {/* Error */}
@@ -224,14 +233,18 @@ export default function WhatsappQRIndex({ sessions }) {
                         <p className="text-sm text-neutral-500 dark:text-neutral-400 mb-4 max-w-md mx-auto">
                             {t('whatsappQr.no_sessions_description')}
                         </p>
-                        <button
-                            onClick={handleCreate}
-                            disabled={creating}
-                            className="inline-flex items-center gap-2 rounded-lg bg-green-600 hover:bg-green-700 disabled:opacity-60 text-white px-4 py-2.5 text-sm font-semibold shadow-sm transition"
-                        >
-                            <Plus className="h-4 w-4" />
-                            {t('whatsappQr.create_first_session')}
-                        </button>
+                        {exhausted ? (
+                            <span className="text-sm font-medium text-amber-600 dark:text-amber-400">{t('inbox.channel_limit_reached')}</span>
+                        ) : (
+                            <button
+                                onClick={handleCreate}
+                                disabled={creating}
+                                className="inline-flex items-center gap-2 rounded-lg bg-green-600 hover:bg-green-700 disabled:opacity-60 text-white px-4 py-2.5 text-sm font-semibold shadow-sm transition"
+                            >
+                                <Plus className="h-4 w-4" />
+                                {t('whatsappQr.create_first_session')}
+                            </button>
+                        )}
                     </div>
                 )}
 

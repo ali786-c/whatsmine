@@ -64,10 +64,13 @@ class InboxSetupController extends Controller
             ->get(['id', 'name']);
 
         // Plan limits per channel — drives the "X / Y used" badges and the
-        // disabled connect buttons on the setup page.
+        // disabled connect buttons on the setup page. Cloud API and QR have
+        // separate buckets; both badges appear on the setup page (the QR one
+        // guards the "Connect WhatsApp QR" link target page too).
         $limits = app(ChannelLimitService::class, ['workspaceId' => $workspaceId]);
         $channelLimits = [
             'whatsapp' => $limits->snapshot('whatsapp'),
+            'whatsapp_qr' => $limits->snapshot('whatsapp_qr'),
             'instagram' => $limits->snapshot('instagram'),
             'messenger' => $limits->snapshot('messenger'),
         ];
