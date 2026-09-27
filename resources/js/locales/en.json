@@ -2986,6 +2986,7 @@
     "media_files": "Files",
     "media_audio": "Audio",
     "ai_draft": "Write a draft with AI",
+    "ai_draft_improve": "Improve the typed draft with AI",
     "ai_draft_ready": "Draft ready — review, edit, then send.",
     "ai_draft_error": "Could not generate a draft. Try again."
   },

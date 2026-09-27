@@ -2915,6 +2915,7 @@
     "media_files": "Dosyalar",
     "media_audio": "Ses",
     "ai_draft": "Yapay zekâ ile taslak yaz",
+    "ai_draft_improve": "Yazılan taslağı yapay zekâ ile iyileştir",
     "ai_draft_ready": "Taslak hazır — gözden geçir, düzenle, sonra gönder.",
     "ai_draft_error": "Taslak oluşturulamadı. Tekrar deneyin."
   },

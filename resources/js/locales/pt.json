@@ -2915,6 +2915,7 @@
     "media_files": "Arquivos",
     "media_audio": "Áudio",
     "ai_draft": "Escrever rascunho com IA",
+    "ai_draft_improve": "Melhorar o rascunho digitado com IA",
     "ai_draft_ready": "Rascunho pronto — revise, edite e envie.",
     "ai_draft_error": "Não foi possível gerar o rascunho. Tente novamente."
   },

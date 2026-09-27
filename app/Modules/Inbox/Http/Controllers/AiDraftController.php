@@ -18,6 +18,10 @@ use Illuminate\Http\Request;
  * playground uses: KB grounding, product context, emoji intelligence) and the
  * suggested reply is returned as plain text. The agent edits it and sends it
  * through the normal reply flow — the draft is NEVER auto-sent.
+ *
+ * If the composer already has text, the click means "improve MY draft": the
+ * typed text is rewritten through the same bot (ChatbotRunner::improveForApi)
+ * instead of generating a fresh reply from the customer's last message.
  */
 class AiDraftController extends Controller
 {
@@ -30,11 +34,19 @@ class AiDraftController extends Controller
 
         $workspaceId = (int) ($request->user()->current_workspace_id ?? $request->user()->workspace_id);
 
+        // Agent typed something → improve their text; empty → draft a reply.
+        $draftText = trim((string) $request->input('draft', ''));
+        $improve = $draftText !== '';
+
         $bot = $this->resolveBot($conversation, $workspaceId);
         if (! $bot) {
             return response()->json([
                 'error' => 'No AI chatbot configured — assign one in Inbox → Setup.',
             ], 422);
+        }
+
+        if ($improve) {
+            return $this->improveDraft($bot, $draftText, $workspaceId, $conversation);
         }
 
         // Latest customer message is what the draft should answer.
@@ -89,6 +101,51 @@ class AiDraftController extends Controller
 
         return response()->json([
             'draft' => $draft,
+            'meta' => [
+                'bot' => $bot->name,
+                'tokens_used' => (int) ($result['tokens_used'] ?? 0),
+            ],
+        ]);
+    }
+
+    /**
+     * Rewrite the agent's typed draft through the bot — grammar, clarity and
+     * flow only; meaning, language and facts stay untouched. The last turns
+     * still ride along so pronouns like "it / that order" stay resolvable.
+     */
+    private function improveDraft(AiChatbot $bot, string $draftText, int $workspaceId, Conversation $conversation): JsonResponse
+    {
+        $history = $conversation->messages()
+            ->whereIn('type', ['text', 'template'])
+            ->whereNotNull('body')
+            ->where('body', '!=', '')
+            ->orderByDesc('sent_at')
+            ->take(self::HISTORY_MESSAGES)
+            ->get()
+            ->reverse()
+            ->values()
+            ->map(fn (Message $m) => [
+                'role' => $m->direction === 'in' ? 'user' : 'assistant',
+                'content' => mb_substr((string) $m->body, 0, ChatbotRunner::HISTORY_MAX_CHARS),
+            ])
+            ->all();
+
+        try {
+            $result = app(ChatbotRunner::class)->improveForApi($bot, $draftText, $workspaceId, $history);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'error' => 'AI draft failed: '.mb_substr($e->getMessage(), 0, 160),
+            ], 502);
+        }
+
+        $improved = trim((string) ($result['reply'] ?? ''));
+        if ($improved === '') {
+            return response()->json(['error' => 'AI returned an empty draft.'], 502);
+        }
+
+        return response()->json([
+            'draft' => $improved,
+            'mode' => 'improve',
             'meta' => [
                 'bot' => $bot->name,
                 'tokens_used' => (int) ($result['tokens_used'] ?? 0),

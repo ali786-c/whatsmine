@@ -2563,11 +2563,14 @@ export default function InboxShow({
     };
 
     // ── AI draft suggestion — fills the composer, the agent edits + sends ──
+    // Empty composer → generate a reply from the thread; composer already has
+    // text → send it as a draft and the AI improves what the agent wrote.
     const generateDraft = async () => {
         if (drafting) return;
         setDrafting(true);
         try {
-            const res = await axios.post(route('client.inbox.ai-draft.store', conversation.uuid));
+            const typed = (data.body ?? '').trim();
+            const res = await axios.post(route('client.inbox.ai-draft.store', conversation.uuid), typed ? { draft: typed } : {});
             const draft = res?.data?.draft ?? '';
             if (draft) {
                 setData('body', draft);
@@ -3023,9 +3026,9 @@ export default function InboxShow({
                             <form onSubmit={handleSend}>
                                 {/* Toolbar */}
                                 <div className="flex items-center gap-1 mb-1.5">
-                                    {/* AI draft suggestion */}
+                                    {/* AI draft suggestion: empty → draft a reply; typed text → improve it */}
                                     <button type="button" onClick={generateDraft} disabled={drafting}
-                                        title={t('inbox.ai_draft')}
+                                        title={(data.body ?? '').trim() ? t('inbox.ai_draft_improve') : t('inbox.ai_draft')}
                                         className={`p-1.5 rounded-lg transition disabled:opacity-60 ${drafting
                                             ? 'text-brand-600 dark:text-brand-400'
                                             : 'text-accent-600 dark:text-accent-400 hover:text-accent-700 hover:bg-accent-50 dark:hover:bg-accent-900/20'}`}>

@@ -2915,6 +2915,7 @@
     "media_files": "文件",
     "media_audio": "音频",
     "ai_draft": "用 AI 写草稿",
+    "ai_draft_improve": "用 AI 改进已输入的草稿",
     "ai_draft_ready": "草稿已生成 — 检查、修改后再发送。",
     "ai_draft_error": "无法生成草稿。请重试。"
   },

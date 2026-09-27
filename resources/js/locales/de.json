@@ -2915,6 +2915,7 @@
     "media_files": "Dateien",
     "media_audio": "Audio",
     "ai_draft": "Entwurf mit KI schreiben",
+    "ai_draft_improve": "Geschriebenen Entwurf mit KI verbessern",
     "ai_draft_ready": "Entwurf bereit — prüfen, anpassen und senden.",
     "ai_draft_error": "Entwurf konnte nicht erstellt werden. Bitte erneut versuchen."
   },

@@ -2915,6 +2915,7 @@
     "media_files": "File",
     "media_audio": "Audio",
     "ai_draft": "Scrivi una bozza con l'IA",
+    "ai_draft_improve": "Migliora la bozza scritta con l'IA",
     "ai_draft_ready": "Bozza pronta — controlla, modifica, poi invia.",
     "ai_draft_error": "Impossibile generare la bozza. Riprova."
   },

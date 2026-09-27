@@ -2915,6 +2915,7 @@
     "media_files": "Archivos",
     "media_audio": "Audio",
     "ai_draft": "Redactar respuesta con IA",
+    "ai_draft_improve": "Mejorar el borrador escrito con IA",
     "ai_draft_ready": "Borrador listo — revísalo, edítalo y envíalo.",
     "ai_draft_error": "No se pudo generar el borrador. Inténtalo de nuevo."
   },

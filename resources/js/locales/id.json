@@ -2915,6 +2915,7 @@
     "media_files": "File",
     "media_audio": "Audio",
     "ai_draft": "Tulis draf dengan AI",
+    "ai_draft_improve": "Perbaiki draf yang diketik dengan AI",
     "ai_draft_ready": "Draf siap — tinjau, edit, lalu kirim.",
     "ai_draft_error": "Tidak dapat membuat draf. Coba lagi."
   },

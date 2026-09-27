@@ -16,6 +16,9 @@ class ChatbotRunner
     /** Max characters kept per history turn — huge pasted messages get truncated. */
     public const HISTORY_MAX_CHARS = 500;
 
+    /** Max characters accepted for an agent draft handed to improveForApi(). */
+    public const DRAFT_MAX_CHARS = 2000;
+
     /** Sent when no usable reply could be produced and the bot has no fallback_reply set. */
     public const DEFAULT_FALLBACK = 'Sorry, our assistant is briefly unavailable. Please try again shortly.';
 
@@ -635,6 +638,41 @@ class ChatbotRunner
         }
 
         return false;
+    }
+
+    /**
+     * Improve an existing draft text through the bot's brain. The full
+     * runForApi pipeline still applies — KB grounding, emoji intelligence,
+     * workspace model — but the customer-facing message the model answers is
+     * "rewrite the agent's draft", not the customer's question. A different
+     * code path than runForApi because "improve my text" and "answer the
+     * customer" want different prompts: runForApi's grounded-answer retry and
+     * KB-first framing fight against a rewrite request.
+     *
+     * @param  array<int, array{role: string, content: string}>  $history  Prior turns (user = customer, assistant = our replies)
+     * @return array{reply: string, tokens_used: int}
+     */
+    public function improveForApi(AiChatbot $bot, string $draft, int $workspaceId, array $history = []): array
+    {
+        $systemPrompt = app(AiSystemPrompt::class)->build($bot)
+            ."\n\nCurrent task: the USER's latest message is an UNSENT DRAFT written by the human support agent — NOT something the customer sent. Improve that draft and reply with ONLY the improved message: fix grammar, spelling, clarity and flow, keep the agent's language, tone and meaning, keep every fact and figure exactly as written. Do NOT answer the customer, do NOT add new information, do NOT mention that you edited anything — output just the final message ready to send.";
+
+        $messages = array_merge(
+            [['role' => 'system', 'content' => $systemPrompt]],
+            $history,
+            [['role' => 'user', 'content' => mb_substr($draft, 0, self::DRAFT_MAX_CHARS)]],
+        );
+
+        $opts = ['max_tokens' => 512, 'temperature' => 0.2];
+
+        try {
+            $response = $this->llmGateway->chat($workspaceId, $messages, $opts, $bot->id);
+            $text = $this->cleanReply($response->content, $bot);
+        } catch (\Throwable) {
+            return ['reply' => $draft, 'tokens_used' => 0];
+        }
+
+        return ['reply' => $text !== '' ? $text : $draft, 'tokens_used' => $response->promptTokens + $response->completionTokens];
     }
 
     /**

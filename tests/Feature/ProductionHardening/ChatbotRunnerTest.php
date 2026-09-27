@@ -120,4 +120,82 @@ class ChatbotRunnerTest extends TestCase
         $this->assertNotNull($capturedSystemPrompt, 'System prompt should have been captured');
         $this->assertStringContainsString('refund policy is 30 days', (string) $capturedUserMessage);
     }
+
+    public function test_improve_for_api_rewrites_the_agent_draft_not_the_customer_question(): void
+    {
+        $data = $this->createWorkspaceContext();
+        $workspace = $data['workspace'];
+
+        AiProviderConfig::create([
+            'workspace_id' => $workspace->id,
+            'provider' => 'openai',
+            'credentials' => ['api_key' => 'sk-test'],
+            'default_model_chat' => 'gpt-4o-mini',
+            'default_model_embed' => 'text-embedding-3-small',
+            'enabled' => true,
+        ]);
+
+        $chatbot = AiChatbot::create([
+            'workspace_id' => $workspace->id,
+            'name' => 'Support Bot',
+            'system_prompt' => 'You are a helpful assistant.',
+            'enabled' => true,
+        ]);
+
+        $capturedSystem = null;
+        $capturedLastUser = null;
+        Http::fake([
+            'api.openai.com/v1/chat/completions' => function ($request) use (&$capturedSystem, &$capturedLastUser) {
+                $body = json_decode($request->body(), true);
+                $capturedSystem = collect($body['messages'] ?? [])->firstWhere('role', 'system')['content'] ?? '';
+                // History user turns come first — the draft is the LAST user message.
+                $capturedLastUser = collect($body['messages'] ?? [])->where('role', 'user')->pluck('content')->last();
+
+                return Http::response([
+                    'choices' => [['message' => ['content' => 'Please share your order number so we can help you faster.']]],
+                    'usage' => ['prompt_tokens' => 40, 'completion_tokens' => 12],
+                    'model' => 'gpt-4o-mini',
+                ], 200);
+            },
+        ]);
+
+        $result = app(ChatbotRunner::class)->improveForApi($chatbot, 'pls send order numbr', $workspace->id, [
+            ['role' => 'user', 'content' => 'where is my order'],
+        ]);
+
+        $this->assertSame('Please share your order number so we can help you faster.', $result['reply']);
+        $this->assertSame(52, $result['tokens_used']);
+        // Rewrite framing must reach the model, and the draft — not the
+        // customer's question — must be the message being answered.
+        $this->assertStringContainsString('UNSENT DRAFT', (string) $capturedSystem);
+        $this->assertSame('pls send order numbr', (string) $capturedLastUser);
+    }
+
+    public function test_improve_for_api_returns_original_draft_when_upstream_dies(): void
+    {
+        $data = $this->createWorkspaceContext();
+        $workspace = $data['workspace'];
+
+        AiProviderConfig::create([
+            'workspace_id' => $workspace->id,
+            'provider' => 'openai',
+            'credentials' => ['api_key' => 'sk-test'],
+            'default_model_chat' => 'gpt-4o-mini',
+            'enabled' => true,
+        ]);
+
+        $chatbot = AiChatbot::create([
+            'workspace_id' => $workspace->id,
+            'name' => 'Support Bot',
+            'enabled' => true,
+        ]);
+
+        Http::fake(['api.openai.com/*' => Http::response('server exploded', 500)]);
+
+        $result = app(ChatbotRunner::class)->improveForApi($chatbot, 'my original text', $workspace->id);
+
+        // Never destroy the agent's typed text over a dead upstream.
+        $this->assertSame('my original text', $result['reply']);
+        $this->assertSame(0, $result['tokens_used']);
+    }
 }

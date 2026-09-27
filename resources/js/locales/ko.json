@@ -2915,6 +2915,7 @@
     "media_files": "파일",
     "media_audio": "오디오",
     "ai_draft": "AI로 초안 작성",
+    "ai_draft_improve": "입력한 초안을 AI로 개선",
     "ai_draft_ready": "초안 완료 — 검토하고 수정한 뒤 보내세요.",
     "ai_draft_error": "초안을 생성하지 못했습니다. 다시 시도해 주세요."
   },

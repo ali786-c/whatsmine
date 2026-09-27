@@ -2915,6 +2915,7 @@
     "media_files": "ファイル",
     "media_audio": "音声",
     "ai_draft": "AIで下書きを作成",
+    "ai_draft_improve": "入力した下書きをAIで改善",
     "ai_draft_ready": "下書きが完了 — 確認・編集してから送信してください。",
     "ai_draft_error": "下書きを生成できませんでした。もう一度お試しください。"
   },

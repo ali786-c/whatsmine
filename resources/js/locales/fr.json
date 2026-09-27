@@ -2917,6 +2917,7 @@
     "media_files": "Fichiers",
     "media_audio": "Audio",
     "ai_draft": "Rédiger une réponse avec l'IA",
+    "ai_draft_improve": "Améliorer le brouillon tapé avec l'IA",
     "ai_draft_ready": "Brouillon prêt — vérifiez, modifiez, puis envoyez.",
     "ai_draft_error": "Impossible de générer le brouillon. Réessayez."
   },

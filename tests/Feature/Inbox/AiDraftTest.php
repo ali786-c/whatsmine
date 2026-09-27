@@ -269,4 +269,131 @@ class AiDraftTest extends TestCase
         $this->assertSame('assistant', $captured['history'][1]['role']);
         $this->assertSame('our earlier reply', $captured['history'][1]['content']);
     }
+
+    public function test_typed_draft_improves_instead_of_generating_reply(): void
+    {
+        $captured = [];
+        $runner = \Mockery::mock(ChatbotRunner::class);
+        $runner->shouldReceive('improveForApi')
+            ->once()
+            ->andReturnUsing(function ($bot, $draft, $workspaceId, $history) use (&$captured) {
+                $captured = ['draft' => $draft, 'history' => $history];
+
+                return ['reply' => 'Pls send your order number', 'tokens_used' => 88];
+            });
+        $this->app->instance(ChatbotRunner::class, $runner);
+
+        AiChatbot::create([
+            'workspace_id' => $this->ctx['workspace']->id,
+            'name' => 'Bot',
+            'enabled' => true,
+        ]);
+        $this->addInbound('where is my order');
+
+        $response = $this->actingAs($this->ctx['user'])
+            ->postJson(route('client.inbox.ai-draft.store', $this->conversation->uuid), [
+                'draft' => '  pls send order number  ',
+            ]);
+
+        $response->assertOk()
+            ->assertJsonPath('draft', 'Pls send your order number')
+            ->assertJsonPath('mode', 'improve');
+        $this->assertSame('pls send order number', $captured['draft']);
+        // The customer's latest message still rides along as history context.
+        $this->assertCount(1, $captured['history']);
+        $this->assertSame('user', $captured['history'][0]['role']);
+        $this->assertSame('where is my order', $captured['history'][0]['content']);
+    }
+
+    public function test_improve_passes_conversation_history_for_pronoun_context(): void
+    {
+        $captured = [];
+        $runner = \Mockery::mock(ChatbotRunner::class);
+        $runner->shouldReceive('improveForApi')
+            ->once()
+            ->andReturnUsing(function ($bot, $draft, $workspaceId, $history) use (&$captured) {
+                $captured = ['draft' => $draft, 'history' => $history];
+
+                return ['reply' => 'improved', 'tokens_used' => 5];
+            });
+        $this->app->instance(ChatbotRunner::class, $runner);
+
+        AiChatbot::create([
+            'workspace_id' => $this->ctx['workspace']->id,
+            'name' => 'Bot',
+            'enabled' => true,
+        ]);
+
+        // Explicit sent_at ordering — see test_history_is_built_and_passed_to_runner.
+        Message::create([
+            'conversation_id' => $this->conversation->id,
+            'direction' => 'in',
+            'channel' => 'whatsapp',
+            'type' => 'text',
+            'body' => 'kya package hai',
+            'status' => 'delivered',
+            'sent_by' => 'human',
+            'sent_at' => now()->subMinutes(2),
+        ]);
+        Message::create([
+            'conversation_id' => $this->conversation->id,
+            'direction' => 'out',
+            'channel' => 'whatsapp',
+            'type' => 'text',
+            'body' => 'hamara pro package 2000/month hai',
+            'status' => 'sent',
+            'sent_by' => 'human',
+            'sent_at' => now()->subMinute(),
+        ]);
+
+        $this->actingAs($this->ctx['user'])
+            ->postJson(route('client.inbox.ai-draft.store', $this->conversation->uuid), [
+                'draft' => 'yes that one',
+            ]);
+
+        $this->assertCount(2, $captured['history']);
+        $this->assertSame('user', $captured['history'][0]['role']);
+        $this->assertSame('assistant', $captured['history'][1]['role']);
+    }
+
+    public function test_502_when_improve_runner_returns_empty(): void
+    {
+        $runner = \Mockery::mock(ChatbotRunner::class);
+        $runner->shouldReceive('improveForApi')->once()->andReturn(['reply' => '', 'tokens_used' => 0]);
+        $this->app->instance(ChatbotRunner::class, $runner);
+
+        AiChatbot::create([
+            'workspace_id' => $this->ctx['workspace']->id,
+            'name' => 'Bot',
+            'enabled' => true,
+        ]);
+
+        $response = $this->actingAs($this->ctx['user'])
+            ->postJson(route('client.inbox.ai-draft.store', $this->conversation->uuid), [
+                'draft' => 'something',
+            ]);
+
+        $response->assertStatus(502)
+            ->assertJsonStructure(['error']);
+    }
+
+    public function test_whitespace_only_draft_falls_back_to_reply_generation(): void
+    {
+        $this->mockRunner();
+
+        AiChatbot::create([
+            'workspace_id' => $this->ctx['workspace']->id,
+            'name' => 'Bot',
+            'enabled' => true,
+        ]);
+        $this->addInbound('hello');
+
+        $response = $this->actingAs($this->ctx['user'])
+            ->postJson(route('client.inbox.ai-draft.store', $this->conversation->uuid), [
+                'draft' => '   ',
+            ]);
+
+        $response->assertOk()
+            ->assertJsonPath('draft', 'Here is a suggested reply!');
+    }
 }
