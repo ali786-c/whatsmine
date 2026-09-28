@@ -112,6 +112,8 @@ const CONDITION_OPERATORS = [
     { value: 'not_contains', labelKey: 'automation.op_not_contains' },
     { value: 'exists',       labelKey: 'automation.op_exists' },
     { value: 'not_exists',   labelKey: 'automation.op_not_exists' },
+    { value: 'gt',           labelKey: 'automation.op_gt' },
+    { value: 'lt',           labelKey: 'automation.op_lt' },
 ];
 
 const UPDATE_FIELDS = [
@@ -150,6 +152,16 @@ function BaseNode({ id, data, selected }) {
     const defLabel = def ? t(def.labelKey) : nodeType;
     const defColor = def?.color ?? '#6b7280';
     const isCondition = nodeType === 'condition';
+    // Interactive branching: quick replies / lists / polls with wait_for_choice
+    // get one source handle per configured option (btn_1… / row_1…) + a default.
+    const isInteractiveBrancher = ['quick_replies', 'list_message', 'send_poll'].includes(nodeType) && Boolean(data.wait_for_choice);
+    const brancherOptions = isInteractiveBrancher
+        ? (nodeType === 'quick_replies'
+            ? (Array.isArray(data.buttons) ? data.buttons : []).filter(Boolean).map((title, i) => ({ id: `btn_${i + 1}`, title }))
+            : (nodeType === 'list_message'
+                ? String(data.rows ?? '').split(/\r?\n/).map(s => s.trim()).filter(Boolean).map((line, i) => ({ id: `row_${i + 1}`, title: line.split('|')[0] }))
+                : (typeof data.options === 'string' ? data.options.split(/[\r\n,]+/) : (data.options ?? [])).map(s => String(s).trim()).filter(Boolean).map((title, i) => ({ id: `row_${i + 1}`, title }))))
+        : [];
 
     const hasLabel = label && label !== defLabel;
     const summary = hasLabel ? label : (configured ? summarizeConfig(data, t) : '');
@@ -226,7 +238,25 @@ function BaseNode({ id, data, selected }) {
             </div>
 
             {/* Handles */}
-            {isCondition ? (
+            {isInteractiveBrancher ? (
+                <>
+                    {brancherOptions.map((opt, i) => (
+                        <div key={opt.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '0 12px 4px', fontSize: 9, fontWeight: 600, color: '#7c3aed' }}>
+                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 150 }}>{opt.title}</span>
+                        </div>
+                    ))}
+                    {brancherOptions.map((opt, i) => (
+                        <Handle
+                            key={`h-${opt.id}`}
+                            type="source"
+                            id={opt.id}
+                            position={Position.Bottom}
+                            style={{ left: `${((i + 1) * 100) / (brancherOptions.length + 1)}%`, background: '#fff', width: 9, height: 9, border: '2px solid #7c3aed' }}
+                        />
+                    ))}
+                    <Handle type="source" id="default" position={Position.Bottom} style={{ left: '96%', background: '#fff', width: 9, height: 9, border: `2px solid ${defColor}` }} />
+                </>
+            ) : isCondition ? (
                 <>
                     <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0 12px 7px', fontSize: 9, fontWeight: 600 }}>
                         <span style={{ color: '#10b981' }}>✓ {t('common.yes')}</span>
@@ -680,7 +710,48 @@ function TemplateFields({ d, set }) {
                     <textarea className={textareaCls} rows={3} value={typeof d.variables === 'string' ? d.variables : ''} onChange={e => set('variables', e.target.value)} placeholder={t('automation.placeholder_template_vars')} />
                 </Field>
             )}
+
+            <TemplateButtonsEditor d={d} set={set} />
         </>
+    );
+}
+
+/* Up to 3 buttons attached to a template: quick replies, URL or phone CTA. */
+function TemplateButtonsEditor({ d, set }) {
+    const { t } = useTranslation();
+    const buttons = Array.isArray(d.buttons) ? d.buttons : [];
+    const update = (i, patch) => set('buttons', buttons.map((b, idx) => (idx === i ? { ...b, ...patch } : b)));
+    const remove = (i) => set('buttons', buttons.filter((_, idx) => idx !== i));
+    const add = () => set('buttons', [...buttons, { type: 'quick_reply', text: '' }]);
+
+    return (
+        <div>
+            <label className={labelCls}>{t('automation.template_buttons')}</label>
+            {buttons.map((b, i) => (
+                <div key={i} style={{ display: 'flex', gap: 4, marginBottom: 4, alignItems: 'center' }}>
+                    <select className={selectCls} style={{ width: 92, flexShrink: 0 }} value={b.type ?? 'quick_reply'} onChange={e => update(i, { type: e.target.value })}>
+                        <option value="quick_reply">{t('automation.tpl_btn_quick_reply')}</option>
+                        <option value="url">{t('automation.tpl_btn_url')}</option>
+                        <option value="phone">{t('automation.tpl_btn_phone')}</option>
+                    </select>
+                    {(b.type ?? 'quick_reply') === 'quick_reply' && (
+                        <input className={inputCls} style={{ flex: 1 }} value={b.text ?? ''} onChange={e => update(i, { text: e.target.value })} maxLength={25} placeholder={t('automation.tpl_btn_text_placeholder')} />
+                    )}
+                    {b.type === 'url' && (
+                        <input className={inputCls} style={{ flex: 1 }} value={b.url ?? ''} onChange={e => update(i, { url: e.target.value })} placeholder="https://..." />
+                    )}
+                    {b.type === 'phone' && (
+                        <input className={inputCls} style={{ flex: 1 }} value={b.phone ?? ''} onChange={e => update(i, { phone: e.target.value })} placeholder={t('automation.tpl_btn_phone_placeholder')} />
+                    )}
+                    <button type="button" onClick={() => remove(i)} title={t('common.delete')} style={{ flexShrink: 0, color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer', padding: 2, fontWeight: 700 }}>✕</button>
+                </div>
+            ))}
+            {buttons.length < 3 && (
+                <button type="button" onClick={add} style={{ fontSize: 10, color: '#4f46e5', background: '#eef2ff', border: '1px dashed #c7d2fe', borderRadius: 6, padding: '4px 8px', cursor: 'pointer' }}>
+                    + {t('automation.tpl_btn_add')}
+                </button>
+            )}
+        </div>
     );
 }
 
@@ -784,6 +855,30 @@ const addBtnStyle = {
     fontWeight: 600, color: '#475569', background: '#f8fafc', cursor: 'pointer',
 };
 
+/* Shared toggle: after sending this message, wait for the contact's
+   button/row tap and branch per option (edge sourceHandle = option id). */
+function WaitForChoiceToggle({ d, set, varName = 'choice' }) {
+    const { t } = useTranslation();
+    return (
+        <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, background: '#f5f3ff', border: '1px solid #ddd6fe', borderRadius: 8, padding: '8px 10px', cursor: 'pointer' }}>
+            <input
+                type="checkbox"
+                checked={Boolean(d.wait_for_choice)}
+                onChange={e => set('wait_for_choice', e.target.checked)}
+                style={{ marginTop: 2 }}
+            />
+            <span style={{ fontSize: 10.5, lineHeight: 1.4, color: '#5b21b6' }}>
+                {t('automation.wait_for_choice')}
+                {d.wait_for_choice ? (
+                    <span style={{ display: 'block', color: '#7c3aed', marginTop: 2 }}>
+                        {t('automation.wait_for_choice_hint', { var: `{{context.${d.variable || varName}}}` })}
+                    </span>
+                ) : null}
+            </span>
+        </label>
+    );
+}
+
 function QuickRepliesFields({ d, set }) {
     const { t } = useTranslation();
     const buttons = Array.isArray(d.buttons) ? d.buttons : ['', '', ''];
@@ -802,6 +897,7 @@ function QuickRepliesFields({ d, set }) {
                     <input className={inputCls} maxLength={20} value={buttons[i] ?? ''} onChange={e => setBtn(i, e.target.value)} placeholder={i === 0 ? t('automation.placeholder_button_required') : t('automation.placeholder_button_optional')} />
                 </Field>
             ))}
+            <WaitForChoiceToggle d={d} set={set} />
         </>
     );
 }
@@ -822,6 +918,7 @@ function ListMessageFields({ d, set }) {
             <Field label={t('automation.field_list_rows_required')}>
                 <textarea className={textareaCls} rows={4} value={d.rows ?? ''} onChange={e => set('rows', e.target.value)} placeholder={t('automation.placeholder_list_rows')} />
             </Field>
+            <WaitForChoiceToggle d={d} set={set} />
         </>
     );
 }
@@ -1084,6 +1181,7 @@ function PollFields({ d, set }) {
             <Field label={t('automation.field_poll_options_required')}>
                 <textarea className={textareaCls} rows={4} value={d.options ?? ''} onChange={e => set('options', e.target.value)} placeholder={t('automation.placeholder_poll_options')} />
             </Field>
+            <WaitForChoiceToggle d={d} set={set} varName="vote" />
             <p style={{ fontSize: 10, color: '#64748b' }}>{t('automation.poll_hint')}</p>
         </>
     );

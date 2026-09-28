@@ -3702,6 +3702,8 @@
     "op_not_contains": "शामिल नहीं है",
     "op_exists": "मौजूद है",
     "op_not_exists": "मौजूद नहीं है",
+    "op_gt": "से बड़ा (संख्या)",
+    "op_lt": "से छोटा (संख्या)",
     "update_field_phone": "फ़ोन",
     "update_field_notes": "नोट्स",
     "click_to_configure": "कॉन्फ़िगर करने के लिए क्लिक करें…",
@@ -3863,6 +3865,8 @@
     "node_send_media": "Send Media",
     "node_send_sequence": "Send Sequence",
     "node_quick_replies": "Quick Replies",
+    "wait_for_choice": "ग्राहक की पसंद का इंतज़ार करें और हर विकल्प के अनुसार शाखा बनाएं",
+    "wait_for_choice_hint": "उसका चयन मिलान पथ चुनता है; मान {{var}} में सहेजा जाता है",
     "node_list_message": "List Message",
     "node_ask_question": "Ask Question",
     "node_run_subflow": "Run Sub-flow",
@@ -3899,7 +3903,14 @@
     "field_media_required": "Media (upload or URL) *",
     "template_not_approved": "This template is {{status}} — only APPROVED templates are delivered by WhatsApp.",
     "template_var_n": "Variable {{n}}",
-    "template_var_placeholder": "Value for {{n}} (tokens allowed)"
+    "template_var_placeholder": "Value for {{n}} (tokens allowed)",
+    "template_buttons": "टेम्पलेट बटन (वैकल्पिक)",
+    "tpl_btn_quick_reply": "क्विक रिप्लाई",
+    "tpl_btn_url": "URL बटन",
+    "tpl_btn_phone": "कॉल बटन",
+    "tpl_btn_text_placeholder": "बटन टेक्स्ट",
+    "tpl_btn_phone_placeholder": "फ़ोन नंबर",
+    "tpl_btn_add": "बटन जोड़ें"
   },
   "ai": {
     "chatbots_title": "चैटबॉट",

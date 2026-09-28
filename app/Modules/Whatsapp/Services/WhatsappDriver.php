@@ -12,6 +12,7 @@ use App\Modules\Shared\Models\Contact;
 use App\Modules\Shared\Models\Conversation;
 use App\Modules\Shared\Models\Message;
 use App\Modules\Shared\Services\ContactService;
+use App\Modules\Whatsapp\Models\WaFlowResponse;
 use App\Modules\Whatsapp\Models\WhatsappPhoneNumber;
 use App\Modules\Whatsapp\Models\WhatsappTemplate;
 use App\Services\WebhookIdempotencyService;
@@ -56,6 +57,7 @@ class WhatsappDriver implements ChannelDriverInterface
         $resp = match ($message->type) {
             'template' => $client->sendTemplate($phone, $payload['template']['name'] ?? '', $payload['template']['language'] ?? 'en', $payload['template']['components'] ?? []),
             'interactive' => $client->sendInteractive($phone, $payload['interactive'] ?? []),
+            'poll' => $client->sendPoll($phone, (string) ($payload['poll']['question'] ?? $message->body ?? ''), array_column($payload['poll']['options'] ?? [], 'text')),
             'image' => $client->sendMedia($phone, 'image', $payload['media_id'] ?? '', $payload['caption'] ?? null, null, $payload['link'] ?? null),
             'video' => $client->sendMedia($phone, 'video', $payload['media_id'] ?? '', $payload['caption'] ?? null, null, $payload['link'] ?? null),
             'document' => $client->sendMedia($phone, 'document', $payload['media_id'] ?? '', $payload['caption'] ?? null, $payload['filename'] ?? null, $payload['link'] ?? null),
@@ -425,7 +427,7 @@ class WhatsappDriver implements ChannelDriverInterface
         }
 
         $allowedTypes = ['text', 'template', 'media', 'interactive', 'reaction', 'image', 'video',
-            'document', 'audio', 'location', 'contacts', 'sticker', 'order', 'poll', 'event', 'unsupported'];
+            'document', 'audio', 'location', 'contacts', 'sticker', 'order', 'poll', 'event', 'button', 'unsupported'];
 
         $message = Message::create([
             'conversation_id' => $conversation->id,
@@ -463,6 +465,10 @@ class WhatsappDriver implements ChannelDriverInterface
 
             // Fire typed event for automations / AI
             MessageReceived::dispatch($message);
+
+            // WhatsApp Flow completed → store the structured response and fire
+            // FormSubmitted so form.submitted automations can act on the data.
+            $this->processFlowResponse($message, $interactive, $conversation);
         }
 
         \App\Services\MetaLogger::log('[Inbox Inbound Message Saved]', [
@@ -476,6 +482,49 @@ class WhatsappDriver implements ChannelDriverInterface
         ]);
 
         return $message;
+    }
+
+    /**
+     * A WhatsApp Flow completed — the Cloud API delivers the submission as an
+     * interactive `nfm_reply` (flow name + JSON response payload). Store it
+     * structured (wa_flow_responses) and fire FormSubmitted so the
+     * `form.submitted` automation trigger can react to the submitted data.
+     */
+    private function processFlowResponse(Message $message, array $interactive, Conversation $conversation): void
+    {
+        $nfm = $interactive['nfm_reply'] ?? null;
+        if (! is_array($nfm)) {
+            return;
+        }
+
+        $responseJson = (string) ($nfm['response_json'] ?? '');
+        $responses = [];
+        if ($responseJson !== '') {
+            $decoded = json_decode($responseJson, true);
+            $responses = is_array($decoded) ? $decoded : [];
+        }
+
+        try {
+            WaFlowResponse::create([
+                'workspace_id' => $conversation->workspace_id,
+                'contact_id' => $conversation->contact_id,
+                'conversation_id' => $conversation->id,
+                'message_id' => $message->id,
+                'flow_name' => $nfm['name'] ?? null,
+                'flow_token' => $nfm['flow_token'] ?? null,
+                'responses' => $responses,
+                'raw' => $nfm,
+            ]);
+
+            \App\Events\FormSubmitted::dispatch(
+                $conversation->contact,
+                $conversation->id,
+                $responses,
+            );
+        } catch (\Throwable $e) {
+            // Storage must never break inbound message processing.
+            Log::warning('wa_flow_response.store_failed', ['error' => $e->getMessage()]);
+        }
     }
 
     private function processStatusUpdate(array $status): void

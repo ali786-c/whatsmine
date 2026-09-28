@@ -3041,6 +3041,8 @@
     "op_not_contains": "does not contain",
     "op_exists": "exists",
     "op_not_exists": "does not exist",
+    "op_gt": "より大きい（数値）",
+    "op_lt": "より小さい（数値）",
     "update_field_phone": "Phone",
     "update_field_notes": "Notes",
     "click_to_configure": "Click to configure…",
@@ -3111,6 +3113,8 @@
     "node_send_media": "Send Media",
     "node_send_sequence": "Send Sequence",
     "node_quick_replies": "Quick Replies",
+    "wait_for_choice": "顧客の選択を待ち、選択肢ごとに分岐",
+    "wait_for_choice_hint": "タップされた選択肢に応じたパスに進みます。値は{{var}}に保存されます",
     "node_list_message": "List Message",
     "node_ask_question": "Ask Question",
     "node_run_subflow": "Run Sub-flow",
@@ -3245,7 +3249,14 @@
     "category_${cat}": "Category ${Cat}",
     "status_${automation": {
       "status}": "Status}"
-    }
+    },
+    "template_buttons": "テンプレートボタン（任意）",
+    "tpl_btn_quick_reply": "クイック返信",
+    "tpl_btn_url": "URLボタン",
+    "tpl_btn_phone": "通話ボタン",
+    "tpl_btn_text_placeholder": "ボタンテキスト",
+    "tpl_btn_phone_placeholder": "電話番号",
+    "tpl_btn_add": "ボタンを追加"
   },
   "ai": {
     "chatbots_title": "Chatbots",

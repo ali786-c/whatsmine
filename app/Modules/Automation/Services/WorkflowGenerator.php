@@ -22,6 +22,7 @@ class WorkflowGenerator
         'add_tag', 'remove_tag', 'update_contact', 'assign_agent', 'add_to_campaign', 'cta_button',
         'send_location', 'send_poll', 'run_chatbot', 'book_appointment', 'google_meet', 'whatsapp_form',
         'whatsapp_catalog', 'woocommerce_product', 'shopify_product', 'google_sheets', 'google_docs',
+        'google_forms',
     ];
 
     /** Trigger types the listener understands (mirrors the builder's TRIGGER_TYPES). */
@@ -94,7 +95,7 @@ Node "data" by type:
 - send_template: { "template_name": "name", "language": "en", "variables": "one value per line" }
 - send_media: { "media_type": "image|video|document|audio", "link": "https://...", "caption": "text" }
 - send_sequence: { "steps": [ { "kind": "text", "body": "..." }, { "kind": "media", "media_type": "image", "link": "https://...", "caption": "..." } ] }
-- quick_replies: { "body": "text", "buttons": ["Yes","No","Maybe"] }  (max 3 buttons)
+- quick_replies: { "body": "text", "buttons": ["Yes","No","Maybe"] }  (max 3 buttons; add "wait_for_choice": true and "variable": "snake_case_key" to branch on the customer's tap — then connect one edge per button with "sourceHandle": "btn:1", "btn:2", ... in button order)
 - list_message: { "body": "text", "button_label": "Menu", "section_title": "Options", "rows": "Title|Description per line" }
 - ask_question: { "question": "text", "variable": "snake_case_key", "channel": "whatsapp" }
 - condition: { "field": "contact.name|contact.email|contact.phone|contact.tag|message.body|context.<key>", "operator": "equals|not_equals|contains|not_contains|exists|not_exists", "value": "text" }
@@ -109,6 +110,7 @@ Node "data" by type:
 - send_location: { "latitude": "37.42", "longitude": "-122.08", "name": "Place", "address": "Street" }
 - book_appointment / google_meet: { "summary": "text", "start": "{{context.start}}", "duration_minutes": 30 }
 - whatsapp_form: { "flow_id": "123", "body": "text", "flow_cta": "Open form" }
+- google_forms: { "form_id": "1ABc...", "title": "text" }
 
 Keep it focused: 2–6 nodes is ideal. Make every message specific and useful.
 PROMPT;

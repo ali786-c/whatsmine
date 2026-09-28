@@ -5,9 +5,12 @@ namespace App\Providers;
 use App\Events\AutomationFailed;
 use App\Events\AutomationWebhookReceived;
 use App\Events\CampaignCompleted;
+use App\Events\CampaignMessageSent;
 use App\Events\CommerceEventReceived;
 use App\Events\ContactCreated;
+use App\Events\ContactTagAdded;
 use App\Events\ConversationAssigned;
+use App\Events\FormSubmitted;
 use App\Events\MessageReceived;
 use App\Events\MessageSent;
 use App\Events\PlanChanged;
@@ -89,6 +92,9 @@ class AppServiceProvider extends ServiceProvider
         // ── AI self-learning (background, throttled) ─────────────────────────
         Event::listen(MessageSent::class, LearnFromConversationListener::class);
         Event::listen(ContactCreated::class, [AutomationTriggerListener::class, 'handleContactCreated']);
+        Event::listen(ContactTagAdded::class, [AutomationTriggerListener::class, 'handleContactTagAdded']);
+        Event::listen(CampaignMessageSent::class, [AutomationTriggerListener::class, 'handleCampaignMessageSent']);
+        Event::listen(FormSubmitted::class, [AutomationTriggerListener::class, 'handleFormSubmitted']);
         Event::listen(AutomationWebhookReceived::class, [AutomationTriggerListener::class, 'handleAutomationWebhookReceived']);
         Event::listen(CommerceEventReceived::class, [AutomationTriggerListener::class, 'handleCommerceEvent']);
 

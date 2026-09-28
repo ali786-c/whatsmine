@@ -133,7 +133,9 @@ class ContactService
 
                 $tagId = isset($row['tag_id']) ? (int) $row['tag_id'] : 0;
                 if ($tagId > 0 && ContactTag::where('workspace_id', $workspaceId)->whereKey($tagId)->exists()) {
+                    $tagName = (string) ContactTag::where('workspace_id', $workspaceId)->whereKey($tagId)->value('name');
                     $contact->tags()->syncWithoutDetaching([$tagId]);
+                    \App\Events\ContactTagAdded::dispatch($contact->refresh(), $tagName);
                 }
 
                 $segmentId = isset($row['segment_id']) ? (int) $row['segment_id'] : 0;

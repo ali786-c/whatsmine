@@ -3041,6 +3041,8 @@
     "op_not_contains": "does not contain",
     "op_exists": "exists",
     "op_not_exists": "does not exist",
+    "op_gt": "maior que (número)",
+    "op_lt": "menor que (número)",
     "update_field_phone": "Phone",
     "update_field_notes": "Notes",
     "click_to_configure": "Click to configure…",
@@ -3111,6 +3113,8 @@
     "node_send_media": "Send Media",
     "node_send_sequence": "Send Sequence",
     "node_quick_replies": "Quick Replies",
+    "wait_for_choice": "Aguardar a escolha do cliente e ramificar por opção",
+    "wait_for_choice_hint": "O toque dele escolhe o caminho correspondente; o valor é salvo em {{var}}",
     "node_list_message": "List Message",
     "node_ask_question": "Ask Question",
     "node_run_subflow": "Run Sub-flow",
@@ -3245,7 +3249,14 @@
     "category_${cat}": "Category ${Cat}",
     "status_${automation": {
       "status}": "Status}"
-    }
+    },
+    "template_buttons": "Botões de modelo (opcional)",
+    "tpl_btn_quick_reply": "Resposta rápida",
+    "tpl_btn_url": "Botão URL",
+    "tpl_btn_phone": "Botão de chamada",
+    "tpl_btn_text_placeholder": "Texto do botão",
+    "tpl_btn_phone_placeholder": "Número de telefone",
+    "tpl_btn_add": "Adicionar botão"
   },
   "ai": {
     "chatbots_title": "Chatbots",

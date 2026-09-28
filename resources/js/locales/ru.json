@@ -3041,6 +3041,8 @@
     "op_not_contains": "не содержит",
     "op_exists": "существует",
     "op_not_exists": "не существует",
+    "op_gt": "больше чем (число)",
+    "op_lt": "меньше чем (число)",
     "update_field_phone": "Телефон",
     "update_field_notes": "Заметки",
     "click_to_configure": "Нажмите, чтобы настроить…",
@@ -3111,6 +3113,8 @@
     "node_send_media": "Отправить медиа",
     "node_send_sequence": "Отправить последовательность",
     "node_quick_replies": "Быстрые ответы",
+    "wait_for_choice": "Ждать выбора клиента и ветвить по вариантам",
+    "wait_for_choice_hint": "Его касание выбирает нужный путь; значение сохраняется в {{var}}",
     "node_list_message": "Сообщение-список",
     "node_ask_question": "Задать вопрос",
     "node_run_subflow": "Запустить вложенный сценарий",
@@ -3245,7 +3249,14 @@
     "category_${cat}": "Категория ${Cat}",
     "status_${automation": {
       "status}": "Статус}"
-    }
+    },
+    "template_buttons": "Кнопки шаблона (необязательно)",
+    "tpl_btn_quick_reply": "Быстрый ответ",
+    "tpl_btn_url": "URL-кнопка",
+    "tpl_btn_phone": "Кнопка звонка",
+    "tpl_btn_text_placeholder": "Текст кнопки",
+    "tpl_btn_phone_placeholder": "Номер телефона",
+    "tpl_btn_add": "Добавить кнопку"
   },
   "ai": {
     "chatbots_title": "Чат-боты",

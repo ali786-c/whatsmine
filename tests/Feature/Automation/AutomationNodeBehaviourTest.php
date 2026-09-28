@@ -364,12 +364,17 @@ class AutomationNodeBehaviourTest extends TestCase
         $this->assertEquals('HQ', $msg->payload['location']['name']);
     }
 
-    public function test_send_poll_uses_buttons_then_list(): void
+    public function test_send_poll_native_by_default_and_interactive_when_branching(): void
     {
+        // Default: native poll message type (renders as a real poll bubble).
         $this->runSingleNode('send_poll', ['question' => 'Color?', 'options' => "Red\nBlue"]);
-        $this->assertEquals('button', $this->lastOutbound()->payload['interactive']['type']);
+        $msg = $this->lastOutbound();
+        $this->assertEquals('poll', $msg->type);
+        $this->assertEquals('Color?', $msg->payload['poll']['question']);
+        $this->assertCount(2, $msg->payload['poll']['options']);
 
-        $this->runSingleNode('send_poll', ['question' => 'Color?', 'options' => "Red\nBlue\nGreen\nPink"]);
+        // wait_for_choice: interactive list so per-option row ids drive edges.
+        $this->runSingleNode('send_poll', ['question' => 'Color?', 'options' => "Red\nBlue\nGreen\nPink", 'wait_for_choice' => true]);
         $this->assertEquals('list', $this->lastOutbound()->payload['interactive']['type']);
     }
 

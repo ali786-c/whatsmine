@@ -3601,6 +3601,8 @@
     "op_not_contains": "لا يحتوي على",
     "op_exists": "موجود",
     "op_not_exists": "غير موجود",
+    "op_gt": "أكبر من (رقم)",
+    "op_lt": "أصغر من (رقم)",
     "update_field_phone": "الهاتف",
     "update_field_notes": "ملاحظات",
     "click_to_configure": "انقر للإعداد…",
@@ -3762,6 +3764,8 @@
     "node_send_media": "Send Media",
     "node_send_sequence": "Send Sequence",
     "node_quick_replies": "Quick Replies",
+    "wait_for_choice": "انتظر اختيار العميل وتفرّع حسب كل خيار",
+    "wait_for_choice_hint": "اختياره يحدد المسار المناسب؛ وتُحفظ القيمة في {{var}}",
     "node_list_message": "List Message",
     "node_ask_question": "Ask Question",
     "node_run_subflow": "Run Sub-flow",
@@ -3798,7 +3802,14 @@
     "field_media_required": "Media (upload or URL) *",
     "template_not_approved": "This template is {{status}} — only APPROVED templates are delivered by WhatsApp.",
     "template_var_n": "Variable {{n}}",
-    "template_var_placeholder": "Value for {{n}} (tokens allowed)"
+    "template_var_placeholder": "Value for {{n}} (tokens allowed)",
+    "template_buttons": "أزرار القالب (اختياري)",
+    "tpl_btn_quick_reply": "رد سريع",
+    "tpl_btn_url": "زر URL",
+    "tpl_btn_phone": "زر اتصال",
+    "tpl_btn_text_placeholder": "نص الزر",
+    "tpl_btn_phone_placeholder": "رقم الهاتف",
+    "tpl_btn_add": "إضافة زر"
   },
   "ai": {
     "chatbots_title": "روبوتات الدردشة",

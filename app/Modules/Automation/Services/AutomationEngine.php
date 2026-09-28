@@ -2,6 +2,7 @@
 
 namespace App\Modules\Automation\Services;
 
+use App\Events\ContactTagAdded;
 use App\Events\ConversationAssigned;
 use App\Events\MessageSent;
 use App\Mail\AutomationEmail;
@@ -77,8 +78,16 @@ class AutomationEngine
      * Resume runs that are parked on an "Ask question" node, waiting for this
      * contact's next inbound message. The reply body is stored in the configured
      * context variable and the run continues from the node after the question.
+     *
+     * Interactive replies (quick-reply buttons / list rows) carry a structured
+     * choice: the webhook stores it in message payload, and the listener passes
+     * both the display text and the reply id. When the parked node was an
+     * interactive sender (quick_replies / list_message / send_poll), the reply id
+     * ALSO drives branching: an edge whose sourceHandle matches the chosen id
+     * wins over the plain sequential edge — per-option paths without a
+     * text-matching condition node.
      */
-    public function resumeAwaitingReplies(int $workspaceId, int $contactId, string $messageBody): void
+    public function resumeAwaitingReplies(int $workspaceId, int $contactId, string $messageBody, ?string $replyId = null): void
     {
         $runs = AutomationRun::where('contact_id', $contactId)
             ->where('status', 'waiting')
@@ -93,8 +102,19 @@ class AutomationEngine
 
             $var = $context['_reply_var'] ?? 'answer';
             $context[$var] = $messageBody;
-            unset($context['_awaiting_reply'], $context['_reply_var']);
+            if ($replyId !== null) {
+                $context[$var.'_id'] = $replyId;
+            }
+
+            $nodeType = $context['_awaiting_node_type'] ?? null;
+            unset($context['_awaiting_reply'], $context['_reply_var'], $context['_awaiting_node_type']);
             $run->update(['context' => $context]);
+
+            // Interactive branching: remember the chosen id so executeRun picks
+            // the matching sourceHandle edge when resuming.
+            if ($replyId !== null && in_array($nodeType, ['quick_replies', 'list_message', 'send_poll'], true)) {
+                $run->update(['resume_edge_handle' => $replyId]);
+            }
 
             dispatch(new ExecuteAutomationRunJob($run->id))->onQueue('automation');
         }
@@ -109,10 +129,15 @@ class AutomationEngine
         $edges = collect($automation->edges ?? []);
         $context = $run->context ?? [];
 
-        // If resuming after a wait, start from the node after the wait
+        // If resuming after a wait, start from the node after the wait.
+        // resume_edge_handle carries an interactive choice (button/row id): the
+        // resumed node already ran, so skip re-executing it once — the first
+        // edge lookup below picks the edge whose sourceHandle matches the choice.
+        $resumeHandle = $run->resume_edge_handle;
+        $skipFirstExecution = $resumeHandle !== null;
         if ($run->resume_node_id) {
             $currentId = $run->resume_node_id;
-            $run->update(['resume_node_id' => null]);
+            $run->update(['resume_node_id' => null, 'resume_edge_handle' => null]);
         } else {
             // Find trigger node and start from the first node after it
             $triggerNode = $nodes->first(fn ($n) => ($n['type'] ?? '') === 'trigger');
@@ -143,7 +168,14 @@ class AutomationEngine
             // can read the correct node ID when looking up outgoing edges.
             $run->update(['current_node_id' => $currentId]);
 
-            $result = $this->executeNode($node, $run, $context);
+            // Resuming on an interactive choice: the parked node already sent its
+            // message — do not execute it again, just branch from its handles.
+            if ($skipFirstExecution) {
+                $skipFirstExecution = false;
+                $result = ['status' => 'ok', 'message' => 'Resumed on interactive choice — skipped re-execution.'];
+            } else {
+                $result = $this->executeNode($node, $run, $context);
+            }
             $context = array_merge($context, $result['context_update'] ?? []);
             $run->update(['context' => $context]);
 
@@ -174,8 +206,16 @@ class AutomationEngine
             // Condition branching
             $nextEdgeLabel = $result['branch'] ?? null;
 
-            // Find next edge
-            $nextEdge = $edges->first(fn ($e) => $e['source'] === $currentId &&
+            // Find next edge — on resume after an interactive choice, an edge
+            // whose sourceHandle equals the chosen button/row id wins (per-option
+            // branch); fall back to the plain sequential edge when absent.
+            $nextEdge = null;
+            if ($resumeHandle !== null) {
+                $nextEdge = $edges->first(fn ($e) => $e['source'] === $currentId
+                    && ($e['sourceHandle'] ?? null) === $resumeHandle);
+                $resumeHandle = null; // only applies to the first resumed hop
+            }
+            $nextEdge ??= $edges->first(fn ($e) => $e['source'] === $currentId &&
                 (! isset($nextEdgeLabel) || ($e['sourceHandle'] ?? null) === $nextEdgeLabel)
             );
 
@@ -681,6 +721,7 @@ class AutomationEngine
         );
         if ($action === 'add') {
             $contact->tags()->syncWithoutDetaching([$tag->id]);
+            ContactTagAdded::dispatch($contact, $tagName);
         } else {
             $contact->tags()->detach($tag->id);
         }
@@ -874,6 +915,25 @@ class AutomationEngine
             $components[] = ['type' => 'body', 'parameters' => $params];
         }
 
+        // Template buttons: URL / phone / quick-reply buttons attached to the
+        // template. Quick replies get deterministic ids so per-option branching
+        // can resume on them (listener maps msg.button.payload → reply id).
+        $buttons = array_values(array_filter(is_array($data['buttons'] ?? null) ? $data['buttons'] : [], fn ($b) => is_array($b) || is_string($b)));
+        if (! empty($buttons)) {
+            foreach (array_slice($buttons, 0, 3) as $i => $btn) {
+                $btn = is_string($btn) ? ['type' => 'quick_reply', 'text' => $btn] : $btn;
+                $btnType = $btn['type'] ?? 'quick_reply';
+                $idx = $i; // Meta button component index is 0-based
+                if ($btnType === 'url' && ! empty($btn['url'])) {
+                    $components[] = ['type' => 'button', 'sub_type' => 'url', 'index' => strval($idx), 'parameters' => [['type' => 'text', 'text' => mb_substr($this->renderTokens((string) $btn['url'], $contact, $context), 0, 2000)]]];
+                } elseif ($btnType === 'phone' && ! empty($btn['phone'])) {
+                    $components[] = ['type' => 'button', 'sub_type' => 'phone_number', 'index' => strval($idx), 'parameters' => [['type' => 'text', 'text' => preg_replace('/\D/', '', (string) $btn['phone']) ?: '0']]]; // phpcs:ignore
+                } elseif ($btnType === 'quick_reply' && ! empty($btn['text'])) {
+                    $components[] = ['type' => 'button', 'sub_type' => 'quick_reply', 'index' => strval($idx), 'parameters' => [['type' => 'payload', 'payload' => 'tmpl_btn_'.($i + 1)]]];
+                }
+            }
+        }
+
         return $this->sendWhatsappPayload($run, 'template', null, ['template' => [
             'name' => $name,
             'language' => $data['language'] ?? 'en',
@@ -956,7 +1016,17 @@ class AutomationEngine
             return ['status' => 'error', 'message' => 'Body and at least one button are required.'];
         }
 
-        return $this->sendWhatsappPayload($run, 'interactive', $body, ['interactive' => $this->buttonInteractive($body, $buttons)]);
+        $send = $this->sendWhatsappPayload($run, 'interactive', $body, ['interactive' => $this->buttonInteractive($body, $buttons)]);
+        if (($send['status'] ?? '') !== 'ok') {
+            return $send;
+        }
+
+        // wait_for_choice: park the run so the tapped button id branches the flow.
+        if (! empty($data['wait_for_choice'])) {
+            return $this->parkAwaitingInteractiveChoice($run, 'quick_replies', ($data['variable'] ?? '') ?: 'choice');
+        }
+
+        return $send;
     }
 
     private function executeListMessage(array $data, AutomationRun $run, array $context): array
@@ -973,7 +1043,17 @@ class AutomationEngine
 
         $interactive = $this->listInteractive($body, (string) ($data['button_label'] ?? 'Menu'), (string) ($data['section_title'] ?? 'Options'), $rows);
 
-        return $this->sendWhatsappPayload($run, 'interactive', $body, ['interactive' => $interactive]);
+        $send = $this->sendWhatsappPayload($run, 'interactive', $body, ['interactive' => $interactive]);
+        if (($send['status'] ?? '') !== 'ok') {
+            return $send;
+        }
+
+        // wait_for_choice: park the run so the chosen row id branches the flow.
+        if (! empty($data['wait_for_choice'])) {
+            return $this->parkAwaitingInteractiveChoice($run, 'list_message', ($data['variable'] ?? '') ?: 'choice');
+        }
+
+        return $send;
     }
 
     // ─── LISTEN nodes ─────────────────────────────────────────────────────────
@@ -1005,6 +1085,28 @@ class AutomationEngine
             'status' => 'waiting',
             'message' => "Asked question — waiting for reply → {{context.{$var}}}",
             'context_update' => ['_awaiting_reply' => true, '_reply_var' => $var],
+        ];
+    }
+
+    /**
+     * Park a run right after sending an interactive message (quick replies /
+     * list / poll) so the contact's tap — captured as a structured reply id —
+     * both resumes the run AND drives per-option branching via resume_edge_handle.
+     */
+    private function parkAwaitingInteractiveChoice(AutomationRun $run, string $nodeType, string $var): array
+    {
+        // Resume from the interactive node ITSELF (already executed) — the first
+        // resumed hop must pick among ITS per-option edges via resume_edge_handle.
+        $run->update(['status' => 'waiting', 'resume_node_id' => $run->current_node_id]);
+
+        return [
+            'status' => 'waiting',
+            'message' => "Waiting for button/list choice → {{context.{$var}}} (per-option edges: choice id)",
+            'context_update' => [
+                '_awaiting_reply' => true,
+                '_reply_var' => $var,
+                '_awaiting_node_type' => $nodeType,
+            ],
         ];
     }
 
@@ -1137,12 +1239,27 @@ class AutomationEngine
             return ['status' => 'error', 'message' => 'Question and options are required.'];
         }
 
-        // The Cloud API has no native poll — emulate with reply buttons (≤3) or an interactive list.
-        $interactive = count($options) <= 3
-            ? $this->buttonInteractive($question, $options)
-            : $this->listInteractive($question, (string) ($data['button_label'] ?? 'Vote'), 'Options', array_map(fn ($o) => ['title' => $o, 'description' => ''], $options));
+        // Branching (wait_for_choice) needs per-option ids to drive edges, so it
+        // uses interactive buttons/list. Otherwise send a NATIVE poll — votes
+        // arrive as `vote` messages and render as real poll bubbles in WhatsApp.
+        if (empty($data['wait_for_choice'])) {
+            return $this->sendWhatsappPayload($run, 'poll', $question, [
+                'poll' => [
+                    'question' => $question,
+                    'options' => array_map(fn ($o) => ['text' => $o], array_slice($options, 0, 12)),
+                ],
+            ]);
+        }
 
-        return $this->sendWhatsappPayload($run, 'interactive', $question, ['interactive' => $interactive]);
+        $interactive = $this->listInteractive($question, (string) ($data['button_label'] ?? 'Vote'), 'Options', array_map(fn ($o) => ['title' => $o, 'description' => ''], $options));
+
+        $send = $this->sendWhatsappPayload($run, 'interactive', $question, ['interactive' => $interactive]);
+        if (($send['status'] ?? '') !== 'ok') {
+            return $send;
+        }
+
+        // wait_for_choice: park the run so the tapped option id branches the flow.
+        return $this->parkAwaitingInteractiveChoice($run, 'send_poll', ($data['variable'] ?? '') ?: 'vote');
     }
 
     private function executeRunChatbot(array $data, AutomationRun $run, array $context): array

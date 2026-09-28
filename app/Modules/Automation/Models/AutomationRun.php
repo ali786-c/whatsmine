@@ -8,7 +8,7 @@ class AutomationRun extends Model
 {
     protected $table = 'automation_runs';
 
-    protected $fillable = ['automation_id', 'contact_id', 'status', 'context', 'current_node_id', 'resume_node_id', 'error', 'started_at', 'completed_at'];
+    protected $fillable = ['automation_id', 'contact_id', 'status', 'context', 'current_node_id', 'resume_node_id', 'resume_edge_handle', 'error', 'started_at', 'completed_at'];
 
     protected function casts(): array
     {

@@ -3041,6 +3041,8 @@
     "op_not_contains": "does not contain",
     "op_exists": "exists",
     "op_not_exists": "does not exist",
+    "op_gt": "大于（数字）",
+    "op_lt": "小于（数字）",
     "update_field_phone": "Phone",
     "update_field_notes": "Notes",
     "click_to_configure": "Click to configure…",
@@ -3111,6 +3113,8 @@
     "node_send_media": "Send Media",
     "node_send_sequence": "Send Sequence",
     "node_quick_replies": "Quick Replies",
+    "wait_for_choice": "等待客户选择并按选项分支",
+    "wait_for_choice_hint": "客户点击的选项决定对应路径；值保存到 {{var}}",
     "node_list_message": "List Message",
     "node_ask_question": "Ask Question",
     "node_run_subflow": "Run Sub-flow",
@@ -3245,7 +3249,14 @@
     "category_${cat}": "Category ${Cat}",
     "status_${automation": {
       "status}": "Status}"
-    }
+    },
+    "template_buttons": "模板按钮（可选）",
+    "tpl_btn_quick_reply": "快速回复",
+    "tpl_btn_url": "URL按钮",
+    "tpl_btn_phone": "通话按钮",
+    "tpl_btn_text_placeholder": "按钮文字",
+    "tpl_btn_phone_placeholder": "电话号码",
+    "tpl_btn_add": "添加按钮"
   },
   "ai": {
     "chatbots_title": "Chatbots",

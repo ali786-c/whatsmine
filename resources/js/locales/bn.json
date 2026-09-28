@@ -3335,6 +3335,8 @@
     "op_not_contains": "ধারণ করে না",
     "op_exists": "বিদ্যমান",
     "op_not_exists": "বিদ্যমান নয়",
+    "op_gt": "এর চেয়ে বড় (সংখ্যা)",
+    "op_lt": "এর চেয়ে ছোট (সংখ্যা)",
     "update_field_phone": "ফোন",
     "update_field_notes": "নোট",
     "click_to_configure": "কনফিগার করতে ক্লিক করুন…",
@@ -3496,6 +3498,8 @@
     "node_send_media": "Send Media",
     "node_send_sequence": "Send Sequence",
     "node_quick_replies": "Quick Replies",
+    "wait_for_choice": "গ্রাহকের পছন্দের জন্য অপেক্ষা করুন এবং প্রতিটি বিকল্প অনুযায়ী শাখা তৈরি করুন",
+    "wait_for_choice_hint": "তার নির্বাচন মিলিত পথ বেছে নেয়; মান {{var}}-এ সংরক্ষিত হয়",
     "node_list_message": "List Message",
     "node_ask_question": "Ask Question",
     "node_run_subflow": "Run Sub-flow",
@@ -3532,7 +3536,14 @@
     "field_media_required": "Media (upload or URL) *",
     "template_not_approved": "This template is {{status}} — only APPROVED templates are delivered by WhatsApp.",
     "template_var_n": "Variable {{n}}",
-    "template_var_placeholder": "Value for {{n}} (tokens allowed)"
+    "template_var_placeholder": "Value for {{n}} (tokens allowed)",
+    "template_buttons": "টেমপ্লেট বোতাম (ঐচ্ছিক)",
+    "tpl_btn_quick_reply": "কুইক রিপ্লাই",
+    "tpl_btn_url": "URL বোতাম",
+    "tpl_btn_phone": "কল বোতাম",
+    "tpl_btn_text_placeholder": "বোতামের টেক্সট",
+    "tpl_btn_phone_placeholder": "ফোন নম্বর",
+    "tpl_btn_add": "বোতাম যোগ করুন"
   },
   "ai": {
     "chatbots_title": "চ্যাটবট",

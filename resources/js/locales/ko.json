@@ -3041,6 +3041,8 @@
     "op_not_contains": "does not contain",
     "op_exists": "exists",
     "op_not_exists": "does not exist",
+    "op_gt": "보다 큼 (숫자)",
+    "op_lt": "보다 작음 (숫자)",
     "update_field_phone": "Phone",
     "update_field_notes": "Notes",
     "click_to_configure": "Click to configure…",
@@ -3111,6 +3113,8 @@
     "node_send_media": "Send Media",
     "node_send_sequence": "Send Sequence",
     "node_quick_replies": "Quick Replies",
+    "wait_for_choice": "고객 선택 대기 후 옵션별 분기",
+    "wait_for_choice_hint": "탭한 선택지에 따라 경로가 결정되고 값은 {{var}}에 저장됩니다",
     "node_list_message": "List Message",
     "node_ask_question": "Ask Question",
     "node_run_subflow": "Run Sub-flow",
@@ -3245,7 +3249,14 @@
     "category_${cat}": "Category ${Cat}",
     "status_${automation": {
       "status}": "Status}"
-    }
+    },
+    "template_buttons": "템플릿 버튼 (선택)",
+    "tpl_btn_quick_reply": "빠른 답장",
+    "tpl_btn_url": "URL 버튼",
+    "tpl_btn_phone": "통화 버튼",
+    "tpl_btn_text_placeholder": "버튼 텍스트",
+    "tpl_btn_phone_placeholder": "전화번호",
+    "tpl_btn_add": "버튼 추가"
   },
   "ai": {
     "chatbots_title": "Chatbots",

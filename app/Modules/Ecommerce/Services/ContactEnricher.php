@@ -80,6 +80,7 @@ class ContactEnricher
             ['color' => '#16a34a'],
         );
         $contact->tags()->syncWithoutDetaching([$tag->id]);
+        \App\Events\ContactTagAdded::dispatch($contact, $name);
     }
 
     private function platformLabel(string $platform): string

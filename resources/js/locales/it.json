@@ -3041,6 +3041,8 @@
     "op_not_contains": "does not contain",
     "op_exists": "exists",
     "op_not_exists": "does not exist",
+    "op_gt": "maggiore di (numero)",
+    "op_lt": "minore di (numero)",
     "update_field_phone": "Phone",
     "update_field_notes": "Notes",
     "click_to_configure": "Click to configure…",
@@ -3111,6 +3113,8 @@
     "node_send_media": "Send Media",
     "node_send_sequence": "Send Sequence",
     "node_quick_replies": "Quick Replies",
+    "wait_for_choice": "Attendi la scelta del cliente e ramifica per opzione",
+    "wait_for_choice_hint": "Il suo tocco sceglie il percorso corrispondente; il valore è salvato in {{var}}",
     "node_list_message": "List Message",
     "node_ask_question": "Ask Question",
     "node_run_subflow": "Run Sub-flow",
@@ -3245,7 +3249,14 @@
     "category_${cat}": "Category ${Cat}",
     "status_${automation": {
       "status}": "Status}"
-    }
+    },
+    "template_buttons": "Pulsanti modello (opzionale)",
+    "tpl_btn_quick_reply": "Risposta rapida",
+    "tpl_btn_url": "Pulsante URL",
+    "tpl_btn_phone": "Pulsante chiamata",
+    "tpl_btn_text_placeholder": "Testo del pulsante",
+    "tpl_btn_phone_placeholder": "Numero di telefono",
+    "tpl_btn_add": "Aggiungi pulsante"
   },
   "ai": {
     "chatbots_title": "Chatbots",

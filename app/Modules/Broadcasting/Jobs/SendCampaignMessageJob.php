@@ -103,6 +103,10 @@ class SendCampaignMessageJob implements ShouldQueue
             // provider_message_id) can update the inbox row too.
             $this->syncToInbox($campaign, $contact, $sent);
 
+            // Per-recipient trigger: lets `campaign.sent` automations react to a
+            // successful send (e.g. "campaign bhejo → 5 min wait → follow-up").
+            \App\Events\CampaignMessageSent::dispatch($campaign, $contact);
+
             UsageMeter::track($campaign->workspace_id, 'messages_'.$campaign->channel);
             if ($campaign->channel === 'whatsapp') {
                 UsageMeter::track($campaign->workspace_id, 'whatsapp_messages');

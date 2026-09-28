@@ -410,6 +410,26 @@ class CloudApiClient
         ]);
     }
 
+    /**
+     * Send a native WhatsApp poll (max 12 options, single-select by default).
+     * Votes arrive as a `poll` / `vote` message in the webhook.
+     */
+    public function sendPoll(string $to, string $question, array $options): Response
+    {
+        return $this->post("/{$this->phoneNumberId}/messages", [
+            'messaging_product' => 'whatsapp',
+            'to' => $to,
+            'type' => 'poll',
+            'poll' => [
+                'question' => mb_substr(trim($question), 0, 255),
+                'options' => array_values(array_map(
+                    fn ($o) => ['text' => mb_substr(trim((string) $o), 0, 60)],
+                    array_slice(array_values($options), 0, 12)
+                )),
+            ],
+        ]);
+    }
+
     /** Verify that the access token and WABA are valid. */
     public function verifyCreds(string $wabaId): bool
     {

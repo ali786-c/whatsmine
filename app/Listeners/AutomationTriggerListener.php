@@ -4,8 +4,11 @@ namespace App\Listeners;
 
 use App\Events\AutomationWebhookReceived;
 use App\Events\CampaignCompleted;
+use App\Events\CampaignMessageSent;
 use App\Events\CommerceEventReceived;
 use App\Events\ContactCreated;
+use App\Events\ContactTagAdded;
+use App\Events\FormSubmitted;
 use App\Events\MessageReceived;
 use App\Modules\Automation\Jobs\ExecuteAutomationRunJob;
 use App\Modules\Automation\Models\Automation;
@@ -27,8 +30,21 @@ class AutomationTriggerListener
 
         $messageBody = $event->message->body ?? '';
 
+        // Structured interactive choice: quick-reply buttons / list rows carry a
+        // reply id in the webhook payload (button_reply.id / list_reply.id) —
+        // used for per-option branching when a run parks with wait_for_choice.
+        $interactive = is_array($event->message->payload['interactive'] ?? null)
+            ? $event->message->payload['interactive']
+            : [];
+        $replyId = ($interactive['button_reply']['id'] ?? null)
+            ?? ($interactive['list_reply']['id'] ?? null)
+            // Template quick replies arrive as msg.button with the developer id in payload.
+            ?? (is_array($event->message->payload['button'] ?? null)
+                ? ($event->message->payload['button']['payload'] ?? null)
+                : null);
+
         // Resume any runs parked on an "Ask question" node awaiting this contact's reply.
-        $this->engine->resumeAwaitingReplies($workspaceId, $contactId, $messageBody);
+        $this->engine->resumeAwaitingReplies($workspaceId, $contactId, $messageBody, $replyId !== null ? (string) $replyId : null);
 
         $this->fireWithConfig('message.received', $workspaceId, $contactId, [
             'message_id' => $event->message->id,
@@ -45,6 +61,38 @@ class AutomationTriggerListener
     public function handleCampaignCompleted(CampaignCompleted $event): void
     {
         // No per-contact trigger for campaign completion; skip.
+        // (Per-recipient `campaign.sent` fires from CampaignMessageSent below.)
+    }
+
+    /** A tag was attached to a contact → `contact.tag_added` trigger. */
+    public function handleContactTagAdded(ContactTagAdded $event): void
+    {
+        $this->fire('contact.tag_added', $event->contact->workspace_id, $event->contact->id, [
+            'tag_name' => $event->tagName,
+        ]);
+    }
+
+    /** A campaign message reached one recipient → `campaign.sent` trigger. */
+    public function handleCampaignMessageSent(CampaignMessageSent $event): void
+    {
+        $this->fire('campaign.sent', $event->campaign->workspace_id, $event->contact->id, [
+            'campaign_id' => $event->campaign->id,
+            'campaign_name' => $event->campaign->name,
+            'campaign_channel' => $event->campaign->channel,
+        ]);
+    }
+
+    /** A WhatsApp Flow / form was submitted → `form.submitted` trigger. */
+    public function handleFormSubmitted(FormSubmitted $event): void
+    {
+        $workspaceId = $event->contact?->workspace_id;
+        if (! $workspaceId || ! $event->contact?->id) {
+            return;
+        }
+
+        $this->fire('form.submitted', $workspaceId, $event->contact->id, [
+            'form_responses' => $event->responses,
+        ]);
     }
 
     public function handleCommerceEvent(CommerceEventReceived $event): void
