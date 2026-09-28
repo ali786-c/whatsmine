@@ -375,6 +375,41 @@ class EmojiEngine
     }
 
     /**
+     * Engine-level emoji clamp for OUTGOING replies — the human-like behaviour
+     * guard. Model prompts alone cannot be trusted (weak local models decorate
+     * every sentence), so after generation we deterministically cap emojis:
+     * a reply that already carries no emoji is returned untouched; one that
+     * over-decorates is trimmed to a single trailing-safe emoji.
+     *
+     * Rules:
+     *  - 0 emoji  → untouched (the desired default)
+     *  - 1 emoji  → untouched
+     *  - 2+ emoji → keep only the LAST one (usually sentence-final), drop the rest
+     *
+     * @param  string  $reply  raw model output
+     * @return string reply with at most one emoji
+     */
+    public function clampReply(string $reply): string
+    {
+        preg_match_all(self::EMOJI_REGEX, $reply, $matches);
+
+        if (count($matches[0]) <= 1) {
+            return $reply;
+        }
+
+        $lastEmoji = $matches[0][count($matches[0]) - 1];
+        $stripped = preg_replace(self::EMOJI_REGEX.'u', '', $reply) ?? $reply;
+
+        // Re-attach the single survivor right after the last non-space content.
+        $trimmed = rtrim($stripped);
+        if ($trimmed === '') {
+            return $lastEmoji;
+        }
+
+        return $trimmed.$lastEmoji;
+    }
+
+    /**
      * Compact meta block for run diagnostics / eval.
      *
      * @param  array<string, mixed>  $analysis

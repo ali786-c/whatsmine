@@ -121,6 +121,58 @@ class ChatbotRunnerTest extends TestCase
         $this->assertStringContainsString('refund policy is 30 days', (string) $capturedUserMessage);
     }
 
+    public function test_replies_are_clamped_to_at_most_one_emoji(): void
+    {
+        $data = $this->createWorkspaceContext();
+        $workspace = $data['workspace'];
+
+        AiProviderConfig::create([
+            'workspace_id' => $workspace->id,
+            'provider' => 'openai',
+            'credentials' => ['api_key' => 'sk-test'],
+            'default_model_chat' => 'gpt-4o-mini',
+            'default_model_embed' => 'text-embedding-3-small',
+            'enabled' => true,
+        ]);
+
+        $chatbot = AiChatbot::create([
+            'workspace_id' => $workspace->id,
+            'name' => 'Support Bot',
+            'system_prompt' => 'You are a helpful assistant.',
+            'enabled' => true,
+        ]);
+
+        // Single fake for both calls (re-faking mid-test is unreliable):
+        // 1st call ('hi') → the model decorates every sentence, so the
+        // engine-level clamp in cleanReply() must cap it at one emoji.
+        // 2nd call ('order status?') → already clean, must pass through untouched.
+        Http::fake([
+            'api.openai.com/v1/chat/completions' => function ($request) {
+                $body = json_decode($request->body(), true);
+                $lastUser = collect($body['messages'] ?? [])->where('role', 'user')->pluck('content')->last() ?? '';
+                $content = str_contains($lastUser, 'order status')
+                    ? 'Ji bilkul, order confirm ho gaya hai.'
+                    : '😊 Hello! 😊 Welcome to our store 😊 How can I help you today?';
+
+                return Http::response([
+                    'choices' => [['message' => ['content' => $content]]],
+                    'usage' => ['prompt_tokens' => 40, 'completion_tokens' => 12],
+                    'model' => 'gpt-4o-mini',
+                ], 200);
+            },
+        ]);
+
+        $result = app(ChatbotRunner::class)->runForApi($chatbot, 'hi', $workspace->id);
+
+        $this->assertNotNull($result['reply']);
+        $this->assertSame(1, substr_count($result['reply'], '😊'), 'Reply must carry at most one emoji');
+        $this->assertStringContainsString('How can I help you today?', $result['reply']);
+
+        // A clean, emoji-free reply must pass through untouched.
+        $clean = app(ChatbotRunner::class)->runForApi($chatbot, 'order status?', $workspace->id);
+        $this->assertSame('Ji bilkul, order confirm ho gaya hai.', $clean['reply']);
+    }
+
     public function test_improve_for_api_rewrites_the_agent_draft_not_the_customer_question(): void
     {
         $data = $this->createWorkspaceContext();

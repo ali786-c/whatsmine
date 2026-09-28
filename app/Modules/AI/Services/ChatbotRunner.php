@@ -269,6 +269,11 @@ class ChatbotRunner
         $text = str_replace(['**', '__'], '', $text) ?? $text;
         $text = trim($text);
 
+        // Engine-level emoji clamp (deterministic, prompt-independent): models
+        // that decorate every sentence get capped at ONE emoji per reply here,
+        // regardless of what the prompt said.
+        $text = app(EmojiEngine::class)->clampReply($text);
+
         return $text !== '' ? $text : $this->fallbackFor($bot);
     }
 

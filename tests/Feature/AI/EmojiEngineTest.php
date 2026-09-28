@@ -188,4 +188,31 @@ class EmojiEngineTest extends TestCase
     {
         $this->assertSame([], $this->engine->metaFor($this->engine->analyze('nothing')));
     }
+
+    #[Test]
+    public function clamp_reply_keeps_plain_and_single_emoji_replies_untouched(): void
+    {
+        $this->assertSame('Ji bilkul, order confirm hai.', $this->engine->clampReply('Ji bilkul, order confirm hai.'));
+        $this->assertSame('Order confirm hai ✅', $this->engine->clampReply('Order confirm hai ✅'));
+        $this->assertSame('Shukriya! 🙏', $this->engine->clampReply('Shukriya! 🙏'));
+    }
+
+    #[Test]
+    public function clamp_reply_caps_over_decorated_replies_to_one_emoji(): void
+    {
+        $out = $this->engine->clampReply('😊 Hello! 😊 Welcome to our store 😊 How can I help?');
+
+        $this->assertSame(1, substr_count($out, '😊'), 'Reply must carry at most one emoji');
+        $this->assertStringContainsString('How can I help?', $out);
+    }
+
+    #[Test]
+    public function clamp_reply_handles_multibyte_safely(): void
+    {
+        $out = $this->engine->clampReply('🙏 Package 📦 kal 🚚 pohanch jayega InshaAllah ✅');
+
+        $this->assertSame(1, substr_count($out, '🙏') + substr_count($out, '📦') + substr_count($out, '🚚') + substr_count($out, '✅'));
+        $this->assertStringContainsString('Package', $out);
+        $this->assertStringContainsString('pohanch jayega', $out);
+    }
 }
