@@ -11,6 +11,8 @@ const { marked } = require('marked');
 
 const DOCS_DIR = path.join(__dirname, '..', 'docs');
 const OUT_FILE = path.join(DOCS_DIR, 'index.html');
+// Public copy — served by the web server at {APP_URL}/docs.html (see public/).
+const PUBLIC_FILE = path.join(__dirname, '..', 'public', 'docs.html');
 
 // Sidebar groups, in display order. Every docs/*.md must appear exactly once.
 const GROUPS = [
@@ -287,8 +289,9 @@ body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Ro
 </html>`;
 
     fs.writeFileSync(OUT_FILE, page, 'utf8');
+    fs.writeFileSync(PUBLIC_FILE, page, 'utf8');
     const kb = (fs.statSync(OUT_FILE).size / 1024).toFixed(1);
-    console.log('Built ' + path.relative(process.cwd(), OUT_FILE) + ' (' + kb + ' KB, ' + sectionList.length + ' sections)');
+    console.log('Built ' + path.relative(process.cwd(), OUT_FILE) + ' + public/docs.html (' + kb + ' KB, ' + sectionList.length + ' sections)');
 }
 
 build();
