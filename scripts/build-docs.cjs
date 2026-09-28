@@ -44,6 +44,7 @@ const GROUPS = [
         items: [
             { file: 'feature.md', label: 'New Features (Sept 4, 2026)' },
             { file: 'ai_inbox_features.md', label: 'AI Chatbot & Inbox Features (Sept 25, 2026)' },
+            { file: 'automation_triggers.md', label: 'Automation Triggers — Complete Reference (Sept 28, 2026)' },
             { file: 'context.md', label: 'Inbox Fix — Context' },
         ],
     },

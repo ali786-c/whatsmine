@@ -18,6 +18,7 @@ Sab documentation is folder me hai. **Aage se har nayi guide/plan/changelog yahi
 | `context.md` | Project context |
 | `feature.md` | Feature notes |
 | `ai_inbox_features.md` | **AI Chatbot & Inbox Features (Sept 25, 2026)** — chatbot KB grounding, playground memory, quoted replies, media/voice notes, `microphone=(self)` header, aaPanel voice-note server requirements |
+| `automation_triggers.md` | **Automation Triggers — Complete Reference (Sept 28, 2026)** — saare 11 triggers ka high-level page: kya karta hai, kab fire hota hai, available tokens (`context.tag_name`, `campaign_name`, `form_responses`, order/cart tokens), ready-made recipes (welcome, VIP, keyword menu, cart recovery, webhook), engine internals aur testing |
 | `guide.md` | General guide |
 | `setting.md` | Settings notes |
 

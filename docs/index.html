@@ -146,6 +146,10 @@ body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Ro
                 <span class="nav-label">AI Chatbot &amp; Inbox Features (Sept 25, 2026)</span>
                 <span class="nav-file">ai_inbox_features.md</span>
             </a>
+<a class="nav-link" data-target="doc-automation_triggers_md" href="#automation_triggers">
+                <span class="nav-label">Automation Triggers — Complete Reference (Sept 28, 2026)</span>
+                <span class="nav-file">automation_triggers.md</span>
+            </a>
 <a class="nav-link" data-target="doc-context_md" href="#context">
                 <span class="nav-label">Inbox Fix — Context</span>
                 <span class="nav-file">context.md</span>
@@ -214,6 +218,10 @@ body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Ro
 <tr>
 <td><code>ai_inbox_features.md</code></td>
 <td><strong>AI Chatbot &amp; Inbox Features (Sept 25, 2026)</strong> — chatbot KB grounding, playground memory, quoted replies, media/voice notes, <code>microphone=(self)</code> header, aaPanel voice-note server requirements</td>
+</tr>
+<tr>
+<td><code>automation_triggers.md</code></td>
+<td><strong>Automation Triggers — Complete Reference (Sept 28, 2026)</strong> — saare 11 triggers ka high-level page: kya karta hai, kab fire hota hai, available tokens (<code>context.tag_name</code>, <code>campaign_name</code>, <code>form_responses</code>, order/cart tokens), ready-made recipes (welcome, VIP, keyword menu, cart recovery, webhook), engine internals aur testing</td>
 </tr>
 <tr>
 <td><code>guide.md</code></td>
@@ -3024,6 +3032,15 @@ php artisan instagram:register-webhook &amp;&amp; php artisan instagram:diagnose
 <blockquote>
 <p>The <code>permissions.query()</code> pre-check was removed: Chrome can report <code>denied</code> even when the site toggle is Allow. <code>getUserMedia</code>&#39;s own error is the only authoritative signal, and its raw error name is now appended to the UI message (e.g. <code>[NotAllowedError]</code>) plus <code>console.error</code> for debugging.</p>
 </blockquote>
+<h2>6A. AI → Human Handover: Auto-Reply + &quot;Waiting for you&quot; Label</h2>
+<p>When the customer asks for a human (&quot;talk to human&quot;, &quot;human chahiye&quot;…), the handover now has a full customer experience instead of silence:</p>
+<ol>
+<li><strong>Immediate acknowledgment</strong> — the bot sends &quot;Connecting you with a human agent…&quot; to the customer. The text is <strong>configurable per chatbot</strong> (<code>AiChatbot › Handover Reply</code>, all 17 languages translated in the UI); empty = language-aware default (Roman Urdu customers get the Roman Urdu reply, everyone else English).</li>
+<li><strong>&quot;Waiting for you&quot; label</strong> — auto-attached to the conversation (amber, created once per workspace, marked <code>auto_assigned</code>). The team&#39;s inbox visibly queues who needs a human.</li>
+<li><strong>Auto-cleanup</strong> — when a human agent sends the first reply, the waiting label is removed automatically.</li>
+<li><strong>AI stays silent</strong> after handover (pre-existing behavior, verified) — the agent owns the thread.</li>
+</ol>
+<p>Implementation: <code>App\Modules\Inbox\Services\HandoverService</code> (announce / attachWaitingLabel / removeWaitingLabel), wired in <code>AutoReplyListener::triggerHandover()</code> and the inbox reply path. Migration adds <code>ai_chatbots.handover_reply</code> + <code>inbox_labels.auto_assigned</code>. Tests: <code>tests/Feature/Inbox/HandoverLabelTest.php</code> (5).</p>
 <h2>7. Engine-Level Emoji Intelligence (EmojiEngine)</h2>
 <p>The LLM understands emoji natively — but everything AROUND the model is text machinery, and emoji died there: keyword retrieval strips punctuation (<code>📦</code> became nothing), the embedder saw an unknown token, the system prompt had no signal, and run metadata recorded nothing.</p>
 <p><code>app/Modules/AI/Services/EmojiEngine.php</code> closes the gap — a deterministic, curated (no giant auto-generated table) layer wired into every <code>ChatbotRunner::run()</code> AND <code>runForApi()</code> (playground) pass:</p>
@@ -3034,7 +3051,14 @@ php artisan instagram:register-webhook &amp;&amp; php artisan instagram:diagnose
 <li><strong>expandKeywords()</strong> — emoji-derived keywords join the keyword-retrieval expansion set, so &quot;🔥🔥&quot; (no words at all) still surfaces relevant KB chunks.</li>
 <li><strong>metaFor()</strong> — <code>emoji_count / emoji_sentiment / emoji_intensity / emoji_intents</code> land in run meta for diagnostics and eval.</li>
 </ol>
-<p>Regression tests: <code>tests/Feature/AI/EmojiEngineTest.php</code> (13 tests). The map covers ~100 high-frequency customer-service emoji; unknown emoji are stripped from queries but still flagged in analysis.</p>
+<p>Regression tests: <code>tests/Feature/AI/EmojiEngineTest.php</code> (17 tests).</p>
+<h3>Universal coverage: CLDR dataset (not just the curated map)</h3>
+<p>Hand-curating emoji can never cover everything customers send, so the engine loads <strong><code>resources/ai/emoji_dataset.php</code></strong> — auto-generated from <strong>emojibase-data</strong> (the full Unicode CLDR annotation set: label + tags + group for ~1895 emoji) via <code>npm run emoji:build</code> (also wired as a postinstall hook, so <code>npm install</code> regenerates it).</p>
+<ul>
+<li><strong>Curated map wins</strong> for the ~100 customer-service emoji where we know the <em>sense</em> (&quot;😍&quot; → &quot;love it&quot;) and the sentiment/intents; the <strong>CLDR dataset is the fallback</strong> for everything else (&quot;🚀&quot; → &quot;rocket&quot; + tags launch/rocket/space, &quot;🐙&quot; → &quot;octopus&quot; + tags animal/ocean).</li>
+<li>Dataset-only emoji get a <strong>conservative label classifier</strong>: unambiguous CLDR words (&quot;enraged&quot;, &quot;crying&quot;, &quot;thumbs up&quot;...) map to sentiment; anything ambiguous stays null — the model remains the deeper judge, the engine never poisons the prompt with a wrong guess.</li>
+<li>Net effect: <strong>every emoji the customer can send</strong> now resolves to words for retrieval, keywords for KB search, and (when unambiguous) a sentiment signal — no manual maintenance as new Unicode emoji ship; regenerate the dataset when emojibase updates.</li>
+</ul>
 <h2>7A. Security Header Change: <code>microphone=(self)</code></h2>
 <p><strong>Root cause of the site-wide mic failure:</strong> <code>app/Http/Middleware/SecureHeaders.php</code> sent <code>Permissions-Policy: microphone=()</code>, which makes Chrome deny every same-origin <code>getUserMedia</code> instantly — no prompt, regardless of user settings. It now sends:</p>
 <pre><code>Permissions-Policy: geolocation=(), microphone=(self), camera=()
@@ -3105,6 +3129,288 @@ php artisan storage:link        # if not already linked
 php artisan queue:restart       # after PHP job code changes
 </code></pre>
 <p>Hard-refresh the browser (<code>Ctrl+Shift+R</code>) after deploying front-end changes — built assets are committed, the server never runs <code>npm</code>.</p>
+</div>
+        </section>
+<section class="doc-section" id="doc-automation_triggers_md" data-title="Automation Triggers — Complete Reference (Sept 28, 2026) Automation Triggers — Complete Reference (Sept 28, 2026) Automation ka trigger wo entry point hai jo batata hai "kis event par ye flow chalega". Har automation ke paas ek hi trigger hota hai. Ye guide saare 11 trigger">
+            <header class="doc-header"><span class="doc-file">automation_triggers.md</span><h1>Automation Triggers — Complete Reference (Sept 28, 2026)</h1></header>
+            <div class="doc-body"><p>Automation ka <strong>trigger</strong> wo entry point hai jo batata hai &quot;kis event par ye flow chalega&quot;. Har automation ke paas <strong>ek hi trigger</strong> hota hai. Ye guide <strong>saare 11 triggers</strong> ko ek ek kar ke explain karti hai — kya karta hai, kab fire hota hai, us me kaunse tokens milte hain, aur asli usage recipes.</p>
+<blockquote>
+<p><strong>TL;DR table</strong> — kaunsa trigger kab use karna:</p>
+<table>
+<thead>
+<tr>
+<th>Trigger</th>
+<th>Kab choose karein</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>contact.created</code></td>
+<td>Naya contact add hote hi welcome / onboarding bhejni hai</td>
+</tr>
+<tr>
+<td><code>contact.tag_added</code></td>
+<td>Kisi tag lagne par us segment ko follow-up bhejni hai</td>
+</tr>
+<tr>
+<td><code>message.received</code></td>
+<td>Customer ka inbound message — keywords ke sath ya bina</td>
+</tr>
+<tr>
+<td><code>campaign.sent</code></td>
+<td>Campaign message deliver hote hi per-recipient follow-up</td>
+</tr>
+<tr>
+<td><code>form.submitted</code></td>
+<td>WhatsApp Flow / form submit hone par lead process karni hai</td>
+</tr>
+<tr>
+<td><code>webhook.received</code></td>
+<td>Bahar ke system (site, CRM) se flow chalwana hai</td>
+</tr>
+<tr>
+<td><code>order.placed</code></td>
+<td>Order confirm + receipt flow</td>
+</tr>
+<tr>
+<td><code>order.fulfilled</code></td>
+<td>Shipping / delivery updates</td>
+</tr>
+<tr>
+<td><code>order.cancelled</code></td>
+<td>Win-back ya feedback</td>
+</tr>
+<tr>
+<td><code>cart.abandoned</code></td>
+<td>Cart recovery dhamakedar flow</td>
+</tr>
+<tr>
+<td><code>customer.created</code></td>
+<td>Store ke customer record ka creation</td>
+</tr>
+</tbody></table>
+</blockquote>
+<p>Sab triggers <strong>active</strong> automations par hi fire hote hain (<code>status = active</code>). Ek automation ko pause karne par uska trigger bhi so jata hai.</p>
+<hr>
+<h2>1. <code>contact.created</code> — Naya Contact</h2>
+<p><strong>Kya hai:</strong> Jab workspace me koi naya contact banta hai (inbox me pehla message, import, manual add, ecommerce enrichment) to ye trigger fire hota hai.</p>
+<p><strong>Kab fire hota hai:</strong> Contact row create hote hi (background, event-driven).</p>
+<p><strong>Available tokens:</strong></p>
+<ul>
+<li><code>{{contact.name}}</code>, <code>{{contact.first_name}}</code>, <code>{{contact.last_name}}</code></li>
+<li><code>{{contact.email}}</code>, <code>{{contact.phone}}</code></li>
+</ul>
+<p><strong>Usage recipe — Welcome flow:</strong></p>
+<pre><code>[contact.created] → [send_whatsapp: &quot;Hi {{contact.first_name}}! 👋 Welcome to our store.
+Reply with MENU to see our catalogue.&quot;] → [add_tag: &quot;welcomed&quot;]
+</code></pre>
+<p><strong>Tips:</strong></p>
+<ul>
+<li>Pehla message aap ka branding moment hai — template use karein to <code>send_template</code> node chalega (promotion ke liye zaroori).</li>
+<li>Import ke waqt hazaron contacts bante hain — welcome flow me <code>wait</code> node daal kar blast ko thoda spread karein.</li>
+</ul>
+<hr>
+<h2>2. <code>contact.tag_added</code> — Tag Lagne Par</h2>
+<p><strong>Kya hai:</strong> Jab kisi contact ko koi tag lagta hai (manual, import, automation ka <code>add_tag</code> node, ecommerce enrichment) to fire hota hai.</p>
+<p><strong>Kab fire hota hai:</strong> Tag attach hote hi — chahe kisi bhi source se laga ho.</p>
+<p><strong>Available tokens:</strong></p>
+<ul>
+<li>Sab contact tokens (upar wale)</li>
+<li><code>{{context.tag_name}}</code> — jo tag abhi laga</li>
+</ul>
+<p><strong>Usage recipe — VIP onboarding:</strong></p>
+<pre><code>[contact.tag_added] → [condition: context.tag_name equals &quot;vip&quot;]
+   ├─ (true)  → [send_whatsapp: &quot;{{contact.first_name}}, aap ab VIP member hain! 🌟
+   │            Exclusive discount code: VIP20&quot;] → [send_email: VIP welcome pack]
+   └─ (false) → [wait: 1 hour] → (khatam — non-VIP ko kuch nahi jata)
+</code></pre>
+<p><strong>Usage recipe — Import follow-up:</strong>
+Import ke waqt <code>tag_id</code> se lagne wale tags par bhi chalta hai, is liye &quot;imported-leads&quot; tag ke sath ek nurture sequence automate ho jati hai.</p>
+<p><strong>⚠️ Loop warning:</strong> Is trigger wali automation me <code>add_tag</code> node ka <strong>iste&#39;mal na karein</strong> agar wo wahi tag laga raha ho jo is trigger ko fire kar raha hai — infinite loop ban jayega. Engine me node-level guard nahi hai; design me hi avoid karein (hamesha <em>alag</em> tag lagayen).</p>
+<hr>
+<h2>3. <code>message.received</code> — Inbound Message (sab se flexible)</h2>
+<p><strong>Kya hai:</strong> Customer ka <strong>har inbound message</strong> (text, button tap, list selection, media caption) ye trigger fire karta hai — WhatsApp, Messenger aur Instagram teeno channels par.</p>
+<p><strong>Kab fire hota hai:</strong> Har naye inbound message par. <strong>Keywords filter</strong> laga sakte hain — trigger config me keywords comma-separated dein; message body me se koi ek keyword mila to hi flow chalega (case-insensitive, &quot;contains&quot; match).</p>
+<p><strong>Available tokens:</strong></p>
+<ul>
+<li>Sab contact tokens</li>
+<li><code>{{message.body}}</code> — customer ka raw message</li>
+<li><code>{{context.message_body}}</code> — wahi, condition nodes ke liye</li>
+<li><code>{{context.message_id}}</code>, <code>{{context.message_channel}}</code> — channel = whatsapp / messenger / instagram</li>
+</ul>
+<p><strong>Usage recipe — Keyword menu:</strong></p>
+<pre><code>[message.received: keywords = &quot;menu,price,rate&quot;]
+ → [quick_replies: &quot;Kya dekhna chahenge?&quot; | buttons: Pricing / Services / Talk to human
+    | wait_for_choice ✓ | variable: choice]
+     ├─ btn_1 → [send_whatsapp: pricing card]
+     ├─ btn_2 → [list_message: services menu]
+     └─ btn_3 → [assign_agent]
+</code></pre>
+<p><strong>Usage recipe — AI receptionist:</strong></p>
+<pre><code>[message.received] (no keywords = sab messages)
+ → [condition: contact.tag exists &quot;human_requested&quot;]
+   ├─ (false) → [ai_reply: &quot;You are the store&#39;s WhatsApp assistant...&quot;]
+   └─ (true)  → [assign_agent] → [send_whatsapp: &quot;Agent jald hi jud raha hai...&quot;]
+</code></pre>
+<p><strong>Tips:</strong></p>
+<ul>
+<li><strong>Bot se double-reply na ho:</strong> Isi contact ke liye agar koi <code>ask_question</code>/<code>wait_for_choice</code> run parked hai to wo bhi isi message par resume hoga — dono cheezein coexist kar sakti hain lekin test zaroor karein.</li>
+<li>Keywords khali chhorne par <strong>har</strong> message par flow chalega — ye sirf tab karein jab aap AI/chatbot-first design kar rahe hon.</li>
+</ul>
+<hr>
+<h2>4. <code>campaign.sent</code> — Campaign Deliver Hua (per-recipient)</h2>
+<p><strong>Kya hai:</strong> Campaign (broadcast) ka message <strong>ek recipient</strong> ko successfully deliver hone par fire hota hai. <strong>Per contact</strong> chalta hai — 1000 recipients = 1000 runs, har ek apne contact ke sath.</p>
+<p><strong>Kab fire hota hai:</strong> <code>SendCampaignMessageJob</code> ke send succeed hote hi (status <code>sent</code>).</p>
+<p><strong>Available tokens:</strong></p>
+<ul>
+<li>Sab contact tokens</li>
+<li><code>{{context.campaign_name}}</code> — campaign ka naam</li>
+<li><code>{{context.campaign_channel}}</code> — whatsapp / messenger / instagram</li>
+<li>(<code>{{context.campaign_id}}</code> bhi context me mojood hai)</li>
+</ul>
+<p><strong>Usage recipe — Post-campaign engagement tag:</strong></p>
+<pre><code>[campaign.sent] → [add_tag: &quot;received-diwali-offer&quot;] → [wait: 3 days]
+ → [condition: contact.tag exists &quot;responded&quot;] 
+   ├─ (false) → [send_whatsapp: &quot;Hi! Kya aap ne offer dekhi? 10% off: HELLO10&quot;]
+   └─ (true)  → (khatam)
+</code></pre>
+<p><strong>Tips:</strong></p>
+<ul>
+<li>Ye trigger campaign launch se <strong>pehle</strong> banayen aur active rakhen — campaign chalne ke baad me trigger lagane par purane recipients cover nahi honge.</li>
+<li>Heavy campaigns ke sath is trigger ka flow chhota rakhein — har recipient par chalta hai.</li>
+</ul>
+<hr>
+<h2>5. <code>form.submitted</code> — WhatsApp Flow / Form Complete</h2>
+<p><strong>Kya hai:</strong> Customer ne WhatsApp ke andar Flow (native form) submit kiya — response data ke sath ye trigger fire hota hai.</p>
+<p><strong>Kab fire hota hai:</strong> WhatsApp webhook me <code>nfm_reply</code> aane par — driver structured response store karta hai (<code>wa_flow_responses</code> table) aur event dispatch karta hai.</p>
+<p><strong>Available tokens:</strong></p>
+<ul>
+<li>Sab contact tokens</li>
+<li><code>{{context.form_responses.*}}</code> — form ke saare jawab. ⚠️ Note: token renderer abhi top-level context keys parhta hai, is liye <strong>messages me nested dot-tokens na use karein</strong>; jawab tak pohanchne ka reliable tareeqa <code>condition</code> node (<code>context.form_responses</code> exists / contains) + message me plain text hai. Nested token support engine me aa to jaye ga, magar aaj ke version me is par rely na karein.</li>
+</ul>
+<p><strong>Usage recipe — Appointment lead:</strong></p>
+<pre><code>[form.submitted] → [add_tag: &quot;appointment-lead&quot;] → [send_whatsapp:
+ &quot;Shukriya! Aap ki booking request mil gayi. Hamari team 2 ghante me
+ confirm karegi.&quot;] → [assign_agent]
+</code></pre>
+<p><strong>Usage recipe — Survey thank-you + agent routing:</strong></p>
+<pre><code>[form.submitted] → [condition: context.form_responses exists]
+   ├─ (true)  → [send_whatsapp: &quot;Feedback ke liye shukriya 💚&quot;] → [add_tag: &quot;survey-done&quot;]
+   └─ (false) → (khatam)
+</code></pre>
+<p><strong>Tips:</strong></p>
+<ul>
+<li>Flow bhejna alag cheez hai — <code>whatsapp_form</code> node (ya inbox se) flow bhejta hai; <strong>submit ka jawab</strong> ye trigger uthata hai. Dono ko ek automation me joda ja sakta hai lekin alag automations bhi ban sakti hain.</li>
+<li>Flow responses inbox me <code>nfm_reply</code> message ke tor par bhi dikhti hain — agent ko raw JSON preview ke sath.</li>
+</ul>
+<hr>
+<h2>6. <code>webhook.received</code> — Bahari Duniya Se</h2>
+<p><strong>Kya hai:</strong> Koi bahar ka system (aap ki website, CRM, payment gateway) aap ke automation ke <strong>dedicated webhook URL</strong> par POST kare to flow chalta hai.</p>
+<p><strong>Kab fire hota hai:</strong> <code>POST {APP_URL}/automation/webhook/{token}</code> — token builder ke trigger panel se generate hota hai (regenerate bhi ho sakta hai).</p>
+<p><strong>Setup:</strong></p>
+<ol>
+<li>Builder → trigger panel → <strong>Generate Token</strong></li>
+<li>URL copy karein aur apne system me configure karein</li>
+<li>POST body <code>context.payload</code> me available hota hai</li>
+</ol>
+<p><strong>Available tokens:</strong></p>
+<ul>
+<li>Sab contact tokens (agar <code>contact_id</code> body me diya ho — phir flow us contact ke liye chalta hai)</li>
+<li><code>{{context.payload}}</code> — poora request body (condition me <code>exists</code>/<code>contains</code> ke liye)</li>
+</ul>
+<p><strong>Usage recipe — Payment received:</strong></p>
+<pre><code class="language-bash">curl -X POST https://aap-ka-domain.com/automation/webhook/TOKEN \
+  -H &quot;Content-Type: application/json&quot; \
+  -d &#39;{&quot;contact_id&quot;: 42, &quot;event&quot;: &quot;payment.success&quot;, &quot;amount&quot;: &quot;2500&quot;}&#39;
+</code></pre>
+<pre><code>[webhook.received] → [send_whatsapp: &quot;Payment received! Order confirm ho gaya ✅&quot;] 
+ → [add_tag: &quot;paid&quot;]
+</code></pre>
+<p><strong>Tips:</strong></p>
+<ul>
+<li><code>contact_id</code> ke baghair bhi chal sakta hai (contact-less run) — lekin phir message nodes ko contact chahiye hoga, is liye jahan mumkin ho contact_id bhejein.</li>
+<li>Token ghlad se public na karein — ye secret hai.</li>
+</ul>
+<hr>
+<h2>7. <code>order.placed</code> — Naya Order</h2>
+<p><strong>Kya hai:</strong> Ecommerce store me naya order place hone par fire hota hai (WooCommerce/Shopify sync).</p>
+<p><strong>Available tokens:</strong></p>
+<ul>
+<li>Sab contact tokens</li>
+<li><code>{{context.order_number}}</code>, <code>{{context.order_total}}</code>, <code>{{context.order_currency}}</code>, <code>{{context.tracking_url}}</code></li>
+</ul>
+<p><strong>Usage recipe:</strong></p>
+<pre><code>[order.placed] → [send_whatsapp: &quot;Order {{context.order_number}} confirm! 
+ Total: {{context.order_total}} {{context.order_currency}}. Shukriya 🙏&quot;]
+ → [add_tag: &quot;customer&quot;]
+</code></pre>
+<hr>
+<h2>8. <code>order.fulfilled</code> — Order Ship / Complete</h2>
+<p><strong>Kya hai:</strong> Order fulfill hone par fire hota hai.</p>
+<p><strong>Available tokens:</strong> order wale sab + <code>{{context.tracking_url}}</code></p>
+<p><strong>Usage recipe:</strong></p>
+<pre><code>[order.fulfilled] → [send_whatsapp: &quot;Aap ka order {{context.order_number}} 
+ dispatch ho gaya 🚚 Track: {{context.tracking_url}}&quot;] → [wait: 5 days]
+ → [send_whatsapp: &quot;Delivery kaisi rahi? 1–5 rate karein&quot;] (poll options ke sath)
+</code></pre>
+<hr>
+<h2>9. <code>order.cancelled</code> — Order Cancel</h2>
+<p><strong>Kya hai:</strong> Order cancel hone par fire hota hai — win-back aur feedback ka perfect moment.</p>
+<p><strong>Usage recipe:</strong></p>
+<pre><code>[order.cancelled] → [wait: 2 hours] → [send_whatsapp: 
+ &quot;Koi masla hua tha? Agle order par 15% off: COMEBACK15&quot;]
+</code></pre>
+<hr>
+<h2>10. <code>cart.abandoned</code> — Cart Recovery</h2>
+<p><strong>Kya hai:</strong> Customer ne cart bhari aur checkout complete nahi kiya — fire hota hai abandonment ke waqt.</p>
+<p><strong>Available tokens:</strong> order wale + <code>{{context.cart_total}}</code>, <code>{{context.recovery_url}}</code></p>
+<p><strong>Usage recipe — 3-touch recovery:</strong></p>
+<pre><code>[cart.abandoned] → [wait: 1 hour] 
+ → [send_whatsapp: &quot;Aap ki cart me {{context.cart_total}} ka saman para hai 🛒 
+    Jaldi karein: {{context.recovery_url}}&quot;]
+ → [wait: 1 day]
+ → [send_whatsapp: &quot;Last chance! Coupon CART10 se 10% off 💸&quot;]
+</code></pre>
+<p><strong>Tips:</strong> Pehla touch soft ho, aakhri me discount — ye proven sequence hai.</p>
+<hr>
+<h2>11. <code>customer.created</code> — Store Customer</h2>
+<p><strong>Kya hai:</strong> Ecommerce store me customer record banna — bina order ke. Onboarding/newsletter flows ke liye.</p>
+<p><strong>Usage recipe:</strong></p>
+<pre><code>[customer.created] → [send_whatsapp: &quot;Welcome! Naye customers ke liye 
+ WELCOME10 coupon: pehle order par 10% off 🎁&quot;]
+</code></pre>
+<hr>
+<h2>Trigger Fire Kaise Hota Hai (engine internals)</h2>
+<pre><code>Event (e.g. MessageReceived)                    ← drivers dispatch karti hain
+      ↓
+AutomationTriggerListener
+      ↓ workspace ke saare ACTIVE automations
+      ↓ jinke trigger_type match kare
+AutomationEngine::triggerForContact()
+      ↓ AutomationRun create (status: pending)
+ExecuteAutomationRunJob (automation queue)
+      ↓
+Nodes execute hote hain → AutomationRunLog me trace
+</code></pre>
+<ul>
+<li>Triggers <strong>event-driven</strong> hain — polling nahi, sab kuch Laravel queue par. Worker (<code>php artisan queue:work</code>) chalna zaroori hai, warna runs <code>pending</code> par ruke rahenge.</li>
+<li>Har run ka log <strong>Runs</strong> page par dikhta hai — kaunsa node chala, kya result tha.</li>
+<li>Keywords filter sirf <code>message.received</code> ke liye hai; baqi triggers me config khali hai.</li>
+</ul>
+<h2>Testing Apna Trigger</h2>
+<ol>
+<li>Builder me flow bana kar <strong>Test</strong> button dabayen — dry-run preview mile ga (koi message nahi jata, koi token nahi lagta).</li>
+<li>Real test: chhoti automation bana kar trigger ka real event karwayen (khud ko message bhejein, test tag lagayen, test webhook curl karein) aur <strong>Runs</strong> page se verify karein.</li>
+<li><code>php artisan queue:failed</code> se failed runs ki wajah dekhein.</li>
+</ol>
+<h2>Server Deploy (jab tak feature me migration ho)</h2>
+<pre><code class="language-bash">cd /www/wwwroot/wa.careerinpak.com &amp;&amp; git pull origin master
+php artisan migrate
+php artisan queue:restart
+php artisan optimize:clear
+</code></pre>
+<blockquote>
+<p><strong>Note:</strong> Trigger fires queue par hote hain — deploy ke baad <code>queue:restart</code> <strong>zaroori</strong> hai warna worker purane code par chalta rahega.</p>
+</blockquote>
 </div>
         </section>
 <section class="doc-section" id="doc-context_md" data-title="WhatsMine Inbox Fix — Context &amp; Summary Inbox Fix — Context Problem Messages were showing in the Node.js terminal ( QR Laravel Forwarding to Laravel: ... text Hi ) but not appearing in the WhatsMine Inbox (Laravel fronte">
