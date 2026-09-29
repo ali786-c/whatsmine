@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Automations — WhatsMine User Guide</title>
+<meta name="description" content="Build visual automations: 11 triggers, message and AI nodes, conditions, delays, commerce events and webhook integrations.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💬</text></svg>">
+<link rel="stylesheet" href="assets/user-docs.css">
+</head>
+<body>
+
+<nav class="docs-nav">
+    <button class="menu-toggle" aria-label="Menu">☰</button>
+    <a class="brand" href="index.html"><span class="logo">💬</span> WhatsMine Docs</a>
+    <div class="nav-search" data-docs-search>
+        <span class="search-icon">🔍</span>
+        <input type="text" placeholder="Search the user guide…" aria-label="Search documentation">
+        <div class="search-results"></div>
+    </div>
+    <div class="nav-links">
+        <a href="index.html" class="hide-sm">All Guides</a>
+        <button class="theme-toggle" aria-label="Toggle dark mode">🌙</button>
+    </div>
+</nav>
+
+<div class="docs-shell with-toc">
+    <aside class="docs-sidebar">
+        <div class="group-title">Start Here</div>
+        <a class="nav-link" href="getting-started.html">Getting Started</a>
+        <a class="nav-link" href="inbox.html">Unified Inbox</a>
+        <div class="group-title">Channels</div>
+        <a class="nav-link" href="whatsapp.html">WhatsApp</a>
+        <a class="nav-link" href="instagram.html">Instagram</a>
+        <div class="group-title">Grow</div>
+        <a class="nav-link" href="ai-chatbots.html">AI &amp; Chatbots</a>
+        <a class="nav-link" href="automations.html">Automations</a>
+        <a class="nav-link" href="campaigns.html">Campaigns</a>
+        <a class="nav-link" href="contacts.html">Contacts &amp; Leads</a>
+        <a class="nav-link" href="ecommerce.html">Ecommerce</a>
+        <a class="nav-link" href="social-media.html">Social Media</a>
+        <a class="nav-link" href="reports.html">Reports</a>
+        <div class="group-title">Account</div>
+        <a class="nav-link" href="team-billing.html">Team &amp; Billing</a>
+        <a class="nav-link" href="settings.html">Settings &amp; Developer</a>
+        <a class="nav-link" href="faq.html">FAQ &amp; Troubleshooting</a>
+    </aside>
+
+    <main class="docs-content">
+        <div class="crumbs"><a href="index.html">User Guide</a><span class="sep">›</span>Automations</div>
+        <h1>Automations</h1>
+        <p class="page-lead">Visual flow builder that reacts to events — welcome new contacts, recover carts, route leads and let AI answer — all without code.</p>
+
+        <h2 id="builder">The builder</h2>
+        <p>Open <strong>Automations</strong> from the sidebar and create a new automation. The builder is a canvas: <strong>drag nodes</strong> from the left palette, connect them into a flow, and configure each node in its panel. Every automation has exactly <strong>one trigger</strong> (the entry event) followed by any sequence of action nodes.</p>
+        <ul>
+            <li><strong>Templates</strong> — start from ready-made recipes instead of a blank canvas.</li>
+            <li><strong>Test</strong> — dry-run your flow before activating; nothing is sent and no tags are applied.</li>
+            <li><strong>Status</strong> — automations only fire while <strong>active</strong>; pausing stops all runs instantly.</li>
+        </ul>
+
+        <h2 id="triggers">Triggers (when a flow starts)</h2>
+        <div class="table-wrap"><table class="docs-table">
+            <tr><th>Trigger</th><th>Fires when…</th><th>Great for</th></tr>
+            <tr><td><strong>New contact</strong></td><td>a contact is created (message, import, form…)</td><td>Welcome messages &amp; onboarding</td></tr>
+            <tr><td><strong>Tag added</strong></td><td>any tag is attached to a contact</td><td>VIP treatment, import follow-ups</td></tr>
+            <tr><td><strong>Message received</strong></td><td>a customer messages you (optional keyword filter)</td><td>Keyword menus, AI receptionist</td></tr>
+            <tr><td><strong>Campaign sent</strong></td><td>a campaign message is delivered (per recipient)</td><td>Post-campaign follow-ups</td></tr>
+            <tr><td><strong>Form submitted</strong></td><td>a WhatsApp flow/form is completed</td><td>Bookings, lead capture, surveys</td></tr>
+            <tr><td><strong>Webhook received</strong></td><td>an external system POSTs to your flow's URL</td><td>Payment alerts, CRM sync</td></tr>
+            <tr><td><strong>Order placed</strong></td><td>a store order comes in</td><td>Order confirmations</td></tr>
+            <tr><td><strong>Order fulfilled</strong></td><td>an order is shipped/completed</td><td>Tracking + delivery feedback</td></tr>
+            <tr><td><strong>Order cancelled</strong></td><td>an order is cancelled</td><td>Win-back offers, feedback</td></tr>
+            <tr><td><strong>Cart abandoned</strong></td><td>a cart is left without checkout</td><td>Cart recovery sequences</td></tr>
+            <tr><td><strong>New customer</strong></td><td>a store customer record is created</td><td>Welcome coupons</td></tr>
+        </table></div>
+        <div class="callout tip"><div class="callout-title">💡 Keyword filter</div><p>On <em>Message received</em>, leave keywords empty to run on every message, or list comma-separated keywords (e.g. <code>menu, price, rates</code>) to run only when one appears in the message.</p></div>
+
+        <h2 id="nodes">What nodes can do</h2>
+        <div class="table-wrap"><table class="docs-table">
+            <tr><th>Category</th><th>Nodes</th></tr>
+            <tr><td><strong>Send</strong></td><td>WhatsApp text, message template, media, quick-reply buttons, list messages, SMS, email, sequences</td></tr>
+            <tr><td><strong>Listen</strong></td><td>Ask a question and store the customer's next reply</td></tr>
+            <tr><td><strong>Logic</strong></td><td>Condition (branch the flow), Wait (delay minutes to days), Webhook call, Run sub-flow</td></tr>
+            <tr><td><strong>AI</strong></td><td>AI reply — let your chatbot compose the answer</td></tr>
+            <tr><td><strong>Contact</strong></td><td>Add/remove tag, update contact fields, assign to agent, add to campaign</td></tr>
+            <tr><td><strong>Engage</strong></td><td>CTA button, location, poll, run chatbot, book appointment, Google Meet, WhatsApp form</td></tr>
+            <tr><td><strong>Commerce</strong></td><td>WhatsApp catalog, WooCommerce &amp; Shopify product pickers</td></tr>
+            <tr><td><strong>Integrations</strong></td><td>Google Sheets, Google Docs, Google Forms</td></tr>
+        </table></div>
+
+        <h2 id="tokens">Personalisation tokens</h2>
+        <p>Drop tokens into any message to personalise it:</p>
+        <div class="table-wrap"><table class="docs-table">
+            <tr><th>Token</th><th>Becomes</th></tr>
+            <tr><td><code>{{contact.first_name}}</code></td><td>Customer's first name</td></tr>
+            <tr><td><code>{{contact.name}}</code> · <code>{{contact.email}}</code> · <code>{{contact.phone}}</code></td><td>Other contact fields</td></tr>
+            <tr><td><code>{{context.campaign_name}}</code></td><td>Name of the campaign that fired the flow</td></tr>
+            <tr><td><code>{{context.order_number}}</code> · <code>{{context.order_total}}</code></td><td>Order details on order triggers</td></tr>
+            <tr><td><code>{{context.cart_total}}</code> · <code>{{context.recovery_url}}</code></td><td>Cart amount and checkout link</td></tr>
+            <tr><td><code>{{context.tag_name}}</code></td><td>The tag that was just added</td></tr>
+            <tr><td><code>{{message.body}}</code></td><td>The customer's inbound message</td></tr>
+        </table></div>
+
+        <h2 id="recipes">Popular recipes</h2>
+        <h3>1. Welcome flow</h3>
+        <p><strong>Trigger:</strong> New contact → <strong>Send WhatsApp:</strong> “Hi {{contact.first_name}}! 👋 Welcome to our store. Reply MENU to see the catalogue.” → <strong>Add tag:</strong> <code>welcomed</code></p>
+        <h3>2. Keyword menu</h3>
+        <p><strong>Trigger:</strong> Message received (keywords: <code>menu, price</code>) → <strong>Quick replies</strong> with buttons <em>Pricing / Services / Talk to human</em> → each button branches to its own message or <em>Assign agent</em>.</p>
+        <h3>3. AI receptionist</h3>
+        <p><strong>Trigger:</strong> Message received (no keywords) → <strong>Condition:</strong> contact has tag <code>human_requested</code> → if yes: <em>Assign agent</em>; if no: <strong>AI reply</strong>.</p>
+        <h3>4. Cart recovery</h3>
+        <p><strong>Trigger:</strong> Cart abandoned → <strong>Wait 1 hour</strong> → “Your cart holds {{context.cart_total}} — finish here: {{context.recovery_url}}” → <strong>Wait 1 day</strong> → “Last chance! Coupon CART10 for 10% off.”</p>
+        <h3>5. Post-campaign follow-up</h3>
+        <p><strong>Trigger:</strong> Campaign sent → <strong>Add tag:</strong> <code>received-offer</code> → <strong>Wait 3 days</strong> → if the customer hasn't replied, send a gentle reminder with a coupon.</p>
+        <div class="callout warn"><div class="callout-title">⚠️ Avoid loops</div><p>Never let a “Tag added” automation add the same tag that triggers it — use a different tag name, or the flow will run forever.</p></div>
+
+        <h2 id="webhook">Webhook trigger</h2>
+        <p>Use <strong>Webhook received</strong> to start a flow from outside tools:</p>
+        <div class="step"><div class="step-num">1</div><div class="step-body"><p>In the trigger panel, click <strong>Generate Token</strong> and copy your unique URL.</p></div></div>
+        <div class="step"><div class="step-num">2</div><div class="step-body"><p>Point your website, CRM or payment gateway to POST that URL.</p></div></div>
+        <div class="step"><div class="step-num">3</div><div class="step-body"><p>Include <code>contact_id</code> in the body when possible so the flow runs for that customer.</p></div></div>
+        <div class="callout warn"><div class="callout-title">⚠️ Keep the URL secret</div><p>Anyone with the token URL can trigger the flow. Regenerate the token if it leaks.</p></div>
+
+        <h2 id="testing">Testing &amp; monitoring</h2>
+        <ul>
+            <li><strong>Test button</strong> — preview the run without sending anything.</li>
+            <li><strong>Runs page</strong> — every execution is logged: which nodes ran, in what order, with what result. Open <strong>Automations → Runs</strong>.</li>
+            <li><strong>Real-world test</strong> — trigger the event for real (message yourself, add a test tag, POST a test webhook) and watch the run appear.</li>
+        </ul>
+        <div class="callout note"><div class="callout-title">📎 Runs pending?</div><p>Automation runs execute on a queue. If runs stay pending or an admin recently deployed, runs process within moments — contact support if runs never start.</p></div>
+
+        <nav class="pager">
+            <a href="ai-chatbots.html"><div class="pager-label">Previous</div><div class="pager-title">← AI &amp; Chatbots</div></a>
+            <a class="next" href="campaigns.html"><div class="pager-label">Next</div><div class="pager-title">Campaigns →</div></a>
+        </nav>
+    </main>
+
+    <aside class="docs-toc">
+        <div class="toc-title">On this page</div>
+        <a href="#builder">The builder</a>
+        <a href="#triggers">Triggers</a>
+        <a href="#nodes">What nodes can do</a>
+        <a href="#tokens">Personalisation tokens</a>
+        <a href="#recipes">Popular recipes</a>
+        <a href="#webhook">Webhook trigger</a>
+        <a href="#testing">Testing &amp; monitoring</a>
+    </aside>
+</div>
+
+<script src="assets/search-index.js"></script>
+<script src="assets/user-docs.js"></script>
+</body>
+</html>

@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Campaigns — WhatsMine User Guide</title>
+<meta name="description" content="Broadcast campaigns to WhatsApp, Messenger and Instagram audiences: wizard, targeting, scheduling and reports.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💬</text></svg>">
+<link rel="stylesheet" href="assets/user-docs.css">
+</head>
+<body>
+
+<nav class="docs-nav">
+    <button class="menu-toggle" aria-label="Menu">☰</button>
+    <a class="brand" href="index.html"><span class="logo">💬</span> WhatsMine Docs</a>
+    <div class="nav-search" data-docs-search>
+        <span class="search-icon">🔍</span>
+        <input type="text" placeholder="Search the user guide…" aria-label="Search documentation">
+        <div class="search-results"></div>
+    </div>
+    <div class="nav-links">
+        <a href="index.html" class="hide-sm">All Guides</a>
+        <button class="theme-toggle" aria-label="Toggle dark mode">🌙</button>
+    </div>
+</nav>
+
+<div class="docs-shell with-toc">
+    <aside class="docs-sidebar">
+        <div class="group-title">Start Here</div>
+        <a class="nav-link" href="getting-started.html">Getting Started</a>
+        <a class="nav-link" href="inbox.html">Unified Inbox</a>
+        <div class="group-title">Channels</div>
+        <a class="nav-link" href="whatsapp.html">WhatsApp</a>
+        <a class="nav-link" href="instagram.html">Instagram</a>
+        <div class="group-title">Grow</div>
+        <a class="nav-link" href="ai-chatbots.html">AI &amp; Chatbots</a>
+        <a class="nav-link" href="automations.html">Automations</a>
+        <a class="nav-link" href="campaigns.html">Campaigns</a>
+        <a class="nav-link" href="contacts.html">Contacts &amp; Leads</a>
+        <a class="nav-link" href="ecommerce.html">Ecommerce</a>
+        <a class="nav-link" href="social-media.html">Social Media</a>
+        <a class="nav-link" href="reports.html">Reports</a>
+        <div class="group-title">Account</div>
+        <a class="nav-link" href="team-billing.html">Team &amp; Billing</a>
+        <a class="nav-link" href="settings.html">Settings &amp; Developer</a>
+        <a class="nav-link" href="faq.html">FAQ &amp; Troubleshooting</a>
+    </aside>
+
+    <main class="docs-content">
+        <div class="crumbs"><a href="index.html">User Guide</a><span class="sep">›</span>Campaigns</div>
+        <h1>Campaigns</h1>
+        <p class="page-lead">Send offers, updates and announcements to hundreds or thousands of contacts — guided by a wizard that keeps you compliant.</p>
+
+        <h2 id="wizard">The campaign wizard</h2>
+        <p>Open <strong>Broadcasting → Campaigns</strong> and click <strong>New Campaign</strong>. The wizard walks you through five steps:</p>
+        <div class="step"><div class="step-num">1</div><div class="step-body"><p><strong>Channel</strong> — pick WhatsApp, Messenger or Instagram. WhatsApp is the most common for broadcasts.</p></div></div>
+        <div class="step"><div class="step-num">2</div><div class="step-body"><p><strong>Audience</strong> — target contacts with filters: tags, segments, or all contacts. The wizard shows a live recipient count before you continue.</p></div></div>
+        <div class="step"><div class="step-num">3</div><div class="step-body"><p><strong>Content</strong> — write the message or pick an approved <a href="whatsapp.html">template</a> and fill its variables. Add media (image, video, document) where the channel allows it.</p></div></div>
+        <div class="step"><div class="step-num">4</div><div class="step-body"><p><strong>Schedule</strong> — send immediately or pick a date and time. Scheduled campaigns run on their own; you can close the browser.</p></div></div>
+        <div class="step"><div class="step-num">5</div><div class="step-body"><p><strong>Review</strong> — check the summary (audience size, content, schedule) and launch.</p></div></div>
+        <div class="callout tip"><div class="callout-title">💡 Warm up your sending</div><p>New WhatsApp numbers should start with smaller broadcasts and engaged audiences — quality and limits grow with good engagement. Create the “Campaign sent” <a href="automations.html">automation</a> before launching if you want per-recipient follow-ups.</p></div>
+
+        <h2 id="audience">Audience tips</h2>
+        <ul>
+            <li>Use <strong><a href="contacts.html">segments</a></strong> to keep reusable audiences — e.g. “VIP customers”, “Karachi leads”.</li>
+            <li>Exclude recent non-deliveries by building segments on tags like <code>undeliverable</code>.</li>
+            <li>Always honour opt-outs — add contacts who reply STOP to an opt-out tag and exclude it in campaigns.</li>
+        </ul>
+
+        <h2 id="tracking">Tracking results</h2>
+        <p>Open a campaign to see its live stats — <strong>sent, delivered, read and replied</strong> counts — plus the per-recipient list. Compare campaigns over time in <strong>Reports → Campaigns</strong>.</p>
+        <div class="img-placeholder">📷 Screenshot placeholder: campaign report with delivered/read chart</div>
+
+        <h2 id="senders">SMS &amp; email senders</h2>
+        <p>Campaigns can also go out over SMS and email once a sender is configured:</p>
+        <ul>
+            <li><strong>Broadcasting → SMS Gateways</strong> — connect an SMS provider with guided, step-by-step setup screens.</li>
+            <li><strong>Broadcasting → Email Server</strong> — connect your SMTP with a built-in setup guide and test button.</li>
+        </ul>
+
+        <h2 id="faq-mini">Common questions</h2>
+        <ul>
+            <li><strong>Can I send without a template?</strong> Only inside each customer's 24-hour reply window; outside it, WhatsApp requires an approved template.</li>
+            <li><strong>Can I cancel a scheduled campaign?</strong> Yes — open it before the send time and cancel from the campaign page.</li>
+            <li><strong>Why did some recipients not get it?</strong> Check the recipient list: invalid numbers, opt-outs and channel limits are the usual reasons.</li>
+        </ul>
+
+        <nav class="pager">
+            <a href="automations.html"><div class="pager-label">Previous</div><div class="pager-title">← Automations</div></a>
+            <a class="next" href="contacts.html"><div class="pager-label">Next</div><div class="pager-title">Contacts &amp; Leads →</div></a>
+        </nav>
+    </main>
+
+    <aside class="docs-toc">
+        <div class="toc-title">On this page</div>
+        <a href="#wizard">The campaign wizard</a>
+        <a href="#audience">Audience tips</a>
+        <a href="#tracking">Tracking results</a>
+        <a href="#senders">SMS &amp; email senders</a>
+        <a href="#faq-mini">Common questions</a>
+    </aside>
+</div>
+
+<script src="assets/search-index.js"></script>
+<script src="assets/user-docs.js"></script>
+</body>
+</html>

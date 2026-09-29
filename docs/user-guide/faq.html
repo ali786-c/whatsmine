@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FAQ &amp; Troubleshooting — WhatsMine User Guide</title>
+<meta name="description" content="Quick answers and fixes for the most common WhatsMine questions: channels, chatbot, campaigns, media and billing.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💬</text></svg>">
+<link rel="stylesheet" href="assets/user-docs.css">
+<style>
+.docs-content .faq-group-title { margin-top: 34px; }
+</style>
+</head>
+<body>
+
+<nav class="docs-nav">
+    <button class="menu-toggle" aria-label="Menu">☰</button>
+    <a class="brand" href="index.html"><span class="logo">💬</span> WhatsMine Docs</a>
+    <div class="nav-search" data-docs-search>
+        <span class="search-icon">🔍</span>
+        <input type="text" placeholder="Search the user guide…" aria-label="Search documentation">
+        <div class="search-results"></div>
+    </div>
+    <div class="nav-links">
+        <a href="index.html" class="hide-sm">All Guides</a>
+        <button class="theme-toggle" aria-label="Toggle dark mode">🌙</button>
+    </div>
+</nav>
+
+<div class="docs-shell">
+    <aside class="docs-sidebar">
+        <div class="group-title">Start Here</div>
+        <a class="nav-link" href="getting-started.html">Getting Started</a>
+        <a class="nav-link" href="inbox.html">Unified Inbox</a>
+        <div class="group-title">Channels</div>
+        <a class="nav-link" href="whatsapp.html">WhatsApp</a>
+        <a class="nav-link" href="instagram.html">Instagram</a>
+        <div class="group-title">Grow</div>
+        <a class="nav-link" href="ai-chatbots.html">AI &amp; Chatbots</a>
+        <a class="nav-link" href="automations.html">Automations</a>
+        <a class="nav-link" href="campaigns.html">Campaigns</a>
+        <a class="nav-link" href="contacts.html">Contacts &amp; Leads</a>
+        <a class="nav-link" href="ecommerce.html">Ecommerce</a>
+        <a class="nav-link" href="social-media.html">Social Media</a>
+        <a class="nav-link" href="reports.html">Reports</a>
+        <div class="group-title">Account</div>
+        <a class="nav-link" href="team-billing.html">Team &amp; Billing</a>
+        <a class="nav-link" href="settings.html">Settings &amp; Developer</a>
+        <a class="nav-link" href="faq.html">FAQ &amp; Troubleshooting</a>
+    </aside>
+
+    <main class="docs-content">
+        <div class="crumbs"><a href="index.html">User Guide</a><span class="sep">›</span>FAQ &amp; Troubleshooting</div>
+        <h1>FAQ &amp; Troubleshooting</h1>
+        <p class="page-lead">Fast fixes for the questions we hear most. Click a question to expand the answer.</p>
+
+        <h2 id="channels" class="faq-group-title">Channels &amp; connections</h2>
+
+        <details class="faq">
+            <summary>My WhatsApp QR session disconnected. What do I do?</summary>
+            <div class="faq-body">
+                <p>Open <strong>Inbox → Channel Setup</strong>, find the disconnected session and re-scan the QR code with your phone (<strong>WhatsApp → Linked Devices → Link a Device</strong>). Sessions drop when the phone stays offline too long or the linked device is removed.</p>
+            </div>
+        </details>
+
+        <details class="faq">
+            <summary>Why can't my agent reply to this customer?</summary>
+            <div class="faq-body">
+                <p>Most likely the <strong>24-hour window</strong> closed — free-form replies are only allowed within 24 hours of the customer's last message. Send an approved <a href="whatsapp.html">template message</a> to re-open the conversation (Instagram allows tagged replies for up to 7 days).</p>
+            </div>
+        </details>
+
+        <details class="faq">
+            <summary>Instagram won't connect.</summary>
+            <div class="faq-body">
+                <p>Your Instagram account must be a <strong>Business or Creator (professional) account</strong> — personal accounts can't connect. Convert in the Instagram app under Settings, then retry the connection from Channel Setup.</p>
+            </div>
+        </details>
+
+        <h2 id="chatbot" class="faq-group-title">AI &amp; chatbot</h2>
+
+        <details class="faq">
+            <summary>The chatbot answers “contact our team” even though the info is in my knowledge base.</summary>
+            <div class="faq-body">
+                <p>Three usual causes:</p>
+                <ol>
+                    <li>The document was edited but not <strong>re-indexed</strong> — re-save it in the KB.</li>
+                    <li>No <strong>embed-capable provider</strong> is configured — add one under AI → Providers, then re-index.</li>
+                    <li>The test question isn't literally covered by the KB text — bots answer from what's written, not what's implied. Add a clear Q&amp;A for it.</li>
+                </ol>
+            </div>
+        </details>
+
+        <details class="faq">
+            <summary>How do I stop the bot from answering completely?</summary>
+            <div class="faq-body">
+                <p>Deactivate the chatbot under <strong>AI → Chatbots</strong>. Once a customer has asked for a human (or an agent has replied), the bot stays out of that conversation.</p>
+            </div>
+        </details>
+
+        <details class="faq">
+            <summary>My microphone doesn't work for voice notes.</summary>
+            <div class="faq-body">
+                <p>The browser needs permission: click the <strong>lock icon</strong> in the address bar → Site settings → set <strong>Microphone to Allow</strong>, then reload the page. On Windows also check <em>Settings → Privacy → Microphone</em> if it still fails.</p>
+            </div>
+        </details>
+
+        <h2 id="campaigns" class="faq-group-title">Campaigns &amp; messaging</h2>
+
+        <details class="faq">
+            <summary>My campaign shows sent, but some contacts didn't receive it.</summary>
+            <div class="faq-body">
+                <p>Check the recipient list on the campaign page. Common reasons: invalid or changed phone numbers, contacts who opted out, template rejections, or channel <a href="whatsapp.html#limits">messaging limits</a>. Fix the numbers, re-import or re-send to the affected segment.</p>
+            </div>
+        </details>
+
+        <details class="faq">
+            <summary>Why was my template rejected?</summary>
+            <div class="faq-body">
+                <p>Meta reviews templates for category accuracy and spam-like content. Common rejections: marketing content marked as “utility”, excessive caps/emojis, or missing opt-out language. Revise and resubmit with honest categorisation (see <a href="whatsapp.html#templates">templates</a>).</p>
+            </div>
+        </details>
+
+        <h2 id="billing" class="faq-group-title">Account &amp; billing</h2>
+
+        <details class="faq">
+            <summary>I hit a plan limit. What happens?</summary>
+            <div class="faq-body">
+                <p>The app shows which limit you reached (channels, contacts, seats…) and offers an upgrade. Your data is safe — nothing is deleted; you just can't add beyond the limit until you upgrade or free up space.</p>
+            </div>
+        </details>
+
+        <details class="faq">
+            <summary>How do I download invoices?</summary>
+            <div class="faq-body">
+                <p>Go to <strong>Account → Billing</strong>, open the invoice and print/save it as PDF from your browser. See <a href="team-billing.html#billing">Team &amp; Billing</a>.</p>
+            </div>
+        </details>
+
+        <details class="faq">
+            <summary>How do I delete my account or workspace data?</summary>
+            <div class="faq-body">
+                <p>Workspace administrators can export data first (<strong>Settings → Data Export</strong>), then contact support via <strong>Support → Tickets</strong> to close the account. We take data removal seriously and confirm once it's done.</p>
+            </div>
+        </details>
+
+        <h2 id="still-stuck" class="faq-group-title">Still stuck?</h2>
+        <div class="callout note"><div class="callout-title">🎫 Open a support ticket</div><p>From inside the app: <strong>Support → Tickets → New Ticket</strong>. Describe what you did, what you expected and what happened — screenshots help a lot, and tickets go straight to the team.</p></div>
+
+        <nav class="pager">
+            <a href="settings.html"><div class="pager-label">Previous</div><div class="pager-title">← Settings &amp; Developer</div></a>
+            <a class="next" href="index.html"><div class="pager-label">Next</div><div class="pager-title">Back to Home ↑</div></a>
+        </nav>
+    </main>
+</div>
+
+<script src="assets/search-index.js"></script>
+<script src="assets/user-docs.js"></script>
+</body>
+</html>

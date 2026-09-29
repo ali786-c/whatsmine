@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ecommerce — WhatsMine User Guide</title>
+<meta name="description" content="Connect WooCommerce and Shopify stores, sync products and orders, and automate order and cart messages.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💬</text></svg>">
+<link rel="stylesheet" href="assets/user-docs.css">
+</head>
+<body>
+
+<nav class="docs-nav">
+    <button class="menu-toggle" aria-label="Menu">☰</button>
+    <a class="brand" href="index.html"><span class="logo">💬</span> WhatsMine Docs</a>
+    <div class="nav-search" data-docs-search>
+        <span class="search-icon">🔍</span>
+        <input type="text" placeholder="Search the user guide…" aria-label="Search documentation">
+        <div class="search-results"></div>
+    </div>
+    <div class="nav-links">
+        <a href="index.html" class="hide-sm">All Guides</a>
+        <button class="theme-toggle" aria-label="Toggle dark mode">🌙</button>
+    </div>
+</nav>
+
+<div class="docs-shell with-toc">
+    <aside class="docs-sidebar">
+        <div class="group-title">Start Here</div>
+        <a class="nav-link" href="getting-started.html">Getting Started</a>
+        <a class="nav-link" href="inbox.html">Unified Inbox</a>
+        <div class="group-title">Channels</div>
+        <a class="nav-link" href="whatsapp.html">WhatsApp</a>
+        <a class="nav-link" href="instagram.html">Instagram</a>
+        <div class="group-title">Grow</div>
+        <a class="nav-link" href="ai-chatbots.html">AI &amp; Chatbots</a>
+        <a class="nav-link" href="automations.html">Automations</a>
+        <a class="nav-link" href="campaigns.html">Campaigns</a>
+        <a class="nav-link" href="contacts.html">Contacts &amp; Leads</a>
+        <a class="nav-link" href="ecommerce.html">Ecommerce</a>
+        <a class="nav-link" href="social-media.html">Social Media</a>
+        <a class="nav-link" href="reports.html">Reports</a>
+        <div class="group-title">Account</div>
+        <a class="nav-link" href="team-billing.html">Team &amp; Billing</a>
+        <a class="nav-link" href="settings.html">Settings &amp; Developer</a>
+        <a class="nav-link" href="faq.html">FAQ &amp; Troubleshooting</a>
+    </aside>
+
+    <main class="docs-content">
+        <div class="crumbs"><a href="index.html">User Guide</a><span class="sep">›</span>Ecommerce</div>
+        <h1>Ecommerce</h1>
+        <p class="page-lead">Connect your online store, sync products and orders, and message customers at every step — confirmation, shipping and abandoned carts.</p>
+
+        <h2 id="stores">Connecting a store</h2>
+        <div class="step"><div class="step-num">1</div><div class="step-body"><p>Open <strong>Ecommerce → Stores</strong> and click <strong>Add Store</strong>.</p></div></div>
+        <div class="step"><div class="step-num">2</div><div class="step-body"><p>Choose <strong>WooCommerce</strong> or <strong>Shopify</strong> and follow the connection steps (site URL &amp; API credentials, or the Shopify connect flow).</p></div></div>
+        <div class="step"><div class="step-num">3</div><div class="step-body"><p>Once connected, <strong>products and orders sync automatically</strong> — and customers found by phone or email link to their store records.</p></div></div>
+        <div class="callout note"><div class="callout-title">📎 What syncs</div><p>Products (for sharing in chats), orders with line items and totals, and customers. Sync runs continuously in the background.</p></div>
+
+        <h2 id="products">Products</h2>
+        <p>Under <strong>Ecommerce → Products</strong> you can browse the synced catalogue and share product cards right inside WhatsApp conversations — perfect for the inbox when a customer asks “do you have this in blue?”.</p>
+        <p>In <a href="automations.html">automations</a>, the <em>WooCommerce product</em> and <em>Shopify product</em> nodes let a flow send a product card automatically, and the <em>WhatsApp catalog</em> node shares your catalog.</p>
+
+        <h2 id="orders">Orders</h2>
+        <p><strong>Ecommerce → Orders</strong> lists every order with its status, items and customer. Open an order to see full details and jump to the customer's conversation.</p>
+        <ul>
+            <li>Order events power <a href="automations.html">automations</a>: <strong>order placed, fulfilled, cancelled</strong> and <strong>cart abandoned</strong>.</li>
+            <li>Tokens like <code>{{context.order_number}}</code>, <code>{{context.order_total}}</code> and <code>{{context.tracking_url}}</code> personalise those messages.</li>
+        </ul>
+
+        <h2 id="automations">Store automations</h2>
+        <p>From the Stores page, open <strong>WhatsApp Automations</strong> for one-click starter flows. Popular set-ups:</p>
+        <div class="table-wrap"><table class="docs-table">
+            <tr><th>Flow</th><th>Trigger</th><th>Typical message</th></tr>
+            <tr><td>Order confirmation</td><td>Order placed</td><td>“Order {{context.order_number}} confirmed — total {{context.order_total}}. Thank you! 🙏”</td></tr>
+            <tr><td>Shipping update</td><td>Order fulfilled</td><td>“Your order is on its way 🚚 Track: {{context.tracking_url}}”</td></tr>
+            <tr><td>Win-back</td><td>Order cancelled</td><td>“Anything go wrong? Here's 15% off your next order: COMEBACK15”</td></tr>
+            <tr><td>Cart recovery</td><td>Cart abandoned</td><td>“Your cart is waiting 🛒 Checkout: {{context.recovery_url}}”</td></tr>
+            <tr><td>New customer welcome</td><td>Customer created</td><td>“Welcome! WELCOME10 gives you 10% off your first order 🎁”</td></tr>
+        </table></div>
+        <div class="callout tip"><div class="callout-title">💡 Recovery that works</div><p>Send the first cart reminder about an hour after abandonment, and a final discount touch a day later — this sequence reliably outperforms a single blast.</p></div>
+
+        <nav class="pager">
+            <a href="contacts.html"><div class="pager-label">Previous</div><div class="pager-title">← Contacts &amp; Leads</div></a>
+            <a class="next" href="social-media.html"><div class="pager-label">Next</div><div class="pager-title">Social Media →</div></a>
+        </nav>
+    </main>
+
+    <aside class="docs-toc">
+        <div class="toc-title">On this page</div>
+        <a href="#stores">Connecting a store</a>
+        <a href="#products">Products</a>
+        <a href="#orders">Orders</a>
+        <a href="#automations">Store automations</a>
+    </aside>
+</div>
+
+<script src="assets/search-index.js"></script>
+<script src="assets/user-docs.js"></script>
+</body>
+</html>

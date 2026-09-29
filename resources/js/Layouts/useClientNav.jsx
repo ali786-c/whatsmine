@@ -28,6 +28,7 @@ export default function useClientNav() {
     const { t } = useTranslation();
     const user = auth?.user;
     const docsUrl = branding?.docs_url;
+    const userGuideUrl = branding?.user_guide_url;
     const isClientAdmin = user?.client_role === 'administrator';
 
     const accountItems = [
@@ -65,6 +66,12 @@ export default function useClientNav() {
 
     if (docsUrl) {
         supportItems.push({ label: t('nav.help_docs'), href: docsUrl, icon: <ExternalLink className={iconClass} />, external: true });
+    }
+
+    // Standalone end-user documentation website (SAAS_USER_GUIDE_URL).
+    // Hidden entirely when the URL is not configured — zero UI change by default.
+    if (userGuideUrl) {
+        supportItems.push({ label: 'User Guide', href: userGuideUrl, icon: <BookOpen className={iconClass} />, external: true });
     }
 
     const contactsItems = [

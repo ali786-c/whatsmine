@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI &amp; Chatbots — WhatsMine User Guide</title>
+<meta name="description" content="Create AI chatbots, train them on your knowledge base, manage memories and test replies in the playground.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💬</text></svg>">
+<link rel="stylesheet" href="assets/user-docs.css">
+</head>
+<body>
+
+<nav class="docs-nav">
+    <button class="menu-toggle" aria-label="Menu">☰</button>
+    <a class="brand" href="index.html"><span class="logo">💬</span> WhatsMine Docs</a>
+    <div class="nav-search" data-docs-search>
+        <span class="search-icon">🔍</span>
+        <input type="text" placeholder="Search the user guide…" aria-label="Search documentation">
+        <div class="search-results"></div>
+    </div>
+    <div class="nav-links">
+        <a href="index.html" class="hide-sm">All Guides</a>
+        <button class="theme-toggle" aria-label="Toggle dark mode">🌙</button>
+    </div>
+</nav>
+
+<div class="docs-shell with-toc">
+    <aside class="docs-sidebar">
+        <div class="group-title">Start Here</div>
+        <a class="nav-link" href="getting-started.html">Getting Started</a>
+        <a class="nav-link" href="inbox.html">Unified Inbox</a>
+        <div class="group-title">Channels</div>
+        <a class="nav-link" href="whatsapp.html">WhatsApp</a>
+        <a class="nav-link" href="instagram.html">Instagram</a>
+        <div class="group-title">Grow</div>
+        <a class="nav-link" href="ai-chatbots.html">AI &amp; Chatbots</a>
+        <a class="nav-link" href="automations.html">Automations</a>
+        <a class="nav-link" href="campaigns.html">Campaigns</a>
+        <a class="nav-link" href="contacts.html">Contacts &amp; Leads</a>
+        <a class="nav-link" href="ecommerce.html">Ecommerce</a>
+        <a class="nav-link" href="social-media.html">Social Media</a>
+        <a class="nav-link" href="reports.html">Reports</a>
+        <div class="group-title">Account</div>
+        <a class="nav-link" href="team-billing.html">Team &amp; Billing</a>
+        <a class="nav-link" href="settings.html">Settings &amp; Developer</a>
+        <a class="nav-link" href="faq.html">FAQ &amp; Troubleshooting</a>
+    </aside>
+
+    <main class="docs-content">
+        <div class="crumbs"><a href="index.html">User Guide</a><span class="sep">›</span>AI &amp; Chatbots</div>
+        <h1>AI &amp; Chatbots</h1>
+        <p class="page-lead">Let AI answer your customers 24/7 — trained on your own content, with smooth human handover when it's needed.</p>
+
+        <h2 id="providers">AI providers</h2>
+        <p>Chatbots need an AI engine behind them. Under <strong>AI → Providers</strong> you connect a provider account and choose the models used for <strong>chat</strong> and <strong>embeddings</strong> (used for knowledge-base search).</p>
+        <div class="step"><div class="step-num">1</div><div class="step-body"><p>Open <strong>AI → Providers</strong> and click <strong>Add Provider</strong>.</p></div></div>
+        <div class="step"><div class="step-num">2</div><div class="step-body"><p>Pick a provider (for example OpenAI or Google Gemini) and paste your <strong>API key</strong>.</p></div></div>
+        <div class="step"><div class="step-num">3</div><div class="step-body"><p>Set the chat model — <strong>auto</strong> is recommended; the platform then routes to the best healthy model automatically.</p></div></div>
+        <div class="step"><div class="step-num">4</div><div class="step-body"><p>Enable it and run the built-in <strong>diagnostic</strong> to confirm everything is wired correctly.</p></div></div>
+        <div class="callout note"><div class="callout-title">📎 Keep a fallback</div><p>Add at least one embed-capable provider. Without embeddings your chatbot falls back to keyword search only, which can miss answers.</p></div>
+
+        <h2 id="knowledge-bases">Knowledge bases</h2>
+        <p>A knowledge base (KB) is your bot's brain: paste or upload your content and the bot answers from it instead of making things up.</p>
+        <div class="step"><div class="step-num">1</div><div class="step-body"><p>Create a KB under <strong>AI → Knowledge Bases</strong> (name it after its purpose, e.g. “Store FAQ”).</p></div></div>
+        <div class="step"><div class="step-num">2</div><div class="step-body"><p>Add <strong>documents</strong>: paste text, upload files, or import FAQ/question-answer content. Every document is automatically split into chunks and indexed.</p></div></div>
+        <div class="step"><div class="step-num">3</div><div class="step-body"><p>After editing a document, <strong>re-index</strong> it (re-save or use the re-index action) so the search index refreshes.</p></div></div>
+        <div class="callout tip"><div class="callout-title">💡 What makes a good KB</div><p>Write the way customers ask: short Q&amp;A pairs, product names spelled out, prices, policies, opening hours. The bot can only answer what's actually in the KB — generic company questions need the company info written there too.</p></div>
+
+        <h2 id="chatbots">Creating a chatbot</h2>
+        <div class="step"><div class="step-num">1</div><div class="step-body"><p>Open <strong>AI → Chatbots</strong> and click <strong>New Chatbot</strong>.</p></div></div>
+        <div class="step"><div class="step-num">2</div><div class="step-body"><p>Give it a name and a <strong>system prompt</strong> — its personality and rules, e.g. “You are the assistant for X Store. Be friendly, answer in the customer's language, only promise what's in the knowledge base.”</p></div></div>
+        <div class="step"><div class="step-num">3</div><div class="step-body"><p><strong>Attach a knowledge base</strong> — this is what grounds its answers in your content.</p></div></div>
+        <div class="step"><div class="step-num">4</div><div class="step-body"><p>Set the <strong>handover reply</strong> — the message sent when a customer asks for a human (translated into 17 languages automatically if left empty).</p></div></div>
+        <div class="step"><div class="step-num">5</div><div class="step-body"><p>Activate the chatbot. It now answers inbound messages on the channels it's attached to.</p></div></div>
+
+        <h2 id="memories">Memories</h2>
+        <p><strong>AI → Memories</strong> shows what the bot has learned about individual customers — preferences and facts it picked up from conversations. Use it to review what the AI remembers and remove anything that shouldn't be stored.</p>
+
+        <h2 id="playground">Testing in the playground</h2>
+        <p>Every chatbot has a <strong>playground</strong> — a private chat where you test before going live:</p>
+        <ul>
+            <li>Ask questions your customers would ask and check the answers.</li>
+            <li>The playground remembers the conversation, so follow-up questions work like a real chat.</li>
+            <li>Try edge cases: a question <em>not</em> in the KB, a request for a human, an angry message with emojis.</li>
+        </ul>
+        <div class="callout tip"><div class="callout-title">💡 Bot ignoring your KB?</div><p>Test with a question that literally appears in your KB text. If the playground still answers poorly, re-index your documents and run the provider diagnostic — the usual culprits are a missing embed provider or an unindexed document.</p></div>
+
+        <h2 id="handover">Human handover</h2>
+        <p>When a customer says “talk to a human” (or the AI detects strong frustration):</p>
+        <ol>
+            <li>The bot instantly acknowledges with your handover message.</li>
+            <li>The conversation is labelled <strong>“Waiting for you”</strong> in the inbox.</li>
+            <li>The bot goes quiet — a human agent takes over and the label clears on the first agent reply.</li>
+        </ol>
+        <p>You can also hand over manually from any <a href="automations.html">automation</a> with the <em>Assign agent</em> node, or from the inbox.</p>
+
+        <h2 id="usage">Monitoring AI usage</h2>
+        <p>Open <strong>Reports → AI</strong> to see chatbot activity and usage over time — helpful for understanding volume and spotting cost spikes. See the <a href="reports.html">Reports guide</a>.</p>
+
+        <nav class="pager">
+            <a href="instagram.html"><div class="pager-label">Previous</div><div class="pager-title">← Instagram</div></a>
+            <a class="next" href="automations.html"><div class="pager-label">Next</div><div class="pager-title">Automations →</div></a>
+        </nav>
+    </main>
+
+    <aside class="docs-toc">
+        <div class="toc-title">On this page</div>
+        <a href="#providers">AI providers</a>
+        <a href="#knowledge-bases">Knowledge bases</a>
+        <a href="#chatbots">Creating a chatbot</a>
+        <a href="#memories">Memories</a>
+        <a href="#playground">Testing in the playground</a>
+        <a href="#handover">Human handover</a>
+        <a href="#usage">Monitoring AI usage</a>
+    </aside>
+</div>
+
+<script src="assets/search-index.js"></script>
+<script src="assets/user-docs.js"></script>
+</body>
+</html>

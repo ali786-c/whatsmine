@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Settings &amp; Developer — WhatsMine User Guide</title>
+<meta name="description" content="Account settings, notifications, data export, audit log, media library, API tokens and webhooks.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💬</text></svg>">
+<link rel="stylesheet" href="assets/user-docs.css">
+</head>
+<body>
+
+<nav class="docs-nav">
+    <button class="menu-toggle" aria-label="Menu">☰</button>
+    <a class="brand" href="index.html"><span class="logo">💬</span> WhatsMine Docs</a>
+    <div class="nav-search" data-docs-search>
+        <span class="search-icon">🔍</span>
+        <input type="text" placeholder="Search the user guide…" aria-label="Search documentation">
+        <div class="search-results"></div>
+    </div>
+    <div class="nav-links">
+        <a href="index.html" class="hide-sm">All Guides</a>
+        <button class="theme-toggle" aria-label="Toggle dark mode">🌙</button>
+    </div>
+</nav>
+
+<div class="docs-shell with-toc">
+    <aside class="docs-sidebar">
+        <div class="group-title">Start Here</div>
+        <a class="nav-link" href="getting-started.html">Getting Started</a>
+        <a class="nav-link" href="inbox.html">Unified Inbox</a>
+        <div class="group-title">Channels</div>
+        <a class="nav-link" href="whatsapp.html">WhatsApp</a>
+        <a class="nav-link" href="instagram.html">Instagram</a>
+        <div class="group-title">Grow</div>
+        <a class="nav-link" href="ai-chatbots.html">AI &amp; Chatbots</a>
+        <a class="nav-link" href="automations.html">Automations</a>
+        <a class="nav-link" href="campaigns.html">Campaigns</a>
+        <a class="nav-link" href="contacts.html">Contacts &amp; Leads</a>
+        <a class="nav-link" href="ecommerce.html">Ecommerce</a>
+        <a class="nav-link" href="social-media.html">Social Media</a>
+        <a class="nav-link" href="reports.html">Reports</a>
+        <div class="group-title">Account</div>
+        <a class="nav-link" href="team-billing.html">Team &amp; Billing</a>
+        <a class="nav-link" href="settings.html">Settings &amp; Developer</a>
+        <a class="nav-link" href="faq.html">FAQ &amp; Troubleshooting</a>
+    </aside>
+
+    <main class="docs-content">
+        <div class="crumbs"><a href="index.html">User Guide</a><span class="sep">›</span>Settings &amp; Developer</div>
+        <h1>Settings &amp; Developer</h1>
+        <p class="page-lead">Tune your workspace preferences, control notifications, export your data, and integrate with the API.</p>
+
+        <h2 id="account">Account settings</h2>
+        <p>Under <strong>Account → Settings</strong> you can:</p>
+        <ul>
+            <li>Update your <strong>profile</strong> — name, email, password and avatar.</li>
+            <li>Set <strong>workspace defaults</strong> — language, currency and timezone used across the app.</li>
+            <li>Manage <strong>workspaces</strong> if your plan includes more than one (see <a href="getting-started.html#workspaces">Workspaces</a>).</li>
+        </ul>
+
+        <h2 id="notifications">Notifications</h2>
+        <p><strong>Account → Notifications</strong> controls how the app gets your attention:</p>
+        <ul>
+            <li>Choose events worth interrupting for — new inbound message, assignment, campaign completion.</li>
+            <li>Pick channels: in-app notifications and browser push (the first enable asks browser permission).</li>
+            <li>Everything lands in the notifications inbox from the bell icon, regardless of settings.</li>
+        </ul>
+
+        <h2 id="data">Data export</h2>
+        <p><strong>Settings → Data Export</strong> generates downloadable copies of your workspace data — contacts and conversations — so you always own your information. Request an export and download the file when it's ready.</p>
+
+        <h2 id="audit">Audit log</h2>
+        <p>The <strong>Audit Log</strong> records important changes made in your workspace: who changed settings, invited users, or modified automations, and when. Administrators can filter by user and action — invaluable when something “mysteriously” changed.</p>
+
+        <h2 id="media">Media library</h2>
+        <p><strong>Developer → Media</strong> stores your uploaded images, videos, audio and documents in one place. Upload once and reuse the same file across campaigns, templates and automations — no re-uploading the same product photo every time.</p>
+
+        <h2 id="api">API tokens</h2>
+        <p>Integrate WhatsMine with your own systems through the API:</p>
+        <div class="step"><div class="step-num">1</div><div class="step-body"><p>Open <strong>Developer → API Tokens</strong> and click <strong>New Token</strong>.</p></div></div>
+        <div class="step"><div class="step-num">2</div><div class="step-body"><p>Name it after its purpose (e.g. “website-forms”) and create it.</p></div></div>
+        <div class="step"><div class="step-num">3</div><div class="step-body"><p><strong>Copy the token immediately</strong> — it's shown only once. Store it safely.</p></div></div>
+        <div class="step"><div class="step-num">4</div><div class="step-body"><p>Send it as a bearer token with API requests. Revoke any token from the same page if it's no longer needed.</p></div></div>
+        <div class="callout warn"><div class="callout-title">⚠️ Tokens are passwords</div><p>Never commit tokens to public repositories or paste them in support chats. Revoke and re-create a token the moment you suspect exposure.</p></div>
+
+        <h2 id="webhooks">Webhooks</h2>
+        <p><strong>Developer → Webhooks</strong> pushes events from WhatsMine to your own endpoints — new message, contact created, order placed and more.</p>
+        <div class="step"><div class="step-num">1</div><div class="step-body"><p>Add your endpoint URL and select the events to receive.</p></div></div>
+        <div class="step"><div class="step-num">2</div><div class="step-body"><p>Save — events start POSTing to your URL as they happen.</p></div></div>
+        <div class="step"><div class="step-num">3</div><div class="step-body"><p>Use the <strong>Deliveries</strong> view to inspect every attempt: payload, response code and retry state — this is where you debug a silent endpoint.</p></div></div>
+
+        <h2 id="docs">API documentation</h2>
+        <p>Open <strong>Developer → API Docs</strong> for the full, in-app API reference — endpoints, parameters and examples using your own tokens. Developers should start there; this guide intentionally stays non-technical.</p>
+
+        <nav class="pager">
+            <a href="team-billing.html"><div class="pager-label">Previous</div><div class="pager-title">← Team &amp; Billing</div></a>
+            <a class="next" href="faq.html"><div class="pager-label">Next</div><div class="pager-title">FAQ &amp; Troubleshooting →</div></a>
+        </nav>
+    </main>
+
+    <aside class="docs-toc">
+        <div class="toc-title">On this page</div>
+        <a href="#account">Account settings</a>
+        <a href="#notifications">Notifications</a>
+        <a href="#data">Data export</a>
+        <a href="#audit">Audit log</a>
+        <a href="#media">Media library</a>
+        <a href="#api">API tokens</a>
+        <a href="#webhooks">Webhooks</a>
+        <a href="#docs">API documentation</a>
+    </aside>
+</div>
+
+<script src="assets/search-index.js"></script>
+<script src="assets/user-docs.js"></script>
+</body>
+</html>

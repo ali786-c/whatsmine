@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WhatsApp — WhatsMine User Guide</title>
+<meta name="description" content="Connect WhatsApp via Cloud API or QR, manage message templates, auto-replies and the website chat widget.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💬</text></svg>">
+<link rel="stylesheet" href="assets/user-docs.css">
+</head>
+<body>
+
+<nav class="docs-nav">
+    <button class="menu-toggle" aria-label="Menu">☰</button>
+    <a class="brand" href="index.html"><span class="logo">💬</span> WhatsMine Docs</a>
+    <div class="nav-search" data-docs-search>
+        <span class="search-icon">🔍</span>
+        <input type="text" placeholder="Search the user guide…" aria-label="Search documentation">
+        <div class="search-results"></div>
+    </div>
+    <div class="nav-links">
+        <a href="index.html" class="hide-sm">All Guides</a>
+        <button class="theme-toggle" aria-label="Toggle dark mode">🌙</button>
+    </div>
+</nav>
+
+<div class="docs-shell with-toc">
+    <aside class="docs-sidebar">
+        <div class="group-title">Start Here</div>
+        <a class="nav-link" href="getting-started.html">Getting Started</a>
+        <a class="nav-link" href="inbox.html">Unified Inbox</a>
+        <div class="group-title">Channels</div>
+        <a class="nav-link" href="whatsapp.html">WhatsApp</a>
+        <a class="nav-link" href="instagram.html">Instagram</a>
+        <div class="group-title">Grow</div>
+        <a class="nav-link" href="ai-chatbots.html">AI &amp; Chatbots</a>
+        <a class="nav-link" href="automations.html">Automations</a>
+        <a class="nav-link" href="campaigns.html">Campaigns</a>
+        <a class="nav-link" href="contacts.html">Contacts &amp; Leads</a>
+        <a class="nav-link" href="ecommerce.html">Ecommerce</a>
+        <a class="nav-link" href="social-media.html">Social Media</a>
+        <a class="nav-link" href="reports.html">Reports</a>
+        <div class="group-title">Account</div>
+        <a class="nav-link" href="team-billing.html">Team &amp; Billing</a>
+        <a class="nav-link" href="settings.html">Settings &amp; Developer</a>
+        <a class="nav-link" href="faq.html">FAQ &amp; Troubleshooting</a>
+    </aside>
+
+    <main class="docs-content">
+        <div class="crumbs"><a href="index.html">User Guide</a><span class="sep">›</span>WhatsApp</div>
+        <h1>WhatsApp</h1>
+        <p class="page-lead">Connect your WhatsApp Business number, manage message templates, automate replies and add WhatsApp chat to your website.</p>
+
+        <h2 id="connect">Connecting WhatsApp</h2>
+        <p>Go to <strong>Inbox → Channel Setup</strong>. Two connection types are available — pick based on how your number is set up:</p>
+        <div class="table-wrap"><table class="docs-table">
+            <tr><th></th><th>Cloud API (official)</th><th>QR session</th></tr>
+            <tr><td><strong>Best for</strong></td><td>Businesses wanting the official Meta API</td><td>Quick start with your existing WhatsApp number</td></tr>
+            <tr><td><strong>Setup</strong></td><td>Meta business verification, one-click embedded signup</td><td>Scan a QR code from WhatsApp → Linked Devices</td></tr>
+            <tr><td><strong>Campaigns</strong></td><td>Full template broadcast support</td><td>Depends on your session type</td></tr>
+            <tr><td><strong>Stability</strong></td><td>Highest — backed by Meta</td><td>Runs alongside your phone app</td></tr>
+        </table></div>
+        <div class="step"><div class="step-num">1</div><div class="step-body"><p>Click <strong>Connect WhatsApp</strong> (Cloud API) or <strong>Connect WhatsApp QR</strong>.</p></div></div>
+        <div class="step"><div class="step-num">2</div><div class="step-body"><p>For QR: open WhatsApp on your phone → <strong>Settings → Linked Devices → Link a Device</strong> → scan the code shown. Keep your phone online until the session syncs.</p></div></div>
+        <div class="step"><div class="step-num">3</div><div class="step-body"><p>For Cloud API: follow the Meta embedded-signup popup — log in to Facebook, pick your business and number, and approve permissions. The webhook is registered automatically.</p></div></div>
+        <div class="step"><div class="step-num">4</div><div class="step-body"><p>The channel appears in your inbox — new customer messages start arriving automatically.</p></div></div>
+        <div class="callout warn"><div class="callout-title">⚠️ QR sessions</div><p>A QR session runs through your own number and can disconnect if the phone is offline for long or the device is removed. Re-scan from the channel page if the status shows disconnected.</p></div>
+
+        <h2 id="templates">Message templates</h2>
+        <p>Templates are pre-approved message formats you can send <strong>outside the 24-hour reply window</strong> — for order updates, offers and reminders.</p>
+        <div class="step"><div class="step-num">1</div><div class="step-body"><p>Open <strong>Messaging → Templates</strong> and click <strong>New Template</strong>.</p></div></div>
+        <div class="step"><div class="step-num">2</div><div class="step-body"><p>Choose a category (Marketing, Utility or Authentication) and write the body. Add <strong>variables</strong> like <code>{{1}}</code> for personalisation — e.g. “Hi {{1}}, your order {{2}} has shipped!”.</p></div></div>
+        <div class="step"><div class="step-num">3</div><div class="step-body"><p>Submit for approval. Meta usually reviews within minutes to a few hours. Status shows under Templates.</p></div></div>
+        <div class="step"><div class="step-num">4</div><div class="step-body"><p>Once approved, use the template in the inbox, in <a href="campaigns.html">campaigns</a> and in <a href="automations.html">automations</a>.</p></div></div>
+        <div class="callout tip"><div class="callout-title">💡 Approval tips</div><p>Be specific and honest with the category, avoid aggressive ALL-CAPS promotions, and use a clear footer with an opt-out line (e.g. “Reply STOP to unsubscribe”).</p></div>
+
+        <h2 id="auto-replies">Auto-replies</h2>
+        <p>Auto-replies answer incoming messages instantly based on keywords — great for FAQs and after-hours responses.</p>
+        <div class="step"><div class="step-num">1</div><div class="step-body"><p>Open <strong>Messaging → Auto-Replies</strong> and click <strong>New</strong>.</p></div></div>
+        <div class="step"><div class="step-num">2</div><div class="step-body"><p>Enter trigger <strong>keywords</strong> (e.g. “price, rates, cost”) and the reply text. Matching is not case-sensitive.</p></div></div>
+        <div class="step"><div class="step-num">3</div><div class="step-body"><p>Toggle the auto-reply <strong>active</strong>. It fires on every matching inbound message on the connected number.</p></div></div>
+        <div class="callout note"><div class="callout-title">📎 Good to know</div><p>When a customer explicitly asks for a human, the chatbot stops and hands over — auto-replies and bots never trap a customer in a loop.</p></div>
+
+        <h2 id="widget">Website chat widget</h2>
+        <p>Turn website visitors into WhatsApp conversations with an embeddable chat bubble.</p>
+        <div class="step"><div class="step-num">1</div><div class="step-body"><p>Open <strong>Messaging → Chat Widget</strong> and customise the bubble: colour, greeting text, position and your brand avatar.</p></div></div>
+        <div class="step"><div class="step-num">2</div><div class="step-body"><p>Copy the generated <strong>embed snippet</strong>.</p></div></div>
+        <div class="step"><div class="step-num">3</div><div class="step-body"><p>Paste it just before <code>&lt;/body&gt;</code> on your website (or send it to your developer). The bubble appears on your site immediately.</p></div></div>
+
+        <h2 id="limits">Quality &amp; limits</h2>
+        <ul>
+            <li>Messaging limits (how many unique customers you can message per day) grow automatically as Meta observes quality traffic.</li>
+            <li>Keep opt-outs honoured, avoid spammy blasts, and monitor template quality — a low-quality rating slows your sending.</li>
+            <li>Check <a href="reports.html">Reports → Campaigns</a> to watch delivery and read rates per broadcast.</li>
+        </ul>
+
+        <nav class="pager">
+            <a href="inbox.html"><div class="pager-label">Previous</div><div class="pager-title">← Unified Inbox</div></a>
+            <a class="next" href="instagram.html"><div class="pager-label">Next</div><div class="pager-title">Instagram →</div></a>
+        </nav>
+    </main>
+
+    <aside class="docs-toc">
+        <div class="toc-title">On this page</div>
+        <a href="#connect">Connecting WhatsApp</a>
+        <a href="#templates">Message templates</a>
+        <a href="#auto-replies">Auto-replies</a>
+        <a href="#widget">Website chat widget</a>
+        <a href="#limits">Quality &amp; limits</a>
+    </aside>
+</div>
+
+<script src="assets/search-index.js"></script>
+<script src="assets/user-docs.js"></script>
+</body>
+</html>

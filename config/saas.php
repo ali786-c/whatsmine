@@ -15,6 +15,10 @@ return [
     // External help/documentation URL shown in the client "Help & Docs" nav
     // item. Leave blank to hide the link. Configure in the admin panel or .env.
     'docs_url' => env('SAAS_DOCS_URL', ''),
+    // Standalone end-user documentation website (docs/user-guide). Leave blank
+    // to hide the "User Guide" nav item. Point to a static-hosted URL, e.g.
+    // https://docs.example.com or wherever docs/user-guide is uploaded.
+    'user_guide_url' => env('SAAS_USER_GUIDE_URL', ''),
 
     /*
     |--------------------------------------------------------------------------
