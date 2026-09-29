@@ -25,6 +25,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -37,6 +38,9 @@ class InboxController extends Controller
 
     /** Human-readable reason for the last transcodeAudioToOgg() failure. */
     private ?string $transcodeReason = null;
+
+    /** Hard cap for proxy-fetched inbound media (20 MB). */
+    private const MEDIA_MAX_BYTES = 20 * 1024 * 1024;
 
     public function index(Request $request): Response
     {
@@ -622,12 +626,16 @@ class InboxController extends Controller
 
         // Intercept for WhatsApp QR (Baileys) media proxy
         if ($message->channel === 'whatsapp_qr') {
-            if (! empty($payload['laravel_preview_url'])) {
-                $ext = $payload['ext'] ?? 'ogg';
-                $filename = "message-media/{$message->id}.{$ext}";
-                $filename = $this->storageManager->prefixedPath($filename);
-                if ($this->storageManager->disk()->exists($filename)) {
-                    return $this->streamStored($filename, $payload['mime_type'] ?? null);
+            $disk = $this->storageManager->disk();
+
+            // Already cached locally: exact stored path first (random names),
+            // then the legacy message-media/{id}.{ext} name for old payloads.
+            $cachedPath = $payload['stored_path']
+                ?? (isset($payload['ext']) ? "message-media/{$message->id}.{$payload['ext']}" : null);
+            if ($cachedPath) {
+                $cachedPath = $this->storageManager->prefixedPath($cachedPath);
+                if ($disk->exists($cachedPath)) {
+                    return $this->streamStored($cachedPath, $payload['mime_type'] ?? null);
                 }
             }
 
@@ -636,25 +644,44 @@ class InboxController extends Controller
                 abort(404, 'No media available from QR session.');
             }
 
+            // SSRF guard: only the configured Node.js (whatscrm) service may be fetched
+            if (! $this->isAllowedNodeMediaUrl($nodeMediaUrl)) {
+                Log::warning('QR media fetch blocked: URL host not allowed', [
+                    'message_id' => $message->id,
+                    'host' => parse_url($nodeMediaUrl, PHP_URL_HOST) ?: 'unparseable',
+                ]);
+                abort(502, 'Media URL is not allowed.');
+            }
+
             try {
-                $response = \Illuminate\Support\Facades\Http::timeout(15)->get($nodeMediaUrl);
+                // No redirect following — a redirect could hop to an internal host
+                $response = \Illuminate\Support\Facades\Http::timeout(15)
+                    ->maxRedirects(0)
+                    ->get($nodeMediaUrl);
                 if (! $response->successful()) {
                     abort(502, 'Could not fetch media from Node service.');
                 }
 
                 $bytes = $response->body();
+                if (strlen($bytes) > self::MEDIA_MAX_BYTES) {
+                    // Thrown so the surrounding catch surfaces it with a clear reason
+                    throw new \RuntimeException('media file exceeds the 20 MB limit');
+                }
                 $mimeType = $response->header('Content-Type') ?? 'audio/ogg';
                 $ext = explode('/', $mimeType)[1] ?? 'ogg';
                 $ext = explode(';', $ext)[0]; // strip codecs info
                 $ext = str_replace(['jpeg', 'oga'], ['jpg', 'ogg'], $ext);
 
-                $filename = "message-media/{$message->id}.{$ext}";
-                $filename = $this->storageManager->prefixedPath($filename);
-                $this->storageManager->disk()->put($filename, $bytes);
-                $laravelPreviewUrl = $this->storageManager->disk()->url($filename);
+                // Random filename — never derived from the sequential message id,
+                // so /storage/message-media/ cannot be enumerated.
+                $relative = 'message-media/'.Str::random(40).'.'.$ext;
+                $filename = $this->storageManager->prefixedPath($relative);
+                $disk->put($filename, $bytes);
+                $laravelPreviewUrl = $disk->url($filename);
 
                 $payload = array_merge($payload, [
                     'laravel_preview_url' => $laravelPreviewUrl,
+                    'stored_path' => $relative,
                     'ext' => $ext,
                     'mime_type' => $mimeType,
                 ]);
@@ -668,12 +695,31 @@ class InboxController extends Controller
 
         // Already cached locally — verify the file still exists before streaming it
         if (! empty($payload['preview_url'])) {
-            $storagePath = "message-media/{$message->id}";
             $disk = $this->storageManager->disk();
-            $files = $disk->files($this->storageManager->prefixedPath('message-media'));
-            $cached = collect($files)->first(fn ($f) => str_starts_with($f, $this->storageManager->prefixedPath($storagePath)));
+            $cached = null;
+
+            if (! empty($payload['stored_path'])) {
+                // New payloads: exact stored path — no directory scans
+                $cached = $this->storageManager->prefixedPath($payload['stored_path']);
+            } elseif (isset($payload['ext'])) {
+                $cached = $this->storageManager->prefixedPath("message-media/{$message->id}.{$payload['ext']}");
+            } else {
+                // Legacy payload without ext: one exact-prefix directory scan (the
+                // trailing dot kills the msg-12/matches-123.jpg collision), then the
+                // payload self-heals so future requests skip the scan entirely.
+                $prefix = $this->storageManager->prefixedPath("message-media/{$message->id}.");
+                $found = collect($disk->files($this->storageManager->prefixedPath('message-media')))
+                    ->first(fn ($f) => str_starts_with($f, $prefix));
+                if ($found) {
+                    $cached = $this->storageManager->prefixedPath($this->unprefixStoragePath($found));
+                }
+            }
 
             if ($cached && $disk->exists($cached)) {
+                if (empty($payload['stored_path'])) {
+                    $message->update(['payload' => array_merge($payload, ['stored_path' => $this->unprefixStoragePath($cached)])]);
+                }
+
                 return $this->streamStored($cached, $payload['mime_type'] ?? null);
             }
 
@@ -702,14 +748,14 @@ class InboxController extends Controller
             $bytes = $client->downloadMedia($downloadUrl);
             $ext = explode('/', $mimeType)[1] ?? 'bin';
             $ext = str_replace(['jpeg'], ['jpg'], $ext);
-            $filename = "message-media/{$message->id}.{$ext}";
+            $relative = 'message-media/'.Str::random(40).'.'.$ext;
 
-            $filename = $this->storageManager->prefixedPath($filename);
+            $filename = $this->storageManager->prefixedPath($relative);
             $this->storageManager->disk()->put($filename, $bytes);
             $previewUrl = $this->storageManager->disk()->url($filename);
 
             // Cache for next request
-            $message->update(['payload' => array_merge($payload, ['preview_url' => $previewUrl, 'mime_type' => $mimeType])]);
+            $message->update(['payload' => array_merge($payload, ['preview_url' => $previewUrl, 'stored_path' => $relative, 'mime_type' => $mimeType])]);
 
             return $this->streamStored($filename, $mimeType);
         } catch (\Throwable $e) {
@@ -840,6 +886,75 @@ class InboxController extends Controller
     }
 
     /**
+     * SSRF guard for QR media fetches: only the configured Node.js (whatscrm)
+     * service host may be fetched, over http/https only. Private/loopback/
+     * link-local hosts are rejected unless they are exactly the configured
+     * whatscrm host (local installs run the Node service on localhost).
+     */
+    private function isAllowedNodeMediaUrl(string $url): bool
+    {
+        $parts = parse_url($url);
+        if ($parts === false || empty($parts['host'])) {
+            return false;
+        }
+
+        $scheme = strtolower($parts['scheme'] ?? '');
+        if (! in_array($scheme, ['http', 'https'], true)) {
+            return false;
+        }
+
+        $allowedHost = strtolower((string) parse_url((string) config('services.whatscrm.url'), PHP_URL_HOST));
+        $host = strtolower($parts['host']);
+        if ($allowedHost !== '' && $host === $allowedHost) {
+            return true;
+        }
+
+        // Any other host must be public: unresolvable names and private ranges are rejected
+        $ip = gethostbyname($host);
+        if ($ip === $host) {
+            return false;
+        }
+
+        return ! $this->isPrivateIp($ip);
+    }
+
+    /** True for loopback/private/link-local/CGNAT ranges (IPv4) and loopback/link-local/ULA (IPv6). */
+    private function isPrivateIp(string $ip): bool
+    {
+        if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
+            foreach ([
+                ['0.0.0.0', 8], ['10.0.0.0', 8], ['127.0.0.0', 8], ['169.254.0.0', 16],
+                ['172.16.0.0', 12], ['192.168.0.0', 16], ['100.64.0.0', 10], ['198.18.0.0', 15],
+            ] as [$subnet, $mask]) {
+                if ((ip2long($ip) >> (32 - $mask)) === (ip2long($subnet) >> (32 - $mask))) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        if (! filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6)) {
+            return false;
+        }
+
+        $lower = strtolower($ip);
+
+        return str_starts_with($lower, '::1')
+            || str_starts_with($lower, 'fe80')
+            || str_starts_with($lower, 'fc')
+            || str_starts_with($lower, 'fd');
+    }
+
+    /** Strip the active storage prefix so payload paths are always disk-relative. */
+    private function unprefixStoragePath(string $path): string
+    {
+        $prefix = $this->storageManager->directoryPrefix();
+
+        return $prefix !== '' && str_starts_with($path, $prefix) ? substr($path, strlen($prefix)) : $path;
+    }
+
+    /**
      * Stream a stored media file inline.
      *
      * Redirecting to disk->url() depends on the /storage symlink (and on
@@ -851,24 +966,39 @@ class InboxController extends Controller
         $disk = $this->storageManager->disk();
         abort_unless($disk->exists($storagePath), 404, 'Media file missing.');
 
-        $mime = $mimeType ?: match (strtolower(pathinfo($storagePath, PATHINFO_EXTENSION))) {
-            'jpg', 'jpeg' => 'image/jpeg',
-            'png' => 'image/png',
-            'webp' => 'image/webp',
-            'gif' => 'image/gif',
-            'mp4' => 'video/mp4',
-            'ogg', 'oga' => 'audio/ogg',
-            'opus' => 'audio/opus',
-            'mp3' => 'audio/mpeg',
-            'm4a' => 'audio/mp4',
-            'pdf' => 'application/pdf',
-            default => 'application/octet-stream',
-        };
+        $ext = strtolower(pathinfo($storagePath, PATHINFO_EXTENSION));
+
+        // Extensions safe to render inside the app origin. Everything else —
+        // html/svg/js/php/phtml and any unknown type — must never be served
+        // inline: attacker-influenced bytes would become stored XSS on the
+        // app origin, so they download with a neutral content type instead.
+        $inlineMimes = [
+            'jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg', 'png' => 'image/png',
+            'webp' => 'image/webp', 'gif' => 'image/gif',
+            'mp4' => 'video/mp4', 'webm' => 'video/webm', 'mov' => 'video/quicktime', '3gp' => 'video/3gpp',
+            'ogg' => 'audio/ogg', 'oga' => 'audio/ogg', 'opus' => 'audio/opus',
+            'mp3' => 'audio/mpeg', 'm4a' => 'audio/mp4', 'aac' => 'audio/aac', 'amr' => 'audio/amr', 'wav' => 'audio/wav',
+            'pdf' => 'application/pdf', 'txt' => 'text/plain',
+        ];
+
+        if (! isset($inlineMimes[$ext])) {
+            return response($disk->get($storagePath), 200, [
+                'Content-Type' => 'application/octet-stream',
+                'Content-Disposition' => 'attachment; filename="'.basename($storagePath).'"',
+                'Cache-Control' => 'private, max-age=86400',
+                'X-Content-Type-Options' => 'nosniff',
+            ]);
+        }
+
+        // The payload-supplied mime (attacker-influenced on some channels) is
+        // only honoured when it matches the safe allowlist for that extension.
+        $mime = ($mimeType && in_array($mimeType, $inlineMimes, true)) ? $mimeType : $inlineMimes[$ext];
 
         return response($disk->get($storagePath), 200, [
             'Content-Type' => $mime,
             'Content-Disposition' => 'inline; filename="'.basename($storagePath).'"',
             'Cache-Control' => 'private, max-age=86400',
+            'X-Content-Type-Options' => 'nosniff',
         ]);
     }
 
@@ -877,7 +1007,11 @@ class InboxController extends Controller
     {
         $this->authorise($request, $conversation);
 
-        $request->validate(['file' => ['required', 'file', 'max:16384']]);
+        // Same allowlist as the composer's reply() attachments — an .html/.svg
+        // upload here would otherwise become stored XSS on /storage/template-media/.
+        $request->validate([
+            'file' => ['required', 'file', 'max:16384', 'mimes:jpg,jpeg,png,webp,mp4,3gp,mov,mp3,aac,m4a,amr,ogg,oga,opus,webm,pdf,doc,docx,xls,xlsx,ppt,pptx,txt'],
+        ]);
 
         $file = $request->file('file');
         $mimeType = $file->getMimeType() ?? 'application/octet-stream';

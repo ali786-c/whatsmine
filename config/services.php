@@ -77,6 +77,9 @@ return [
 
     'whatscrm' => [
         'url' => env('WHATSCRM_URL', 'http://localhost:3010'),
+        // Shared HMAC secret for QR webhooks (X-Qr-Signature). Optional: when
+        // empty, QrSessionManager generates a random per-session secret instead.
+        'webhook_secret' => env('WHATSCRM_WEBHOOK_SECRET'),
     ],
 
     'fast2sms' => [

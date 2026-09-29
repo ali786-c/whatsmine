@@ -14,31 +14,50 @@ use App\Modules\WhatsappQR\Models\WhatsappQRSession;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 
 /**
  * Receives inbound WhatsApp messages from the Node.js Baileys service
  * and stores them in Laravel conversation/message tables so they
  * appear in the WhatsMine Inbox.
+ *
+ * Every POST from the Node service must be HMAC-signed:
+ *   X-Qr-Signature: sha256=<hex of HMAC_SHA256(rawBody, secret)>
+ *   X-Qr-Timestamp: <unix seconds, ±5 min window>
+ *
+ * The secret is per-session (webhook_secret, generated at session creation
+ * and handed to the Node service) or the shared WHATSCRM_WEBHOOK_SECRET.
+ * Production fails closed on missing/invalid signatures; other environments
+ * log a warning and continue so old Node builds keep working in dev.
  */
 class QrWebhookController extends Controller
 {
+    /** Replay window for X-Qr-Timestamp (seconds). */
+    private const TIMESTAMP_TOLERANCE = 300;
+
     /**
      * POST /webhooks/qr/{sessionId}
      */
     public function receive(Request $request, string $sessionId): JsonResponse
     {
-        $payload = $request->all();
-        $messages = $payload["messages"] ?? [];
-        if (empty($messages)) {
-            return response()->json(["status" => "ok"]);
-        }
-        // Relaxed: accept any non-logged-out session
         $qrSession = WhatsappQRSession::where("session_id", $sessionId)
             ->where("status", "!=", "logged_out")
             ->first();
         if (! $qrSession) {
             Log::warning("QR webhook: session not found", ["session_id" => $sessionId]);
             return response()->json(["status" => "ignored", "reason" => "session_not_found"]);
+        }
+
+        // Reject unsigned/invalid callers before touching any state
+        $authFailure = $this->verifyQrSignature($request, $qrSession);
+        if ($authFailure !== null) {
+            return $authFailure;
+        }
+
+        $payload = $request->all();
+        $messages = $payload["messages"] ?? [];
+        if (empty($messages)) {
+            return response()->json(["status" => "ok"]);
         }
         $workspaceId = $qrSession->workspace_id;
         // Auto-promote to active when messages arrive
@@ -75,15 +94,21 @@ class QrWebhookController extends Controller
      */
     public function syncStatus(Request $request, string $sessionId): JsonResponse
     {
-        $payload = $request->all();
-        $status = $payload["status"] ?? null;
-        $phoneNumber = $payload["phone_number"] ?? null;
-        $whatsappJid = $payload["whatsapp_jid"] ?? null;
         $qrSession = WhatsappQRSession::where("session_id", $sessionId)
             ->where("status", "!=", "logged_out")->first();
         if (! $qrSession) {
             return response()->json(["status" => "ignored"]);
         }
+
+        $authFailure = $this->verifyQrSignature($request, $qrSession);
+        if ($authFailure !== null) {
+            return $authFailure;
+        }
+
+        $payload = $request->all();
+        $status = $payload["status"] ?? null;
+        $phoneNumber = $payload["phone_number"] ?? null;
+        $whatsappJid = $payload["whatsapp_jid"] ?? null;
         $updateData = [];
         if ($status) { $updateData["status"] = $status; }
         if ($phoneNumber) { $updateData["phone_number"] = $phoneNumber; }
@@ -96,6 +121,84 @@ class QrWebhookController extends Controller
         if ($status === "active" && ! $qrSession->channel_account_id) { $this->ensureChannelAccount($qrSession); }
         Log::info("QR sync-status", ["session_id" => $sessionId, "status" => $status]);
         return response()->json(["status" => "ok"]);
+    }
+
+    /**
+     * Verify the HMAC signature + timestamp of an inbound QR webhook call.
+     *
+     * Returns null when the request is allowed, or a 401 JsonResponse when
+     * it must be rejected (production only — non-production environments are
+     * logged and allowed through so legacy Node builds keep working in dev).
+     */
+    private function verifyQrSignature(Request $request, WhatsappQRSession $qrSession): ?JsonResponse
+    {
+        $signature = (string) $request->header("X-Qr-Signature", "");
+        $timestamp = (string) $request->header("X-Qr-Timestamp", "");
+        $secret = $qrSession->webhook_secret ?: (string) config("services.whatscrm.webhook_secret");
+        $isProduction = app()->environment("production");
+
+        // Legacy session with no secret at all
+        if ($secret === "") {
+            if ($isProduction) {
+                Log::warning("QR webhook rejected: no webhook secret (legacy session)", [
+                    "session_id" => $qrSession->session_id,
+                ]);
+                return response()->json(["status" => "error", "reason" => "missing_webhook_secret"], 401);
+            }
+
+            // One-time upgrade: provision a per-session secret on first contact
+            $qrSession->ensureWebhookSecret();
+            Log::warning("QR webhook accepted without signature in non-production (legacy session upgraded)", [
+                "session_id" => $qrSession->session_id,
+            ]);
+
+            return null;
+        }
+
+        // No signature header
+        if ($signature === "") {
+            if ($isProduction) {
+                Log::warning("QR webhook rejected: missing X-Qr-Signature", [
+                    "session_id" => $qrSession->session_id,
+                ]);
+                return response()->json(["status" => "error", "reason" => "missing_signature"], 401);
+            }
+            Log::warning("QR webhook accepted WITHOUT signature in non-production — update the Node.js service", [
+                "session_id" => $qrSession->session_id,
+            ]);
+
+            return null;
+        }
+
+        // Signature present — verify timestamp freshness first
+        if ($timestamp === "" || abs(time() - (int) $timestamp) > self::TIMESTAMP_TOLERANCE) {
+            Log::warning("QR webhook: stale or missing X-Qr-Timestamp", [
+                "session_id" => $qrSession->session_id, "timestamp" => $timestamp,
+            ]);
+            if ($isProduction) {
+                return response()->json(["status" => "error", "reason" => "stale_timestamp"], 401);
+            }
+
+            return null;
+        }
+
+        $expected = "sha256=" . hash_hmac("sha256", $request->getContent(), $secret);
+        if (! hash_equals($expected, $signature)) {
+            Log::warning("QR webhook: invalid signature", ["session_id" => $qrSession->session_id]);
+            if ($isProduction) {
+                return response()->json(["status" => "error", "reason" => "invalid_signature"], 401);
+            }
+
+            return null;
+        }
+
+        // Signature is valid — provision a per-session secret for legacy rows
+        // that were only covered by the shared secret (one-time upgrade).
+        if (empty($qrSession->webhook_secret)) {
+            $qrSession->ensureWebhookSecret();
+        }
+
+        return null;
     }
 
     private function ensureChannelAccount(WhatsappQRSession $session): ?ChannelAccount
@@ -150,10 +253,10 @@ class QrWebhookController extends Controller
             if ($exists) { return; }
         }
         $phoneNumber = preg_replace("/@s\.whatsapp\.net$/", "", $from);
-        
+
         // If the message is fromMe, do NOT use the senderName (which is the account owner's pushName) to resolve/overwrite the contact's name
         $contact = $this->resolveContact($workspaceId, $phoneNumber, $fromMe ? null : $senderName);
-        
+
         $conversation = Conversation::firstOrCreate(
             ["workspace_id" => $workspaceId, "contact_id" => $contact->id, "channel_account_id" => $channelAccount->id],
             ["status" => "open", "external_thread_id" => $from, "last_message_at" => now()]

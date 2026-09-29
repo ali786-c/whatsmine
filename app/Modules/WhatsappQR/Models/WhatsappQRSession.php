@@ -19,6 +19,7 @@ class WhatsappQRSession extends Model
         'workspace_id',
         'user_id',
         'session_id',
+        'webhook_secret',
         'title',
         'phone_number',
         'whatsapp_jid',
@@ -29,6 +30,17 @@ class WhatsappQRSession extends Model
         'last_active_at',
         'connected_at',
         'disconnected_at',
+    ];
+
+    /**
+     * webhook_secret never leaves the server — the QR polling endpoints and
+     * Inertia pages read qr_code/status via dedicated JSON actions, so hiding
+     * both columns here keeps the secret (and the base64 QR blob) out of any
+     * accidental full-model serialization.
+     */
+    protected $hidden = [
+        'webhook_secret',
+        'qr_code',
     ];
 
     protected $casts = [
@@ -48,6 +60,9 @@ class WhatsappQRSession extends Model
             }
             if (empty($model->session_id)) {
                 $model->session_id = 'qr_' . Str::random(32);
+            }
+            if (empty($model->webhook_secret)) {
+                $model->webhook_secret = Str::random(64);
             }
         });
     }
@@ -104,6 +119,21 @@ class WhatsappQRSession extends Model
     public function isUsable(): bool
     {
         return $this->status === 'active';
+    }
+
+    /**
+     * Lazily provision a webhook secret for legacy sessions created before
+     * the column existed (one-time upgrade on first webhook contact).
+     */
+    public function ensureWebhookSecret(): string
+    {
+        if (! empty($this->webhook_secret)) {
+            return $this->webhook_secret;
+        }
+
+        $this->forceFill(['webhook_secret' => Str::random(64)])->save();
+
+        return $this->webhook_secret;
     }
 
     // ─── Scopes ───────────────────────────────────────────────────────────
