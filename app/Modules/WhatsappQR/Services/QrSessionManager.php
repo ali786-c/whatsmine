@@ -23,12 +23,17 @@ class QrSessionManager
     public function createSession(int $workspaceId, ?int $userId = null, string $title = 'WhatsApp'): WhatsappQRSession
     {
         $sessionId = 'qr_' . Str::random(32);
+        // Per-session HMAC secret: the Node.js service signs every webhook call
+        // with this (X-Qr-Signature / X-Qr-Timestamp) and QrWebhookController
+        // verifies it. A shared WHATSCRM_WEBHOOK_SECRET wins when configured.
+        $webhookSecret = $this->resolveWebhookSecret();
 
         // Create the local record first
         $session = WhatsappQRSession::create([
             'workspace_id' => $workspaceId,
             'user_id' => $userId,
             'session_id' => $sessionId,
+            'webhook_secret' => $webhookSecret,
             'title' => $title,
             'status' => 'generating',
         ]);
@@ -39,6 +44,7 @@ class QrSessionManager
                 ->post("{$this->nodeBaseUrl}/api/qr/laravel/create", [
                     'sessionId' => $sessionId,
                     'title' => $title,
+                    'webhookSecret' => $webhookSecret,
                 ]);
 
             if (! $response->successful()) {
@@ -56,6 +62,18 @@ class QrSessionManager
         }
 
         return $session->fresh();
+    }
+
+    /**
+     * Secret used to sign QR webhooks. A shared secret (WHATSCRM_WEBHOOK_SECRET)
+     * wins when configured — useful when the Node.js service cannot store
+     * per-session secrets — otherwise every session gets a random one.
+     */
+    private function resolveWebhookSecret(): string
+    {
+        $shared = trim((string) config('services.whatscrm.webhook_secret'));
+
+        return $shared !== '' ? $shared : Str::random(64);
     }
 
     /**
