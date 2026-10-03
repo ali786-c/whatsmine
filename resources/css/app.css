@@ -170,6 +170,174 @@ body {
     }
 }
 
+/* ─── Landing motion: marquee, shimmer, typing dots, accordion ──────────────
+   Added for the WaGenius-style front-page refresh (docs/plans/landing-animation-*.
+   All animation blocks opt out under prefers-reduced-motion; content is never
+   hidden by these rules — only motion is disabled. */
+
+/* Infinite horizontal ticker (TrustedBy brand strip). Track holds two identical
+   groups; translating -50% loops seamlessly. */
+.wm-marquee {
+    overflow: hidden;
+    -webkit-mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent);
+    mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent);
+}
+.wm-marquee__track {
+    display: flex;
+    width: max-content;
+    animation: wm-marquee linear infinite;
+}
+.wm-marquee__group {
+    display: flex;
+    align-items: center;
+    gap: 3rem;
+    padding-right: 3rem;
+    flex-shrink: 0;
+}
+.wm-marquee--pause:hover .wm-marquee__track {
+    animation-play-state: paused;
+}
+@keyframes wm-marquee {
+    from { transform: translateX(0); }
+    to   { transform: translateX(-50%); }
+}
+
+/* Button shimmer sweep (CTA primary) */
+.wm-shimmer {
+    position: relative;
+    overflow: hidden;
+}
+.wm-shimmer::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -80%;
+    width: 60%;
+    height: 100%;
+    background: linear-gradient(105deg, transparent 20%, rgba(255,255,255,0.35) 50%, transparent 80%);
+    transform: skewX(-20deg);
+    transition: left 600ms ease;
+    pointer-events: none;
+}
+.wm-shimmer:hover::after {
+    left: 120%;
+}
+
+/* Typing indicator dots (LiveChatMock) */
+.wm-typing span {
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    margin-right: 4px;
+    border-radius: 50%;
+    background: currentColor;
+    opacity: 0.4;
+    animation: wm-typing 1.2s ease-in-out infinite;
+}
+.wm-typing span:nth-child(2) { animation-delay: 0.15s; }
+.wm-typing span:nth-child(3) { animation-delay: 0.3s; }
+@keyframes wm-typing {
+    0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+    30%           { transform: translateY(-4px); opacity: 1; }
+}
+
+/* Chat bubbles appearing in a loop (LiveChatMock) */
+.wm-chat-loop > * {
+    opacity: 0;
+    transform: translateY(8px) scale(0.97);
+    animation: wm-chat-pop 8s ease-in-out infinite;
+}
+.wm-chat-loop > *:nth-child(1) { animation-delay: 0s; }
+.wm-chat-loop > *:nth-child(2) { animation-delay: 1s; }
+.wm-chat-loop > *:nth-child(3) { animation-delay: 2s; }
+.wm-chat-loop > *:nth-child(4) { animation-delay: 3s; }
+.wm-chat-loop > *:nth-child(5) { animation-delay: 4s; }
+@keyframes wm-chat-pop {
+    0%        { opacity: 0; transform: translateY(8px) scale(0.97); }
+    4%, 88%   { opacity: 1; transform: translateY(0) scale(1); }
+    96%, 100% { opacity: 0; transform: translateY(0) scale(1); }
+}
+
+/* How-it-works connector line draws in on reveal */
+.wm-draw-line {
+    transform: scaleX(0);
+    transform-origin: left center;
+    transition: transform 900ms cubic-bezier(.22,1,.36,1) 200ms;
+}
+.wm-draw-line.is-drawn {
+    transform: scaleX(1);
+}
+
+/* FAQ accordion: grid-rows 0fr → 1fr (no JS measuring) */
+.wm-accordion {
+    display: grid;
+    grid-template-rows: 0fr;
+    transition: grid-template-rows 300ms ease;
+}
+.wm-accordion.is-open {
+    grid-template-rows: 1fr;
+}
+.wm-accordion > div {
+    overflow: hidden;
+    min-height: 0;
+}
+
+/* Testimonial carousel: hide scrollbar but keep scroll/swipe */
+.wm-no-scrollbar {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+.wm-no-scrollbar::-webkit-scrollbar {
+    display: none;
+}
+
+/* Preloader text gradient sweep */
+@keyframes wm-loader-sweep {
+    from { background-position: 200% 50%; }
+    to   { background-position: -200% 50%; }
+}
+.wm-loader-text {
+    background: linear-gradient(90deg, #5a8b38 0%, #9ae67a 25%, #ffffff 50%, #9ae67a 75%, #5a8b38 100%);
+    background-size: 200% auto;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    animation: wm-loader-sweep 1.6s linear infinite;
+}
+
+/* Hero background grid slow breathe */
+@keyframes wm-grid-breathe {
+    0%, 100% { opacity: 1; }
+    50%      { opacity: 0.55; }
+}
+.wm-grid-breathe {
+    animation: wm-grid-breathe 8s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .wm-marquee__track,
+    .wm-loader-text,
+    .wm-grid-breathe,
+    .wm-typing span,
+    .wm-chat-loop > * {
+        animation: none !important;
+    }
+    .wm-chat-loop > * {
+        opacity: 1;
+        transform: none;
+    }
+    .wm-shimmer::after {
+        display: none;
+    }
+    .wm-draw-line {
+        transform: scaleX(1);
+        transition: none;
+    }
+    .wm-accordion {
+        transition: none;
+    }
+}
+
 /* RTL: logical spacing where needed (Tailwind rtl: variant used in components) */
 [dir="rtl"] .text-left {
     text-align: right;
@@ -182,3 +350,27 @@ body {
     direction: ltr;
     unicode-bidi: embed;
 }
+
+/* ─── Hero Redesign Animation Utilities ────────────────────────────────────────── */
+.bg-hero-grid-pattern {
+    background-image: radial-gradient(rgba(40, 63, 36, 0.09) 1px, transparent 1px);
+    background-size: 24px 24px;
+}
+.hero-radial-glow {
+    background: radial-gradient(circle at 50% 50%, rgba(70, 114, 53, 0.12) 0%, rgba(255, 191, 0, 0.05) 45%, transparent 75%);
+}
+
+@keyframes floatSlow {
+    0%, 100% { transform: translateY(0px); }
+    50% { transform: translateY(-8px); }
+}
+@keyframes floatAlt {
+    0%, 100% { transform: translateY(0px); }
+    50% { transform: translateY(8px); }
+}
+.animate-float-1 { animation: floatSlow 6s ease-in-out infinite; }
+.animate-float-2 { animation: floatAlt 7s ease-in-out infinite 1s; }
+.animate-float-3 { animation: floatSlow 8s ease-in-out infinite 0.5s; }
+.animate-float-4 { animation: floatAlt 6.5s ease-in-out infinite 1.5s; }
+.animate-float-5 { animation: floatSlow 7.5s ease-in-out infinite 2s; }
+
