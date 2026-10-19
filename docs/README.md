@@ -8,6 +8,8 @@ Sab documentation is folder me hai. **Aage se har nayi guide/plan/changelog yahi
 
 | File | Kya hai |
 |---|---|
+| `ui_plan.md` | Public website complete redesign specification: pages, content/data, colors, typography, animations, tech stack, mobile behavior aur implementation phases |
+| `project_features_deep_dive.md` | Complete source-based UI, features, workflows, backend processing, dependencies aur exact route/function inventories (6 October 2026) |
 | `instagram_setup_guide.md` | **Asli Instagram setup guide (v3)** — Meta dashboard config, webhook registration, supervisor/worker setup, 2-step button funnel + uncapped gate loop ke sath, aur issues #1–#32 ka changelog (har bug ka root cause + fix, features bhi) |
 | `instagram_fix_guide.md` | Instagram fixes ka purana reference |
 | `instagram_plan.md` | Instagram module ka original plan |

@@ -374,3 +374,96 @@ body {
 .animate-float-4 { animation: floatAlt 6.5s ease-in-out infinite 1.5s; }
 .animate-float-5 { animation: floatSlow 7.5s ease-in-out infinite 2s; }
 
+
+/* ─── Unified marketing design system ───────────────────────────────────── */
+
+/* Fine grid overlay for dark bands (SectionShell / PageHero) */
+.wm-grid-dark {
+    background-image:
+        linear-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+    background-size: 56px 56px;
+    mask-image: radial-gradient(ellipse 85% 90% at 50% 0%, black 35%, transparent 100%);
+    -webkit-mask-image: radial-gradient(ellipse 85% 90% at 50% 0%, black 35%, transparent 100%);
+}
+
+/* Aurora glow behind dark-band headings (static) */
+.wm-glow {
+    width: 1100px;
+    height: 560px;
+    background: radial-gradient(ellipse at center, rgba(90, 139, 56, 0.26) 0%, rgba(90, 139, 56, 0.09) 45%, transparent 72%);
+}
+
+/* Frosted card surface for dark bands */
+.wm-glass {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+}
+
+/* Light-band card surface */
+.wm-card {
+    background: #ffffff;
+    border: 1px solid #e2ebd9;
+    box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.04);
+    transition: border-color 250ms smooth, box-shadow 250ms smooth, transform 250ms smooth;
+}
+.wm-card:hover {
+    border-color: rgba(90, 139, 56, 0.45);
+    box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.07), 0 8px 10px -6px rgb(0 0 0 / 0.05);
+    transform: translateY(-2px);
+}
+
+/* Admin CMS content (Pages/Marketing/CmsPage) - the typography plugin is not
+   installed, so the `prose` class was a no-op. Give CMS HTML a branded,
+   readable hierarchy using the fixed marketing palette. */
+.prose {
+    color: #4A5B44;
+    line-height: 1.75;
+    font-size: 0.975rem;
+}
+.prose h1, .prose h2, .prose h3, .prose h4, .prose h5 {
+    color: #0F1A0C;
+    font-weight: 700;
+    line-height: 1.25;
+    margin-top: 2rem;
+    margin-bottom: 0.75rem;
+}
+.prose h1 { font-size: 1.75rem; }
+.prose h2 { font-size: 1.4rem; }
+.prose h3 { font-size: 1.15rem; }
+.prose h4, .prose h5 { font-size: 1rem; }
+.prose p { margin-top: 0.75rem; margin-bottom: 0.75rem; }
+.prose a { color: #467235; text-decoration: underline; text-underline-offset: 3px; }
+.prose a:hover { color: #5a8b38; }
+.prose strong, .prose b { color: #0F1A0C; font-weight: 600; }
+.prose ul, .prose ol { margin: 0.75rem 0; padding-left: 1.5rem; }
+.prose ul { list-style-type: disc; }
+.prose ol { list-style-type: decimal; }
+.prose li { margin-top: 0.3rem; margin-bottom: 0.3rem; }
+.prose li::marker { color: #5a8b38; }
+.prose blockquote {
+    margin: 1rem 0;
+    padding-left: 1rem;
+    border-left: 3px solid rgba(90, 139, 56, 0.45);
+    font-style: italic;
+    color: #5B6B52;
+}
+.prose hr { margin: 1.5rem 0; border-color: #E2EBD9; }
+.prose code {
+    background: #F2F7EC;
+    border: 1px solid #E2EBD9;
+    border-radius: 0.375rem;
+    padding: 0.1rem 0.35rem;
+    font-size: 0.875em;
+    color: #0F1A0C;
+}
+.prose table { width: 100%; border-collapse: collapse; margin: 1rem 0; }
+.prose th, .prose td {
+    border: 1px solid #E2EBD9;
+    padding: 0.5rem 0.75rem;
+    text-align: left;
+    font-size: 0.9rem;
+}
+.prose th { background: #F2F7EC; color: #0F1A0C; font-weight: 600; }

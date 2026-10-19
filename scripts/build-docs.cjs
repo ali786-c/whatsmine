@@ -20,6 +20,8 @@ const GROUPS = [
         title: 'Getting Started',
         items: [
             { file: 'README.md', label: 'Overview' },
+            { file: 'ui_plan.md', label: 'Public Website UI Redesign Plan' },
+            { file: 'project_features_deep_dive.md', label: 'Complete Project Feature Reference' },
             { file: 'checklist.md', label: 'Project Checklist' },
             { file: 'guide.md', label: 'Local Setup Guide' },
             { file: 'setting.md', label: 'Pusher Setup & Troubleshooting' },

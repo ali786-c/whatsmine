@@ -376,6 +376,12 @@ function HowItWorksTab({ data, setData, t }) {
                     onChange={(v) => set('howitworks_enabled', v ? '1' : '0')}
                     t={t}
                 />
+                <SectionToggle
+                    label={t('landing_page_admin.livemock_section', { defaultValue: 'Live Inbox Mockup (shown after the steps)' })}
+                    enabled={s('livemock_enabled') === '1'}
+                    onChange={(v) => set('livemock_enabled', v ? '1' : '0')}
+                    t={t}
+                />
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <Field label={t('landing_page_admin.section_badge')}>
                         <Input value={s('howitworks_badge')} onChange={(e) => set('howitworks_badge', e.target.value)} placeholder="Simple Process" />

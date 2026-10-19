@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Head, Link } from '@inertiajs/react';
 import LandingLayout from '@/Layouts/LandingLayout';
+import PageHero from '@/Components/marketing/PageHero';
 import { useTranslation } from 'react-i18next';
 
 function Badge({ text }) {
@@ -24,9 +25,9 @@ const USE_CASES = [
         titleKey: 'use_cases.ecommerce_title',
         descKey: 'use_cases.ecommerce_desc',
         bulletKeys: ['use_cases.ecommerce_b1', 'use_cases.ecommerce_b2', 'use_cases.ecommerce_b3', 'use_cases.ecommerce_b4'],
-        color: 'from-violet-500/20 to-violet-500/5',
-        border: 'border-violet-200 dark:border-violet-800',
-        iconBg: 'bg-violet-100 dark:bg-violet-900/40 text-violet-600 dark:text-violet-400',
+        color: 'from-[#5a8b38]/20 to-[#5a8b38]/5',
+        border: 'border-[#5a8b38]/25',
+        iconBg: 'bg-[#5a8b38]/15 text-[#467235]',
     },
     {
         icon: (
@@ -38,9 +39,9 @@ const USE_CASES = [
         titleKey: 'use_cases.realestate_title',
         descKey: 'use_cases.realestate_desc',
         bulletKeys: ['use_cases.realestate_b1', 'use_cases.realestate_b2', 'use_cases.realestate_b3', 'use_cases.realestate_b4'],
-        color: 'from-blue-500/20 to-blue-500/5',
-        border: 'border-blue-200 dark:border-blue-800',
-        iconBg: 'bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400',
+        color: 'from-[#5a8b38]/20 to-[#5a8b38]/5',
+        border: 'border-[#5a8b38]/25',
+        iconBg: 'bg-[#5a8b38]/15 text-[#467235]',
     },
     {
         icon: (
@@ -52,9 +53,9 @@ const USE_CASES = [
         titleKey: 'use_cases.education_title',
         descKey: 'use_cases.education_desc',
         bulletKeys: ['use_cases.education_b1', 'use_cases.education_b2', 'use_cases.education_b3', 'use_cases.education_b4'],
-        color: 'from-amber-500/20 to-amber-500/5',
-        border: 'border-amber-200 dark:border-amber-800',
-        iconBg: 'bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-400',
+        color: 'from-[#5a8b38]/20 to-[#5a8b38]/5',
+        border: 'border-[#5a8b38]/25',
+        iconBg: 'bg-[#5a8b38]/15 text-[#467235]',
     },
     {
         icon: (
@@ -66,9 +67,9 @@ const USE_CASES = [
         titleKey: 'use_cases.healthcare_title',
         descKey: 'use_cases.healthcare_desc',
         bulletKeys: ['use_cases.healthcare_b1', 'use_cases.healthcare_b2', 'use_cases.healthcare_b3', 'use_cases.healthcare_b4'],
-        color: 'from-rose-500/20 to-rose-500/5',
-        border: 'border-rose-200 dark:border-rose-800',
-        iconBg: 'bg-rose-100 dark:bg-rose-900/40 text-rose-600 dark:text-rose-400',
+        color: 'from-[#5a8b38]/20 to-[#5a8b38]/5',
+        border: 'border-[#5a8b38]/25',
+        iconBg: 'bg-[#5a8b38]/15 text-[#467235]',
     },
     {
         icon: (
@@ -80,9 +81,9 @@ const USE_CASES = [
         titleKey: 'use_cases.retail_title',
         descKey: 'use_cases.retail_desc',
         bulletKeys: ['use_cases.retail_b1', 'use_cases.retail_b2', 'use_cases.retail_b3', 'use_cases.retail_b4'],
-        color: 'from-emerald-500/20 to-emerald-500/5',
-        border: 'border-emerald-200 dark:border-emerald-800',
-        iconBg: 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400',
+        color: 'from-[#5a8b38]/20 to-[#5a8b38]/5',
+        border: 'border-[#5a8b38]/25',
+        iconBg: 'bg-[#5a8b38]/15 text-[#467235]',
     },
     {
         icon: (
@@ -94,9 +95,9 @@ const USE_CASES = [
         titleKey: 'use_cases.finance_title',
         descKey: 'use_cases.finance_desc',
         bulletKeys: ['use_cases.finance_b1', 'use_cases.finance_b2', 'use_cases.finance_b3', 'use_cases.finance_b4'],
-        color: 'from-cyan-500/20 to-cyan-500/5',
-        border: 'border-cyan-200 dark:border-cyan-800',
-        iconBg: 'bg-cyan-100 dark:bg-cyan-900/40 text-cyan-600 dark:text-cyan-400',
+        color: 'from-[#5a8b38]/20 to-[#5a8b38]/5',
+        border: 'border-[#5a8b38]/25',
+        iconBg: 'bg-[#5a8b38]/15 text-[#467235]',
     },
 ];
 
@@ -125,36 +126,17 @@ export default function UseCases({ landing = {}, canRegister }) {
             </Head>
 
             {/* ── Page hero ── */}
-            <section
-                className="relative overflow-hidden py-20 text-center"
-                style={{ background: 'radial-gradient(ellipse 60% 60% at 50% 0%, rgba(118,168,78,0.18) 0%, transparent 70%), #162610' }}
-            >
-                <div
-                    className="pointer-events-none absolute inset-0"
-                    style={{
-                        backgroundImage: `linear-gradient(rgba(255,255,255,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.04) 1px, transparent 1px)`,
-                        backgroundSize: '60px 60px',
-                        maskImage: 'radial-gradient(ellipse 80% 100% at 50% 0%, black 50%, transparent 100%)',
-                        WebkitMaskImage: 'radial-gradient(ellipse 80% 100% at 50% 0%, black 50%, transparent 100%)',
-                    }}
-                />
-                <div className="relative max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
-                    <Badge text={t('nav.use_cases')} />
-                    <h1 className="mt-4 text-4xl sm:text-5xl font-bold text-white tracking-tight">{t('use_cases.hero_title')}</h1>
-                    <p className="mt-4 text-lg text-neutral-300 max-w-2xl mx-auto">
-                        {t('use_cases.hero_subtitle')}
-                    </p>
-                    {canRegister && (
-                        <Link
-                            href={route('register')}
-                            className="mt-8 inline-flex items-center gap-2 rounded-xl px-7 py-3.5 text-base font-bold text-white shadow-lg transition-all duration-200 hover:opacity-90"
-                            style={{ background: '#5a8b38' }}
-                        >
-                            {t('use_cases.start_free_trial')}
-                        </Link>
-                    )}
-                </div>
-            </section>
+            <PageHero badge={t('nav.use_cases')} title={t('use_cases.hero_title')} subtitle={t('use_cases.hero_subtitle')}>
+                {canRegister ? (
+                    <Link
+                        href={route('register')}
+                        className="mt-8 inline-flex items-center gap-2 rounded-xl bg-brand-500 px-7 py-3.5 text-base font-bold text-white shadow-lg shadow-brand-950/30 transition-all duration-200 hover:bg-brand-400"
+                    >
+                        {t('use_cases.start_free_trial')}
+                    </Link>
+                ) : null}
+            </PageHero>
+
 
             {/* ── Use case cards ── */}
             <section className="py-20">
@@ -169,14 +151,14 @@ export default function UseCases({ landing = {}, canRegister }) {
                                 <div className={`inline-flex h-12 w-12 items-center justify-center rounded-xl mb-4 ${uc.iconBg}`}>
                                     {uc.icon}
                                 </div>
-                                <span className="text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider">{t(uc.labelKey)}</span>
-                                <h3 className="mt-1 text-lg font-bold text-neutral-900 dark:text-white">{t(uc.titleKey)}</h3>
-                                <p className="mt-2 text-sm text-neutral-600 dark:text-neutral-400 leading-relaxed">{t(uc.descKey)}</p>
+                                <span className="text-xs font-semibold text-[#5B6B52] uppercase tracking-wider">{t(uc.labelKey)}</span>
+                                <h3 className="mt-1 text-lg font-bold text-[#0F1A0C]">{t(uc.titleKey)}</h3>
+                                <p className="mt-2 text-sm text-[#4A5B44] leading-relaxed">{t(uc.descKey)}</p>
 
                                 {active === idx && (
-                                    <ul className="mt-4 space-y-2 border-t border-neutral-200 dark:border-neutral-700 pt-4">
+                                    <ul className="mt-4 space-y-2 border-t border-[#E2EBD9] pt-4">
                                         {uc.bulletKeys.map((b, bi) => (
-                                            <li key={bi} className="flex items-center gap-2 text-sm text-neutral-700 dark:text-neutral-300">
+                                            <li key={bi} className="flex items-center gap-2 text-sm text-[#4A5B44]">
                                                 <svg className="h-4 w-4 flex-shrink-0" style={{ color: '#5a8b38' }} fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
                                                     <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
                                                 </svg>
@@ -186,7 +168,7 @@ export default function UseCases({ landing = {}, canRegister }) {
                                     </ul>
                                 )}
 
-                                <div className={`mt-4 flex items-center gap-1 text-xs font-semibold transition-colors ${active === idx ? 'text-[#5a8b38]' : 'text-neutral-400'}`}>
+                                <div className={`mt-4 flex items-center gap-1 text-xs font-semibold transition-colors ${active === idx ? 'text-[#5a8b38]' : 'text-[#7A8C6E]'}`}>
                                     {active === idx ? t('use_cases.show_less') : t('use_cases.see_details')}
                                     <svg className={`h-3.5 w-3.5 transition-transform ${active === idx ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
@@ -199,12 +181,12 @@ export default function UseCases({ landing = {}, canRegister }) {
             </section>
 
             {/* ── Stats strip ── */}
-            <section className="py-16 border-y border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-900/40">
+            <section className="py-16 border-y border-[#E2EBD9] bg-[#F2F7EC]">
                 <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 grid grid-cols-2 sm:grid-cols-4 gap-8 text-center">
                     {stats.map((stat, idx) => (
                         <div key={idx}>
                             <p className="text-3xl font-bold" style={{ color: '#5a8b38' }}>{stat.value}</p>
-                            <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">{stat.label}</p>
+                            <p className="mt-1 text-sm text-[#5B6B52]">{stat.label}</p>
                         </div>
                     ))}
                 </div>
@@ -215,7 +197,7 @@ export default function UseCases({ landing = {}, canRegister }) {
                 <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
                     <div className="text-center mb-12">
                         <Badge text={t('use_cases.how_it_works')} />
-                        <h2 className="mt-4 text-3xl font-bold text-neutral-900 dark:text-white tracking-tight">{t('use_cases.up_and_running')}</h2>
+                        <h2 className="mt-4 text-3xl font-bold text-[#0F1A0C] tracking-tight">{t('use_cases.up_and_running')}</h2>
                     </div>
                     <div className="grid gap-8 sm:grid-cols-3">
                         {steps.map((step, idx) => (
@@ -226,8 +208,8 @@ export default function UseCases({ landing = {}, canRegister }) {
                                 >
                                     {step.n}
                                 </div>
-                                <h3 className="text-base font-semibold text-neutral-900 dark:text-white mb-1">{step.title}</h3>
-                                <p className="text-sm text-neutral-500 dark:text-neutral-400">{step.desc}</p>
+                                <h3 className="text-base font-semibold text-[#0F1A0C] mb-1">{step.title}</h3>
+                                <p className="text-sm text-[#5B6B52]">{step.desc}</p>
                             </div>
                         ))}
                     </div>
@@ -241,7 +223,7 @@ export default function UseCases({ landing = {}, canRegister }) {
             >
                 <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
                     <h2 className="text-3xl font-bold text-white tracking-tight">{t('use_cases.cta_title')}</h2>
-                    <p className="mt-3 text-neutral-400">{t('use_cases.cta_subtitle')}</p>
+                    <p className="mt-3 text-white/65">{t('use_cases.cta_subtitle')}</p>
                     {canRegister && (
                         <div className="mt-8 flex flex-wrap items-center justify-center gap-4">
                             <Link

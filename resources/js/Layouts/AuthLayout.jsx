@@ -1,9 +1,8 @@
 import { Link } from '@inertiajs/react';
 import { useTranslation } from 'react-i18next';
-import { useTheme } from '@/context/ThemeContext';
 import { useLocale } from '@/hooks/useLocale';
 import ApplicationLogo from '@/Components/ApplicationLogo';
-import { Sun, Moon, ShieldCheck, Zap, Users, Bot, TrendingUp, Clock, Star } from 'lucide-react';
+import { ShieldCheck, Zap, Users, Bot, TrendingUp, Clock, Star } from 'lucide-react';
 
 /**
  * Split-pane auth layout.
@@ -154,23 +153,6 @@ function LeftPane({ variant }) {
     );
 }
 
-function ThemeToggle() {
-    const { t } = useTranslation();
-    const { theme, setTheme } = useTheme();
-    return (
-        <button
-            type="button"
-            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-soft text-neutral-500 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-neutral-800 transition"
-            aria-label={t('topbar.switch_theme')}
-        >
-            {theme === 'dark'
-                ? <Sun className="h-4 w-4" />
-                : <Moon className="h-4 w-4" />}
-        </button>
-    );
-}
-
 function LocaleToggle() {
     const { locale, locales, setLocale } = useLocale();
     if (locales.length <= 1) return null;
@@ -219,7 +201,6 @@ export default function AuthLayout({
                     <span className="hidden lg:block" />
                     <div className="flex items-center gap-2">
                         <LocaleToggle />
-                        <ThemeToggle />
                     </div>
                 </div>
 

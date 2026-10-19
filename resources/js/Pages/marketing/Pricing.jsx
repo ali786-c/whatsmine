@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Head, Link } from '@inertiajs/react';
 import LandingLayout from '@/Layouts/LandingLayout';
+import PageHero from '@/Components/marketing/PageHero';
 import { useTranslation } from 'react-i18next';
 
 function Badge({ text }) {
@@ -51,50 +52,32 @@ export default function Pricing({ landing = {}, plans = [], canRegister }) {
             </Head>
 
             {/* ── Page hero ── */}
-            <section
-                className="relative overflow-hidden py-20 text-center"
-                style={{ background: 'radial-gradient(ellipse 60% 60% at 50% 0%, rgba(118,168,78,0.18) 0%, transparent 70%), #162610' }}
-            >
-                <div
-                    className="pointer-events-none absolute inset-0"
-                    style={{
-                        backgroundImage: `linear-gradient(rgba(255,255,255,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.04) 1px, transparent 1px)`,
-                        backgroundSize: '60px 60px',
-                        maskImage: 'radial-gradient(ellipse 80% 100% at 50% 0%, black 50%, transparent 100%)',
-                        WebkitMaskImage: 'radial-gradient(ellipse 80% 100% at 50% 0%, black 50%, transparent 100%)',
-                    }}
-                />
-                <div className="relative max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
-                    <Badge text={t('welcome.badge_pricing')} />
-                    <h1 className="mt-4 text-4xl sm:text-5xl font-bold text-white tracking-tight">{t('pricing.simple_transparent')}</h1>
-                    <p className="mt-4 text-lg text-neutral-300 max-w-xl mx-auto">
-                        {t('pricing.choose_plan_no_fees')}
-                    </p>
-
-                    {/* Billing toggle */}
-                    <div className="mt-8 inline-flex items-center gap-1 rounded-xl p-1" style={{ background: 'rgba(255,255,255,0.08)' }}>
-                        <button
-                            onClick={() => setYearly(false)}
-                            className={`rounded-lg px-5 py-2 text-sm font-semibold transition-all ${!yearly ? 'bg-white text-neutral-900 shadow' : 'text-white/70 hover:text-white'}`}
-                        >
-                            {t('welcome.monthly')}
-                        </button>
-                        <button
-                            onClick={() => setYearly(true)}
-                            className={`rounded-lg px-5 py-2 text-sm font-semibold transition-all flex items-center gap-2 ${yearly ? 'bg-white text-neutral-900 shadow' : 'text-white/70 hover:text-white'}`}
-                        >
-                            {t('welcome.yearly')}
-                            <span className="rounded-full text-xs px-1.5 py-0.5 font-bold" style={{ background: '#5a8b38', color: '#ffffff' }}>-20%</span>
-                        </button>
-                    </div>
+            <PageHero badge={t('welcome.badge_pricing')} title={t('pricing.simple_transparent')} subtitle={t('pricing.choose_plan_no_fees')}>
+                <div className="mt-8 inline-flex items-center gap-1 rounded-xl p-1" style={{ background: 'rgba(255,255,255,0.08)' }}>
+                    <button
+                        type="button"
+                        onClick={function () { setYearly(false); }}
+                        className={'rounded-lg px-5 py-2 text-sm font-semibold transition-all ' + (!yearly ? 'bg-white text-[#0F1A0C] shadow' : 'text-white/70 hover:text-white')}
+                    >
+                        {t('welcome.monthly')}
+                    </button>
+                    <button
+                        type="button"
+                        onClick={function () { setYearly(true); }}
+                        className={'flex items-center gap-2 rounded-lg px-5 py-2 text-sm font-semibold transition-all ' + (yearly ? 'bg-white text-[#0F1A0C] shadow' : 'text-white/70 hover:text-white')}
+                    >
+                        {t('welcome.yearly')}
+                        <span className="rounded-full bg-brand-500 px-1.5 py-0.5 text-xs font-bold text-white">-20%</span>
+                    </button>
                 </div>
-            </section>
+            </PageHero>
+
 
             {/* ── Plans grid ── */}
-            <section className="py-16 bg-neutral-50 dark:bg-neutral-900/30">
+            <section className="py-16 bg-[#F2F7EC]">
                 <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
                     {plans.length === 0 ? (
-                        <p className="text-center text-neutral-500 dark:text-neutral-400 py-16">{t('pricing.no_plans_yet')}</p>
+                        <p className="text-center text-[#5B6B52] py-16">{t('pricing.no_plans_yet')}</p>
                     ) : (
                         <div className={`grid gap-6 ${plans.length <= 2 ? 'sm:grid-cols-2 max-w-2xl mx-auto' : 'sm:grid-cols-2 lg:grid-cols-3'}`}>
                             {plans.map((plan) => {
@@ -105,7 +88,7 @@ export default function Pricing({ landing = {}, plans = [], canRegister }) {
                                         className={`relative rounded-2xl border p-7 flex flex-col ${
                                             plan.is_featured
                                                 ? 'border-[#5a8b38]/50 shadow-2xl shadow-[#5a8b38]/10 scale-105'
-                                                : 'border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900'
+                                                : 'border-[#E2EBD9] bg-white'
                                         }`}
                                         style={plan.is_featured ? { background: '#162610' } : {}}
                                     >
@@ -115,20 +98,20 @@ export default function Pricing({ landing = {}, plans = [], canRegister }) {
                                             </div>
                                         )}
                                         <div>
-                                            <h3 className={`text-lg font-bold ${plan.is_featured ? 'text-white' : 'text-neutral-900 dark:text-white'}`}>{plan.name}</h3>
+                                            <h3 className={`text-lg font-bold ${plan.is_featured ? 'text-white' : 'text-[#0F1A0C]'}`}>{plan.name}</h3>
                                             {plan.description && (
-                                                <p className={`mt-1 text-sm ${plan.is_featured ? 'text-neutral-400' : 'text-neutral-500 dark:text-neutral-400'}`}>{plan.description}</p>
+                                                <p className={`mt-1 text-sm ${plan.is_featured ? 'text-white/60' : 'text-[#5B6B52]'}`}>{plan.description}</p>
                                             )}
                                         </div>
                                         <div className="mt-5 mb-6">
-                                            <span className={`text-4xl font-bold ${plan.is_featured ? 'text-white' : 'text-neutral-900 dark:text-white'}`}>
+                                            <span className={`text-4xl font-bold ${plan.is_featured ? 'text-white' : 'text-[#0F1A0C]'}`}>
                                                 {price === 0 ? t('welcome.free') : `$${parseFloat(price).toFixed(0)}`}
                                             </span>
                                             {price > 0 && (
-                                                <span className={`text-sm ml-1 ${plan.is_featured ? 'text-neutral-400' : 'text-neutral-400'}`}>{yearly ? t('welcome.per_year') : t('welcome.per_month')}</span>
+                                                <span className={`text-sm ml-1 ${plan.is_featured ? 'text-white/60' : 'text-[#7A8C6E]'}`}>{yearly ? t('welcome.per_year') : t('welcome.per_month')}</span>
                                             )}
                                             {plan.trial_days > 0 && (
-                                                <p className={`text-xs mt-1 ${plan.is_featured ? 'text-neutral-400' : 'text-neutral-400 dark:text-neutral-500'}`}>
+                                                <p className={`text-xs mt-1 ${plan.is_featured ? 'text-white/50' : 'text-[#7A8C6E]'}`}>
                                                     {t('pricing.trial_days', { days: plan.trial_days })}
                                                 </p>
                                             )}
@@ -140,7 +123,7 @@ export default function Pricing({ landing = {}, plans = [], canRegister }) {
                                                         <svg className="h-4 w-4 mt-0.5 flex-shrink-0" style={{ color: '#5a8b38' }} fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
                                                             <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
                                                         </svg>
-                                                        <span className={plan.is_featured ? 'text-neutral-300' : 'text-neutral-700 dark:text-neutral-300'}>{feat}</span>
+                                                        <span className={plan.is_featured ? 'text-white/70' : 'text-[#4A5B44]'}>{feat}</span>
                                                     </li>
                                                 ))}
                                             </ul>
@@ -149,7 +132,7 @@ export default function Pricing({ landing = {}, plans = [], canRegister }) {
                                             <Link
                                                 href={route('register')}
                                                 className={`block text-center rounded-xl py-3 text-sm font-bold transition-all duration-200 ${
-                                                    plan.is_featured ? 'text-white hover:opacity-90' : 'border border-neutral-200 dark:border-neutral-700 text-neutral-700 dark:text-neutral-300 hover:border-[#5a8b38]/50 hover:text-[#467235] dark:hover:text-[#5a8b38]'
+                                                    plan.is_featured ? 'text-white hover:opacity-90' : 'border border-[#E2EBD9] text-[#4A5B44] hover:border-[#5a8b38]/50 hover:text-[#467235]'
                                                 }`}
                                                 style={plan.is_featured ? { background: '#5a8b38' } : {}}
                                             >
@@ -163,7 +146,7 @@ export default function Pricing({ landing = {}, plans = [], canRegister }) {
                     )}
 
                     {/* Money-back */}
-                    <p className="mt-10 text-center text-sm text-neutral-500 dark:text-neutral-400">
+                    <p className="mt-10 text-center text-sm text-[#5B6B52]">
                         {t('pricing.money_back')}
                     </p>
                 </div>
@@ -175,22 +158,22 @@ export default function Pricing({ landing = {}, plans = [], canRegister }) {
                     <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
                         <div className="text-center mb-12">
                             <Badge text={t('welcome.badge_customers')} />
-                            <h2 className="mt-4 text-3xl font-bold text-neutral-900 dark:text-white tracking-tight">
+                            <h2 className="mt-4 text-3xl font-bold text-[#0F1A0C] tracking-tight">
                                 {s('testimonials_title', 'What Our Customers Say')}
                             </h2>
                         </div>
                         <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
                             {testimonials.map((t, idx) => (
-                                <div key={idx} className="rounded-2xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 p-6 flex flex-col gap-4">
+                                <div key={idx} className="rounded-2xl border border-[#E2EBD9] bg-white p-6 flex flex-col gap-4">
                                     <StarRating />
-                                    <blockquote className="text-sm text-neutral-700 dark:text-neutral-300 leading-relaxed flex-1">&ldquo;{t.text}&rdquo;</blockquote>
-                                    <div className="flex items-center gap-3 pt-2 border-t border-neutral-100 dark:border-neutral-800">
+                                    <blockquote className="text-sm text-[#4A5B44] leading-relaxed flex-1">&ldquo;{t.text}&rdquo;</blockquote>
+                                    <div className="flex items-center gap-3 pt-2 border-t border-[#E5EEDC]">
                                         <div className="h-9 w-9 rounded-full flex items-center justify-center text-white text-sm font-bold flex-shrink-0" style={{ background: '#5a8b38' }}>
                                             {t.name.charAt(0)}
                                         </div>
                                         <div>
-                                            <p className="text-sm font-semibold text-neutral-900 dark:text-white">{t.name}</p>
-                                            <p className="text-xs text-neutral-500 dark:text-neutral-400">{t.role}</p>
+                                            <p className="text-sm font-semibold text-[#0F1A0C]">{t.name}</p>
+                                            <p className="text-xs text-[#5B6B52]">{t.role}</p>
                                         </div>
                                     </div>
                                 </div>
@@ -202,27 +185,27 @@ export default function Pricing({ landing = {}, plans = [], canRegister }) {
 
             {/* ── FAQ ── */}
             {faqs.length > 0 && (
-                <section className="py-20 bg-neutral-50 dark:bg-neutral-900/30">
+                <section className="py-20 bg-[#F2F7EC]">
                     <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
                         <div className="text-center mb-12">
                             <Badge text={t('welcome.badge_faq')} />
-                            <h2 className="mt-4 text-3xl font-bold text-neutral-900 dark:text-white tracking-tight">{t('pricing.pricing_faq')}</h2>
+                            <h2 className="mt-4 text-3xl font-bold text-[#0F1A0C] tracking-tight">{t('pricing.pricing_faq')}</h2>
                         </div>
                         <div className="space-y-2">
                             {faqs.map((faq, idx) => (
-                                <div key={idx} className="rounded-xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 overflow-hidden">
+                                <div key={idx} className="rounded-xl border border-[#E2EBD9] bg-white overflow-hidden">
                                     <button
                                         className="w-full flex items-center justify-between px-5 py-4 text-left gap-4"
                                         onClick={() => setOpenFaq(openFaq === idx ? null : idx)}
                                     >
-                                        <span className="font-medium text-neutral-900 dark:text-white text-sm">{faq.q}</span>
-                                        <svg className={`h-5 w-5 flex-shrink-0 text-neutral-400 transition-transform duration-200 ${openFaq === idx ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                                        <span className="font-medium text-[#0F1A0C] text-sm">{faq.q}</span>
+                                        <svg className={`h-5 w-5 flex-shrink-0 text-[#7A8C6E] transition-transform duration-200 ${openFaq === idx ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                                             <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
                                         </svg>
                                     </button>
                                     {openFaq === idx && (
-                                        <div className="px-5 pb-4 border-t border-neutral-100 dark:border-neutral-800 pt-3">
-                                            <p className="text-sm text-neutral-600 dark:text-neutral-400 leading-relaxed">{faq.a}</p>
+                                        <div className="px-5 pb-4 border-t border-[#E5EEDC] pt-3">
+                                            <p className="text-sm text-[#4A5B44] leading-relaxed">{faq.a}</p>
                                         </div>
                                     )}
                                 </div>
@@ -236,8 +219,8 @@ export default function Pricing({ landing = {}, plans = [], canRegister }) {
             {canRegister && (
                 <section className="py-16">
                     <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-                        <h2 className="text-2xl sm:text-3xl font-bold text-neutral-900 dark:text-white">{t('pricing.ready_to_start')}</h2>
-                        <p className="mt-3 text-neutral-500 dark:text-neutral-400">{t('pricing.ready_to_start_desc')}</p>
+                        <h2 className="text-2xl sm:text-3xl font-bold text-[#0F1A0C]">{t('pricing.ready_to_start')}</h2>
+                        <p className="mt-3 text-[#5B6B52]">{t('pricing.ready_to_start_desc')}</p>
                         <div className="mt-8 flex flex-wrap items-center justify-center gap-4">
                             <Link
                                 href={route('register')}
@@ -247,7 +230,7 @@ export default function Pricing({ landing = {}, plans = [], canRegister }) {
                                 {t('pricing.start_free_trial')}
                                 <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" /></svg>
                             </Link>
-                            <Link href="/contact" className="inline-flex items-center gap-2 rounded-xl border border-neutral-300 dark:border-neutral-700 px-7 py-3.5 text-base font-semibold text-neutral-700 dark:text-neutral-300 hover:border-neutral-400 transition-all duration-200">
+                            <Link href="/contact" className="inline-flex items-center gap-2 rounded-xl border border-[#E2EBD9] px-7 py-3.5 text-base font-semibold text-[#4A5B44] hover:border-[#5a8b38]/50 transition-all duration-200">
                                 {t('pricing.talk_to_sales')}
                             </Link>
                         </div>

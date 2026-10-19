@@ -102,7 +102,7 @@ export function resolveBrandKey(name) {
  */
 export function BrandMark({ name, tileClassName = 'h-10 w-10 rounded-xl', glyphClassName = 'h-6 w-6', monogramClassName = 'text-sm' }) {
     const key = resolveBrandKey(name);
-    const tile = `inline-flex items-center justify-center bg-white ring-1 ring-neutral-200 dark:ring-neutral-700 ${tileClassName}`;
+    const tile = `inline-flex items-center justify-center bg-white ring-1 ring-neutral-200 ${tileClassName}`;
     if (key) {
         return (
             <span className={tile} aria-label={name}>

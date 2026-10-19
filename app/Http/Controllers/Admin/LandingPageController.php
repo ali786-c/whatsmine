@@ -148,6 +148,9 @@ class LandingPageController extends Controller
             'landing.step_3_title'        => 'Automate & Grow',
             'landing.step_3_desc'         => 'Launch broadcasts, set up AI chatbots, and watch conversations turn into customers.',
 
+            // ── Live inbox mockup (signature section) ────────────────
+            'landing.livemock_enabled'    => '1',
+
             // ── Integrations strip ──────────────────────────────────
             'landing.integrations_strip_enabled'  => '1',
             'landing.integrations_strip_title'    => 'Works with the tools you already use',

@@ -1,6 +1,7 @@
 import { Link } from '@inertiajs/react';
 import LandingLayout from '@/Layouts/LandingLayout';
 import SeoHead from '@/Components/SeoHead';
+import PageHero from '@/Components/marketing/PageHero';
 import { FeatureIcon } from '@/Components/LandingIcons';
 import { useTranslation } from 'react-i18next';
 
@@ -40,30 +41,18 @@ export default function About({ canRegister, landing = {} }) {
             />
 
             {/* Hero */}
-            <section
-                className="relative overflow-hidden"
-                style={{ background: 'radial-gradient(ellipse 70% 65% at 50% 0%, rgba(118,168,78,0.18) 0%, transparent 60%), #162610' }}
-            >
-                <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pt-24 pb-20 text-center">
-                    <div className="flex justify-center mb-6"><Badge text={s('about_badge')} /></div>
-                    <h1 className="text-4xl sm:text-5xl font-bold tracking-tight text-white max-w-3xl mx-auto leading-tight">
-                        {s('about_title')}
-                    </h1>
-                    {s('about_subtitle') && (
-                        <p className="mt-6 text-lg text-neutral-300 max-w-2xl mx-auto leading-relaxed">{s('about_subtitle')}</p>
-                    )}
-                </div>
-            </section>
+            <PageHero badge={s('about_badge')} title={s('about_title')} subtitle={s('about_subtitle')} />
+
 
             {/* Stats band */}
             {stats.length > 0 && (
-                <section className="border-b border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-900/30">
+                <section className="border-b border-[#E2EBD9] bg-[#F2F7EC]">
                     <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
                         <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
                             {stats.map((st, idx) => (
                                 <div key={idx} className="text-center">
-                                    <p className="text-3xl sm:text-4xl font-bold tracking-tight text-neutral-900 dark:text-white">{st.value}</p>
-                                    <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">{st.label}</p>
+                                    <p className="text-3xl sm:text-4xl font-bold tracking-tight text-[#0F1A0C]">{st.value}</p>
+                                    <p className="mt-1 text-sm text-[#5B6B52]">{st.label}</p>
                                 </div>
                             ))}
                         </div>
@@ -75,12 +64,12 @@ export default function About({ canRegister, landing = {} }) {
             {storyParagraphs.length > 0 && (
                 <section className="py-24">
                     <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
-                        <h2 className="text-3xl font-bold text-neutral-900 dark:text-white tracking-tight mb-6">
+                        <h2 className="text-3xl font-bold text-[#0F1A0C] tracking-tight mb-6">
                             {s('about_story_title')}
                         </h2>
                         <div className="space-y-4">
                             {storyParagraphs.map((p, idx) => (
-                                <p key={idx} className="text-lg text-neutral-600 dark:text-neutral-400 leading-relaxed">{p}</p>
+                                <p key={idx} className="text-lg text-[#4A5B44] leading-relaxed">{p}</p>
                             ))}
                         </div>
                     </div>
@@ -89,21 +78,21 @@ export default function About({ canRegister, landing = {} }) {
 
             {/* Values */}
             {values.length > 0 && (
-                <section className="py-24 bg-neutral-50 dark:bg-neutral-900/30">
+                <section className="py-24 bg-[#F2F7EC]">
                     <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
                         <div className="text-center mb-16">
-                            <h2 className="text-3xl sm:text-4xl font-bold text-neutral-900 dark:text-white tracking-tight">
+                            <h2 className="text-3xl sm:text-4xl font-bold text-[#0F1A0C] tracking-tight">
                                 {t('about_page.values_title', { defaultValue: 'What we stand for' })}
                             </h2>
                         </div>
                         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
                             {values.map((v, idx) => (
-                                <div key={idx} className="rounded-2xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 p-6">
+                                <div key={idx} className="rounded-2xl border border-[#E2EBD9] bg-white p-6">
                                     <div className="mb-4 inline-flex h-11 w-11 items-center justify-center rounded-xl" style={{ background: 'rgba(118,168,78,0.12)' }}>
                                         <FeatureIcon name={v.icon} className="h-5 w-5" style={{ color: '#5a8b38' }} />
                                     </div>
-                                    <h3 className="text-base font-semibold text-neutral-900 dark:text-white mb-1">{v.title}</h3>
-                                    <p className="text-sm text-neutral-600 dark:text-neutral-400 leading-relaxed">{v.desc}</p>
+                                    <h3 className="text-base font-semibold text-[#0F1A0C] mb-1">{v.title}</h3>
+                                    <p className="text-sm text-[#4A5B44] leading-relaxed">{v.desc}</p>
                                 </div>
                             ))}
                         </div>
@@ -122,7 +111,7 @@ export default function About({ canRegister, landing = {} }) {
                             {s('about_cta_title')}
                         </h2>
                         {s('about_cta_subtitle') && (
-                            <p className="relative mt-4 text-lg text-neutral-400 max-w-xl mx-auto">{s('about_cta_subtitle')}</p>
+                            <p className="relative mt-4 text-lg text-white/65 max-w-xl mx-auto">{s('about_cta_subtitle')}</p>
                         )}
                         <div className="relative mt-10 flex flex-wrap items-center justify-center gap-4">
                             {canRegister && (
