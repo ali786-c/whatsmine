@@ -89,8 +89,10 @@ Route::prefix('v1')->middleware(['auth:sanctum', 'throttle:api', 'demo'])->group
     Route::get('/notifications', [NotificationApiController::class, 'index']);
     Route::post('/notifications/{notification}/read', [NotificationApiController::class, 'markRead']);
     Route::get('/tokens', [TokenController::class, 'index']);
-    Route::post('/tokens', [TokenController::class, 'store']);
-    Route::delete('/tokens/{tokenId}', [TokenController::class, 'destroy']);
+    Route::post('/tokens', [TokenController::class, 'store'])
+        ->middleware('api.ability:tokens:write');
+    Route::delete('/tokens/{tokenId}', [TokenController::class, 'destroy'])
+        ->middleware('api.ability:tokens:write');
     Route::get('/token-scopes', [TokenController::class, 'scopes']);
 
     // ─── Contacts (contacts:read / contacts:write) ────────────────────────────

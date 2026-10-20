@@ -111,17 +111,28 @@ class FirebaseLoginController extends Controller
 
             $data = $response->json();
 
-            // Verify audience matches the Firebase project
+            // Verify the token was issued by Firebase for THIS project.
+            // All three checks are mandatory (AND) — previously an OR between
+            // a substring audience check and the generic Google issuer let any
+            // Google token for any project authenticate as any email.
             $aud = $data['aud'] ?? '';
             $iss = $data['iss'] ?? '';
 
-            $validAudience = $aud === $projectId || Str::contains($aud, $projectId);
-            $validIssuer   = in_array($iss, [
-                "https://securetoken.google.com/{$projectId}",
-                'https://accounts.google.com',
-            ]);
+            // Firebase ID tokens always carry aud = project id (exact match)
+            // and iss = https://securetoken.google.com/<project-id>.
+            if (! hash_equals($projectId, (string) $aud)) {
+                return null;
+            }
 
-            if (! $validAudience && ! $validIssuer) {
+            if (! hash_equals("https://securetoken.google.com/{$projectId}", (string) $iss)) {
+                return null;
+            }
+
+            // Only accept tokens for a verified email address; the login flow
+            // below links/creates accounts purely by email, so an unverified
+            // email claim would allow account takeover.
+            $emailVerified = $data['email_verified'] ?? false;
+            if (! ($emailVerified === true || $emailVerified === 'true')) {
                 return null;
             }
 
