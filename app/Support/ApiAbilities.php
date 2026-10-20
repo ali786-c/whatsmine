@@ -42,6 +42,9 @@ final class ApiAbilities
     // Analytics (read-only)
     public const ANALYTICS_READ = 'analytics:read';
 
+    // API token management (creating/revoking personal access tokens)
+    public const TOKENS_WRITE = 'tokens:write';
+
     /** All scopes as a flat array for UI dropdowns and validation. */
     public static function all(): array
     {
@@ -58,6 +61,7 @@ final class ApiAbilities
             self::AUTOMATIONS_WRITE,
             self::SOCIAL_WRITE,
             self::ANALYTICS_READ,
+            self::TOKENS_WRITE,
         ];
     }
 
@@ -77,6 +81,7 @@ final class ApiAbilities
             self::AUTOMATIONS_WRITE => 'Trigger automations for a contact',
             self::SOCIAL_WRITE => 'Schedule social media posts',
             self::ANALYTICS_READ => 'Read analytics and reporting metrics',
+            self::TOKENS_WRITE => 'Create and revoke API tokens',
         ];
     }
 }
